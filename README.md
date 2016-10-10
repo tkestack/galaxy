@@ -1,8 +1,6 @@
 # Build
 
-```
-hack/dockerbuild.sh
-```
+hack/dockerbuild.sh(mac) or hack/build.sh(linux)
 
 # Development
 
@@ -33,18 +31,16 @@ git commit -am "Update ..."
 
 ## CNI plugin
 
+create a network config
 ```
-go install -v `pwd`/cni/vlan/vlan.go
-
-# create a config
 mkdir -p /etc/cni/net.d
 # vlan config
 cat >/etc/cni/net.d/10-mynet.conf <<EOF
 {
     "name": "mynet",
-    "type": "vlan",
+    "type": "galaxy-vlan",
     "ipam": {
-        "type": "host-local",
+        "type": "galaxy-ipam-local",
         "subnet": "192.168.33.0/24",
         "routes": [
             { "dst": "0.0.0.0/0" }
@@ -62,12 +58,22 @@ cat >/etc/cni/net.d/99-loopback.conf <<EOF
     "type": "loopback"
 }
 EOF
+```
 
-cd vendor/github.com/containernetworking/cni
-./build
-# cni depends jq
-apt-get install jq
+Execute plugin via cni script
+```
 CNI_PATH=`pwd`/bin
+cd vendor/github.com/containernetworking/cni
+# cni scripts depends on jq
+apt-get install jq
 cd scripts
 CNI_PATH=$CNI_PATH CNI_ARGS="IP=192.168.33.3" ./priv-net-run.sh ip ad
 ```
+
+Execute plugin manually
+ ```
+export PATH=`pwd`/bin
+CNI_PATH=`pwd`/bin
+ip netns add ctn
+CNI_ARGS="IP=192.168.33.3" CNI_COMMAND="ADD" CNI_CONTAINERID=ctn1 CNI_NETNS=/var/run/netns/ctn CNI_IFNAME=eth0 CNI_PATH=$CNI_PATH galaxy-vlan < /etc/cni/net.d/10-mynet.conf
+ ```
