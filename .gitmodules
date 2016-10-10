@@ -1,0 +1,15 @@
+[submodule "vendor/github.com/coreos/go-iptables"]
+	path = vendor/github.com/coreos/go-iptables
+	url = https://github.com/coreos/go-iptables
+[submodule "vendor/github.com/vishvananda/netlink"]
+	path = vendor/github.com/vishvananda/netlink
+	url = https://github.com/vishvananda/netlink
+[submodule "vendor/github.com/vishvananda/netns"]
+	path = vendor/github.com/vishvananda/netns
+	url = https://github.com/vishvananda/netns
+[submodule "vendor/golang.org/x/sys"]
+	path = vendor/golang.org/x/sys
+	url = https://go.googlesource.com/sys
+[submodule "vendor/github.com/containernetworking/cni"]
+	path = vendor/github.com/containernetworking/cni
+	url = https://github.com/containernetworking/cni
