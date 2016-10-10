@@ -65,6 +65,8 @@ EOF
 
 cd vendor/github.com/containernetworking/cni
 ./build
+# cni depends jq
+apt-get install jq
 CNI_PATH=`pwd`/bin
 cd scripts
 CNI_PATH=$CNI_PATH CNI_ARGS="IP=192.168.33.3" ./priv-net-run.sh ip ad
