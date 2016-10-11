@@ -36,10 +36,10 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if result.IP4 == nil {
 		return fmt.Errorf("IPAM plugin returned missing IPv4 config")
 	}
-	if err := d.CreateVlanDevice(); err != nil {
+	if err := d.CreateVlanDevice(0); err != nil {
 		return err
 	}
-	if err := d.CreateVeth(result, args); err != nil {
+	if err := d.CreateVeth(result, args, 0); err != nil {
 		return err
 	}
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/containernetworking/cni/pkg/ipam"
 	"github.com/containernetworking/cni/pkg/ns"
@@ -12,7 +13,6 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
-	"sync"
 )
 
 const (
@@ -35,7 +35,6 @@ type NetConf struct {
 	types.NetConf
 	// The device which has IDC ip address, eg. eth1 or eth1.12 (A vlan device)
 	Device string `json:"device"`
-	Vlan   int    `json:"vlan"`
 }
 
 func (d *VlanDriver) LoadConf(bytes []byte) (*NetConf, error) {
@@ -146,18 +145,18 @@ func getOrCreateDevice(name string, createDevice func(name string) error) (netli
 	return device, nil
 }
 
-func (d *VlanDriver) CreateVlanDevice() error {
-	if d.Vlan == 0 {
+func (d *VlanDriver) CreateVlanDevice(vlanId uint16) error {
+	if vlanId == 0 {
 		return nil
 	}
-	vlanIfName := fmt.Sprintf("%s%d", vlanPrefix, d.Vlan)
-	bridgeIfName := fmt.Sprintf("%s%d", bridgePrefix, d.Vlan)
+	vlanIfName := fmt.Sprintf("%s%d", vlanPrefix, vlanId)
+	bridgeIfName := fmt.Sprintf("%s%d", bridgePrefix, vlanId)
 
 	d.Lock()
 	defer d.Unlock()
 	// Get vlan device
 	vlan, err := getOrCreateDevice(vlanIfName, func(name string) error {
-		vlanIf := &netlink.Vlan{LinkAttrs: netlink.LinkAttrs{Name: vlanIfName, ParentIndex: d.vlanParentIndex}, VlanId: (int)(d.Vlan)}
+		vlanIf := &netlink.Vlan{LinkAttrs: netlink.LinkAttrs{Name: vlanIfName, ParentIndex: d.vlanParentIndex}, VlanId: (int)(vlanId)}
 		if err := netlink.LinkAdd(vlanIf); err != nil {
 			return fmt.Errorf("Failed to add vlan device %s: %v", vlanIfName, err)
 		}
@@ -184,10 +183,10 @@ func (d *VlanDriver) CreateVlanDevice() error {
 	return nil
 }
 
-func (d *VlanDriver) CreateVeth(result *types.Result, args *skel.CmdArgs) error {
+func (d *VlanDriver) CreateVeth(result *types.Result, args *skel.CmdArgs, vlanId uint16) error {
 	bridgeName := defaultBridge
-	if d.Vlan != 0 {
-		bridgeName = fmt.Sprintf("%s%d", bridgePrefix, d.Vlan)
+	if vlanId != 0 {
+		bridgeName = fmt.Sprintf("%s%d", bridgePrefix, vlanId)
 	}
 	hostIfName, err := utils.GenerateIfaceName(fmt.Sprintf("%s-h", vethPrefix), vethLen)
 	if err != nil {

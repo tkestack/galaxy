@@ -47,8 +47,7 @@ cat >/etc/cni/net.d/10-mynet.conf <<EOF
         ],
         "gateway": "192.168.33.1"
     },
-    "device": "eth1",
-    "vlan": 3
+    "device": "eth1"
 }
 EOF
 # optional loop config
