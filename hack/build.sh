@@ -14,7 +14,12 @@ echo "   host-local"
 go build -o /go/src/$package/bin/${bin_prefix}-ipam-local -v $cni_package/plugins/ipam/host-local
 echo "Building plugins"
 echo "   loopback"
-go build -o /go/src/$package/bin/${bin_prefix}-loopback -v $cni_package/plugins/main/loopback
+# we can't add prefix to loopback binary cause k8s hard code the type name of lo plugin
+go build -o /go/src/$package/bin/loopback -v $cni_package/plugins/main/loopback
+echo "   bridge"
+go build -o /go/src/$package/bin/${bin_prefix}-bridge -v $cni_package/plugins/main/bridge
+echo "   flannel"
+go build -o /go/src/$package/bin/${bin_prefix}-flannel -v $cni_package/plugins/meta/flannel
 
 # build galaxy cni plugins
 PLUGINS="/go/src/$package/cni/*"
