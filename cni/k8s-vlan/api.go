@@ -66,7 +66,7 @@ func retrieveResult(conf *IPAMConf, kvMap map[string]string) (*types.Result, uin
 	var ipInfo IPInfo
 	maxRetry := 5
 	for i := 0; i < maxRetry; i++ {
-		resp, err := client.Post(fmt.Sprintf("%s/%s/%s", conf.URL, conf.QueryURI, kvMap[K8S_POD_NAME]), "application/json", nil)
+		resp, err := client.Post(fmt.Sprintf("%s/%s", conf.URL, strings.Replace(conf.QueryURI, "{podName}", kvMap[K8S_POD_NAME], 1)), "application/json", nil)
 		if err == nil {
 			defer resp.Body.Close()
 			data, err := ioutil.ReadAll(resp.Body)
