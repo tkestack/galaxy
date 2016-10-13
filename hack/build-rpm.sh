@@ -22,6 +22,11 @@ done
 rm -rf ${CURDIR}/bin/${NAME}-${VERSION}.tar.gz
 tar cf ${CURDIR}/bin/${NAME}-${VERSION}.tar -C ${CURDIR}/bin .
 gzip -f ${CURDIR}/bin/${NAME}-${VERSION}.tar
+trap "cleanup" EXIT SIGINT
+function cleanup () {
+    docker rm -vf ${CONTAINER_NAME}
+    rm -rf ${BIND_DIR}
+}
 docker create -it --name ${CONTAINER_NAME} -v ${CURDIR}/bin:/root/rpmbuild/RPMS \
     -e GITVERSION=${GITVERSION} \
     -e GITCOMMITNUM=${GITCOMMITNUM} \
@@ -30,11 +35,6 @@ docker create -it --name ${CONTAINER_NAME} -v ${CURDIR}/bin:/root/rpmbuild/RPMS 
     --define="gitversion ${GITVERSION}" \
     --define="commit ${GITCOMMITNUM}" \
     --define="version ${VERSION}" /root/rpmbuild/SPECS/galaxy.spec
-trap "cleanup" EXIT SIGINT
-function cleanup () {
-    docker rm -vf ${CONTAINER_NAME}
-    rm -rf ${BIND_DIR}
-}
 docker cp ${CURDIR}/bin/${NAME}-${VERSION}.tar.gz ${CONTAINER_NAME}:/root/rpmbuild/SOURCES/
 docker cp ${CURDIR}/hack/v1/galaxy.spec ${CONTAINER_NAME}:/root/rpmbuild/SPECS/
 docker start -ai ${CONTAINER_NAME}
