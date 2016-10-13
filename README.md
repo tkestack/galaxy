@@ -40,7 +40,7 @@ cat >/etc/cni/net.d/10-mynet.conf <<EOF
     "name": "mynet",
     "type": "galaxy-vlan",
     "ipam": {
-        "type": "galaxy-ipam-local",
+        "type": "host-local",
         "subnet": "192.168.33.0/24",
         "routes": [
             { "dst": "0.0.0.0/0" }

@@ -21,7 +21,7 @@ trap cleanup EXIT
 echo "Building ipam plugins"
 echo "   host-local"
 # build host-local ipam plugin
-go build -o bin/${bin_prefix}-ipam-local -v $cni_package/plugins/ipam/host-local
+go build -o bin/host-local -v $cni_package/plugins/ipam/host-local
 echo "Building plugins"
 echo "   loopback"
 # we can't add prefix to loopback binary cause k8s hard code the type name of lo plugin
