@@ -76,3 +76,7 @@ CNI_PATH=`pwd`/bin
 ip netns add ctn
 CNI_ARGS="IP=192.168.33.3" CNI_COMMAND="ADD" CNI_CONTAINERID=ctn1 CNI_NETNS=/var/run/netns/ctn CNI_IFNAME=eth0 CNI_PATH=$CNI_PATH galaxy-vlan < /etc/cni/net.d/10-mynet.conf
  ```
+
+# Release
+
+hack/build-rpm.sh
