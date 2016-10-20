@@ -3,10 +3,11 @@
 set -e
 set -x
 
+if [ -z "$V" ]; then V="1"; fi
 CURDIR=${PWD}
 CONTAINER_NAME=galaxy
 GITCOMMITNUM=$(git log --oneline|wc -l|sed -e 's/^[ \t]*//')
-GITVERSION=1.0
+GITVERSION=$V.0
 VERSION=${GITVERSION}.2
 NAME=galaxy
 RPMNAME=${NAME}-${VERSION}-${GITCOMMITNUM}.tl2.x86_64.rpm
@@ -22,10 +23,10 @@ done
 rm -rf ${CURDIR}/bin/${NAME}-${VERSION}.tar.gz
 tar cf ${CURDIR}/bin/${NAME}-${VERSION}.tar -C ${CURDIR}/bin .
 gzip -f ${CURDIR}/bin/${NAME}-${VERSION}.tar
-trap "cleanup" EXIT SIGINT
+trap "cleanup" EXIT SIGINT SIGTERM
 function cleanup () {
-    docker rm -vf ${CONTAINER_NAME}
     rm -rf ${BIND_DIR}
+    docker rm -vf ${CONTAINER_NAME}
 }
 docker create -it --name ${CONTAINER_NAME} -v ${CURDIR}/bin:/root/rpmbuild/RPMS \
     -e GITVERSION=${GITVERSION} \
@@ -36,7 +37,7 @@ docker create -it --name ${CONTAINER_NAME} -v ${CURDIR}/bin:/root/rpmbuild/RPMS 
     --define="commit ${GITCOMMITNUM}" \
     --define="version ${VERSION}" /root/rpmbuild/SPECS/galaxy.spec
 docker cp ${CURDIR}/bin/${NAME}-${VERSION}.tar.gz ${CONTAINER_NAME}:/root/rpmbuild/SOURCES/
-docker cp ${CURDIR}/hack/v1/galaxy.spec ${CONTAINER_NAME}:/root/rpmbuild/SPECS/
+docker cp ${CURDIR}/hack/v${V}/galaxy.spec ${CONTAINER_NAME}:/root/rpmbuild/SPECS/
 docker start -ai ${CONTAINER_NAME}
 size=$(ls -l ${CURDIR}/bin/x86_64/${RPMNAME} | awk '{print $5}')
 curl -v 'http://gaia.repo.oa.com/upload_file?filesize='${size}'&filename='${RPMNAME}'&dirtype=1' -T ${RPMFILE}

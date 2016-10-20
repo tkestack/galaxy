@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"runtime"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
-
 	"github.com/containernetworking/cni/pkg/skel"
+
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
 )
 
 var (
@@ -15,9 +16,11 @@ var (
 )
 
 type IPAMConf struct {
+	//ipam url, currently its the apiswitch
 	URL         string `json:"url"`
 	QueryURI    string `json:"query_uri"`
 	AllocateURI string `json:"allocate_uri"`
+	NodeIP      string `json:"node_ip"`
 }
 
 func init() {
@@ -32,18 +35,18 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	ipamConf, err := LoadIPAMConf(args.StdinData)
+	ipamConf, err := loadIPAMConf(args.StdinData)
 	if err != nil {
 		return err
 	}
 	if err := d.SetupBridge(); err != nil {
 		return fmt.Errorf("failed to setup bridge %v", err)
 	}
-	kvMap, err := parseArgs(args.Args)
+	kvMap, err := k8s.ParseK8SCNIArgs(args.Args)
 	if err != nil {
 		return err
 	}
-	result, vlanId, err := retrieveResult(ipamConf, kvMap)
+	result, vlanId, err := allocate(ipamConf, args.Args, kvMap)
 	if err != nil {
 		return err
 	}
@@ -69,7 +72,7 @@ func main() {
 	skel.PluginMain(cmdAdd, cmdDel)
 }
 
-func LoadIPAMConf(bytes []byte) (*IPAMConf, error) {
+func loadIPAMConf(bytes []byte) (*IPAMConf, error) {
 	conf := &IPAMConf{}
 	if err := json.Unmarshal(bytes, conf); err != nil {
 		return nil, fmt.Errorf("failed to load netconf: %v", err)
