@@ -3,7 +3,7 @@
 set -e
 set -x
 
-if [ -z "$V" ]; then V="1"; fi
+if [ -z "$V" ]; then V="2"; fi
 CURDIR=${PWD}
 CONTAINER_NAME=galaxy
 GITCOMMITNUM=$(git log --oneline|wc -l|sed -e 's/^[ \t]*//')
