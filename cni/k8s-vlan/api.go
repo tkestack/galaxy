@@ -30,10 +30,12 @@ func allocate(conf *IPAMConf, args string, kvMap map[string]string) (*types.Resu
 			if resp.StatusCode != 200 {
 				return nil, 0, errors.New(string(data))
 			}
-			//TODO handle no enough ip return
 			ipInfo = new(apiswitch.IPInfo)
 			if err := json.Unmarshal(data, ipInfo); err != nil {
 				return nil, 0, fmt.Errorf("failed to unmarshal ipinfo %s: %v", string(data), err)
+			}
+			if len(ipInfo.Gateway) == 0 {
+				return nil, 0, fmt.Errorf("no enough floating ips")
 			}
 		} else {
 			return nil, 0, err
