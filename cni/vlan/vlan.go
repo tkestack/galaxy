@@ -7,6 +7,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
 	"github.com/containernetworking/cni/pkg/ipam"
 	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/containernetworking/cni/pkg/version"
 )
 
 var (
@@ -65,5 +66,5 @@ func cmdDel(args *skel.CmdArgs) error {
 
 func main() {
 	d = &vlan.VlanDriver{}
-	skel.PluginMain(cmdAdd, cmdDel)
+	skel.PluginMain(cmdAdd, cmdDel, version.Legacy)
 }

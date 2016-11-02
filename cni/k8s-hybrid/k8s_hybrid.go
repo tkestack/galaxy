@@ -10,6 +10,7 @@ import (
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
+	"github.com/containernetworking/cni/pkg/version"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
@@ -105,7 +106,7 @@ func cmd(args *skel.CmdArgs, add bool) error {
 }
 
 func main() {
-	skel.PluginMain(cmdAdd, cmdDel)
+	skel.PluginMain(cmdAdd, cmdDel, version.Legacy)
 }
 
 func delegateCmd(cid string, netconf map[string]interface{}, add bool) (*types.Result, error) {

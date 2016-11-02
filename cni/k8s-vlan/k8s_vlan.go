@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/containernetworking/cni/pkg/version"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
@@ -69,7 +70,7 @@ func cmdDel(args *skel.CmdArgs) error {
 
 func main() {
 	d = &vlan.VlanDriver{}
-	skel.PluginMain(cmdAdd, cmdDel)
+	skel.PluginMain(cmdAdd, cmdDel, version.Legacy)
 }
 
 func loadIPAMConf(bytes []byte) (*IPAMConf, error) {
