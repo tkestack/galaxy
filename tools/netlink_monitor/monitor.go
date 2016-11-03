@@ -8,6 +8,7 @@ import (
 	log "github.com/golang/glog"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 )
 
 var flagDevice = flag.String("device", "", "device name to listen")
@@ -57,16 +58,22 @@ func (dev *device) processNeighMsg(msg syscall.NetlinkMessage) {
 		log.Error("Failed to deserialize netlink ndmsg: %v", err)
 		return
 	}
+	log.V(1).Infof("receiving neigh msg %#v, neigh %#v", msg, neigh)
 
 	if int(neigh.LinkIndex) != dev.l.Attrs().Index {
-		log.Infof("ignore neigh msg from kernel %v: not equal device id %d", neigh, dev.l.Attrs().Index)
+		log.Infof("ignore neigh msg from kernel %#v: not equal device id %d", neigh, dev.l.Attrs().Index)
 		return
 	}
 
 	if msg.Header.Type != syscall.RTM_GETNEIGH && msg.Header.Type != syscall.RTM_NEWNEIGH {
-		log.Infof("ignore neigh msg from kernel %v: msg type is wrong %d", neigh, msg.Header.Type)
+		log.Infof("ignore neigh msg from kernel %#v: msg type is wrong %d", neigh, msg.Header.Type)
 		return
 	}
 
-	log.Infof("receive good neigh msg from kernel %v", neigh)
+	if !network.IsNeighResolving(neigh.State) {
+		log.Infof("ignore neigh msg from kernel %#v: invalid state %d", neigh, neigh.State)
+		return
+	}
+
+	log.Infof("receive good neigh msg from kernel %#v", neigh)
 }
