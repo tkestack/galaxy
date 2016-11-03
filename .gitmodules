@@ -13,3 +13,6 @@
 [submodule "vendor/github.com/containernetworking/cni"]
 	path = vendor/github.com/containernetworking/cni
 	url = https://github.com/containernetworking/cni
+[submodule "vendor/github.com/golang/glog"]
+	path = vendor/github.com/golang/glog
+	url = https://github.com/golang/glog
