@@ -16,3 +16,6 @@
 [submodule "vendor/github.com/golang/glog"]
 	path = vendor/github.com/golang/glog
 	url = https://github.com/golang/glog
+[submodule "vendor/k8s.io/kubernetes"]
+	path = vendor/k8s.io/kubernetes
+	url = git+ssh://k8s.io/kubernetes
