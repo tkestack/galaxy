@@ -21,6 +21,7 @@ kubernetes network cni plugin
 %install
 install -d $RPM_BUILD_ROOT/opt/cni/bin/
 install -p -m 755 bin/galaxy-k8s-hybrid $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-hybrid
+install -p -m 755 bin/galaxy-k8s-cni $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-cni
 install -p -m 755 bin/galaxy-k8s-vlan $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-vlan
 install -p -m 755 bin/galaxy-flannel $RPM_BUILD_ROOT/opt/cni/bin/galaxy-flannel
 install -p -m 755 bin/galaxy-bridge $RPM_BUILD_ROOT/opt/cni/bin/galaxy-bridge
@@ -32,6 +33,7 @@ install -p -m 644 hack/v2/galaxy.conf $RPM_BUILD_ROOT/etc/cni/net.d/galaxy.conf
 
 %files
 /opt/cni/bin/galaxy-k8s-hybrid
+/opt/cni/bin/galaxy-k8s-cni
 /opt/cni/bin/galaxy-k8s-vlan
 /opt/cni/bin/galaxy-flannel
 /opt/cni/bin/galaxy-bridge
