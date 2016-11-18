@@ -41,6 +41,11 @@ func cmdAdd(args *skel.CmdArgs) error {
 }
 
 func cmdDel(args *skel.CmdArgs) error {
+	if args.Netns == "" {
+		// avoid k8s double delete error
+		// see https://github.com/kubernetes/kubernetes/issues/20379#issuecomment-255272531
+		return nil
+	}
 	return cmd(args, false)
 }
 
