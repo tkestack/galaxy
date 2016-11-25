@@ -1,0 +1,12 @@
+[Unit]
+Description=galaxy, networking daemon
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/sysconfig/galaxy-config
+ExecStart=/usr/bin/galaxy $ARGS
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
