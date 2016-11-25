@@ -50,6 +50,7 @@ install -p -m 644 hack/v2/galaxy-config $RPM_BUILD_ROOT/etc/sysconfig/galaxy-con
 /%{_unitdir}/galaxy.service
 
 %config(noreplace) /etc/cni/net.d/galaxy.conf
+%config(noreplace) /%{_unitdir}/galaxy.service
 %config(missingok) /etc/sysconfig/galaxy-config
 
 %define __debug_install_post   \
