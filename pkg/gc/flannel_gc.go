@@ -63,6 +63,9 @@ func (gc *flannelGC) cleanupIP() error {
 		}
 		ipFile := filepath.Join(gc.allocatedIPDir, fi.Name())
 		containerIdData, err := ioutil.ReadFile(ipFile)
+		if os.IsNotExist(err) || len(containerIdData) == 0 {
+			continue
+		}
 		containerId := string(containerIdData)
 		if err != nil {
 			if !os.IsNotExist(err) {
