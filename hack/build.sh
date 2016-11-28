@@ -40,3 +40,7 @@ for d in $PLUGINS; do
 		go build -o bin/${bin_prefix}-$plugin -v $package/cni/$plugin
 	fi
 done
+
+# build galaxy
+echo "Building galaxy"
+go build -o bin/galaxy -v $package/cmd/galaxy
