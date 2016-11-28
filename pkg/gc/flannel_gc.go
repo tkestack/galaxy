@@ -54,6 +54,9 @@ func (gc *flannelGC) Run() {
 func (gc *flannelGC) cleanupIP() error {
 	fis, err := ioutil.ReadDir(gc.allocatedIPDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
 	for _, fi := range fis {
@@ -101,6 +104,9 @@ func (gc *flannelGC) cleanupIP() error {
 func (gc *flannelGC) cleanupBridgeConf() error {
 	fis, err := ioutil.ReadDir(gc.bridgeConfDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
 	for _, fi := range fis {
