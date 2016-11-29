@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/bridge"
 )
 
 const (
@@ -126,23 +126,23 @@ func consumeScratchNetConf(containerID string) ([]byte, error) {
 	return ioutil.ReadFile(path)
 }
 
-func delegateAdd(cid string, netconf map[string]interface{}) error {
+func delegateAdd(args *skel.CmdArgs, netconf map[string]interface{}) (*types.Result, error) {
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
-		return fmt.Errorf("error serializing delegate netconf: %v", err)
+		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
 	}
 
 	// save the rendered netconf for cmdDel
-	if err = saveScratchNetConf(cid, netconfBytes); err != nil {
-		return err
+	if err = saveScratchNetConf(args.ContainerID, netconfBytes); err != nil {
+		return nil, err
 	}
 
-	result, err := invoke.DelegateAdd(netconf["type"].(string), netconfBytes)
-	if err != nil {
-		return err
-	}
-
-	return result.Print()
+	return bridge.CmdAdd(&skel.CmdArgs{
+		ContainerID: args.ContainerID,
+		Netns:       args.Netns,
+		IfName:      args.IfName,
+		StdinData:   netconfBytes,
+	})
 }
 
 func hasKey(m map[string]interface{}, k string) bool {
@@ -155,28 +155,28 @@ func isString(i interface{}) bool {
 	return ok
 }
 
-func cmdAdd(args *skel.CmdArgs) error {
+func CmdAdd(args *skel.CmdArgs) (*types.Result, error) {
 	n, err := loadFlannelNetConf(args.StdinData)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	fenv, err := loadFlannelSubnetEnv(n.SubnetFile)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if n.Delegate == nil {
 		n.Delegate = make(map[string]interface{})
 	} else {
 		if hasKey(n.Delegate, "type") && !isString(n.Delegate["type"]) {
-			return fmt.Errorf("'delegate' dictionary, if present, must have (string) 'type' field")
+			return nil, fmt.Errorf("'delegate' dictionary, if present, must have (string) 'type' field")
 		}
 		if hasKey(n.Delegate, "name") {
-			return fmt.Errorf("'delegate' dictionary must not have 'name' field, it'll be set by flannel")
+			return nil, fmt.Errorf("'delegate' dictionary must not have 'name' field, it'll be set by flannel")
 		}
 		if hasKey(n.Delegate, "ipam") {
-			return fmt.Errorf("'delegate' dictionary must not have 'ipam' field, it'll be set by flannel")
+			return nil, fmt.Errorf("'delegate' dictionary must not have 'ipam' field, it'll be set by flannel")
 		}
 	}
 
@@ -213,10 +213,10 @@ func cmdAdd(args *skel.CmdArgs) error {
 		},
 	}
 
-	return delegateAdd(args.ContainerID, n.Delegate)
+	return delegateAdd(args, n.Delegate)
 }
 
-func cmdDel(args *skel.CmdArgs) error {
+func CmdDel(args *skel.CmdArgs) error {
 	netconfBytes, err := consumeScratchNetConf(args.ContainerID)
 	if err != nil {
 		return err
@@ -227,5 +227,10 @@ func cmdDel(args *skel.CmdArgs) error {
 		return fmt.Errorf("failed to parse netconf: %v", err)
 	}
 
-	return invoke.DelegateDel(n.Type, netconfBytes)
+	return bridge.CmdDel(&skel.CmdArgs{
+		ContainerID: args.ContainerID,
+		Netns:       args.Netns,
+		IfName:      args.IfName,
+		StdinData:   netconfBytes,
+	})
 }

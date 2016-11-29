@@ -7,35 +7,34 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 )
 
-func cmdAdd(args *skel.CmdArgs) error {
+func CmdAdd(args *skel.CmdArgs) (*types.Result, error) {
 	ipamConf, err := LoadIPAMConfig(args.StdinData, args.Args)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	store, err := disk.New(ipamConf.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer store.Close()
 
 	allocator, err := NewIPAllocator(ipamConf, store)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ipConf, err := allocator.Get(args.ContainerID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	r := &types.Result{
+	return &types.Result{
 		IP4: ipConf,
-	}
-	return r.Print()
+	}, nil
 }
 
-func cmdDel(args *skel.CmdArgs) error {
+func CmdDel(args *skel.CmdArgs) error {
 	ipamConf, err := LoadIPAMConfig(args.StdinData, args.Args)
 	if err != nil {
 		return err

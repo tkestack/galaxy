@@ -15,6 +15,7 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/utils"
 	"github.com/vishvananda/netlink"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/ipam/host-local"
 )
 
 const defaultBrName = "cni0"
@@ -193,10 +194,10 @@ func setupBridge(n *NetConf) (*netlink.Bridge, error) {
 	return br, nil
 }
 
-func cmdAdd(args *skel.CmdArgs) error {
+func CmdAdd(args *skel.CmdArgs) (*types.Result, error) {
 	n, err := loadNetConf(args.StdinData)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if n.IsDefaultGW {
@@ -205,28 +206,28 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 	br, err := setupBridge(n)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	netns, err := ns.GetNS(args.Netns)
 	if err != nil {
-		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
+		return nil, fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
 	}
 	defer netns.Close()
 
 	if err = setupVeth(netns, br, args.IfName, n.MTU, n.HairpinMode); err != nil {
-		return err
+		return nil, err
 	}
 
 	// run the IPAM plugin and get back the config to apply
-	result, err := ipam.ExecAdd(n.IPAM.Type, args.StdinData)
+	result, err := host_local.CmdAdd(args)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// TODO: make this optional when IPv6 is supported
 	if result.IP4 == nil {
-		return errors.New("IPAM plugin returned missing IPv4 config")
+		return nil, errors.New("IPAM plugin returned missing IPv4 config")
 	}
 
 	if result.IP4.Gateway == nil && n.IsGW {
@@ -270,7 +271,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 		return nil
 	}); err != nil {
-		return err
+		return nil, err
 	}
 
 	if n.IsGW {
@@ -280,15 +281,15 @@ func cmdAdd(args *skel.CmdArgs) error {
 		}
 
 		if err = ensureBridgeAddr(br, gwn, n.ForceAddress); err != nil {
-			return err
+			return nil, err
 		}
 
 		if err := ip.SetHWAddrByIP(n.BrName, gwn.IP, nil /* TODO IPv6 */); err != nil {
-			return err
+			return nil, err
 		}
 
 		if err := ip.EnableIP4Forward(); err != nil {
-			return fmt.Errorf("failed to enable forwarding: %v", err)
+			return nil, fmt.Errorf("failed to enable forwarding: %v", err)
 		}
 	}
 
@@ -296,21 +297,21 @@ func cmdAdd(args *skel.CmdArgs) error {
 		chain := utils.FormatChainName(n.Name, args.ContainerID)
 		comment := utils.FormatComment(n.Name, args.ContainerID)
 		if err = ip.SetupIPMasq(ip.Network(&result.IP4.IP), chain, comment); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	result.DNS = n.DNS
-	return result.Print()
+	return result, nil
 }
 
-func cmdDel(args *skel.CmdArgs) error {
+func CmdDel(args *skel.CmdArgs) error {
 	n, err := loadNetConf(args.StdinData)
 	if err != nil {
 		return err
 	}
 
-	if err := ipam.ExecDel(n.IPAM.Type, args.StdinData); err != nil {
+	if err := host_local.CmdDel(args); err != nil {
 		return err
 	}
 
