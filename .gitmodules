@@ -40,3 +40,6 @@
 [submodule "vendor/github.com/emicklei/go-restful"]
 	path = vendor/github.com/emicklei/go-restful
 	url = https://github.com/emicklei/go-restful
+[submodule "vendor/github.com/opencontainers/runc"]
+	path = vendor/github.com/opencontainers/runc
+	url = https://github.com/opencontainers/runc
