@@ -13,7 +13,7 @@ import (
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/bridge"
+	"github.com/containernetworking/cni/pkg/invoke"
 )
 
 const (
@@ -137,11 +137,17 @@ func delegateAdd(args *skel.CmdArgs, netconf map[string]interface{}) (*types.Res
 		return nil, err
 	}
 
-	return bridge.CmdAdd(&skel.CmdArgs{
+	pluginPath, err := invoke.FindInPath(netconf["type"].(string), strings.Split(args.Path, ":"))
+	if err != nil {
+		return nil, err
+	}
+
+	return invoke.ExecPluginWithResult(pluginPath, netconfBytes, &invoke.Args{
+		Command:     "ADD",
 		ContainerID: args.ContainerID,
-		Netns:       args.Netns,
+		NetNS:       args.Netns,
 		IfName:      args.IfName,
-		StdinData:   netconfBytes,
+		Path:        args.Path,
 	})
 }
 
@@ -227,10 +233,16 @@ func CmdDel(args *skel.CmdArgs) error {
 		return fmt.Errorf("failed to parse netconf: %v", err)
 	}
 
-	return bridge.CmdDel(&skel.CmdArgs{
+	pluginPath, err := invoke.FindInPath(n.Type, strings.Split(args.Path, ":"))
+	if err != nil {
+		return err
+	}
+
+	return invoke.ExecPluginWithoutResult(pluginPath, netconfBytes, &invoke.Args{
+		Command:     "DEL",
 		ContainerID: args.ContainerID,
-		Netns:       args.Netns,
+		NetNS:       args.Netns,
 		IfName:      args.IfName,
-		StdinData:   netconfBytes,
+		Path:        args.Path,
 	})
 }

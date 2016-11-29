@@ -16,7 +16,9 @@ func main() {
 	if err != nil {
 		glog.Fatalf("Error create galaxy: %v", err)
 	}
-	galaxy.Start()
+	if err := galaxy.Start(); err != nil {
+		glog.Fatalf("Error start galaxy: %v", err)
+	}
 	signal.BlockSignalHandler(func() {
 		if err := galaxy.Stop(); err != nil {
 			glog.Errorf("Error stop galaxy: %v", err)

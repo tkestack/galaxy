@@ -28,7 +28,7 @@ func (g *Galaxy) newQuitChannel() chan error {
 
 func (g *Galaxy) Start() error {
 	g.cleaner.Run()
-	return nil
+	return g.startServer()
 }
 
 func (g *Galaxy) Stop() error {
