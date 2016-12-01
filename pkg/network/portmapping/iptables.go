@@ -1,4 +1,4 @@
-package main
+package portmapping
 
 import (
 	"bytes"
@@ -22,7 +22,7 @@ const (
 	kubeHostportChainPrefix string = "KUBE-HP-"
 )
 
-func setupPortMapping(natInterfaceName string, ports []*k8s.Port) error {
+func SetupPortMapping(natInterfaceName string, ports []*k8s.Port) error {
 	iptInterface := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
 	if err := ensureBasicRule(natInterfaceName, iptInterface); err != nil {
 		return err
@@ -88,7 +88,7 @@ func setupPortMapping(natInterfaceName string, ports []*k8s.Port) error {
 	return nil
 }
 
-func cleanPortMapping(natInterfaceName string, ports []*k8s.Port) error {
+func CleanPortMapping(natInterfaceName string, ports []*k8s.Port) error {
 	iptInterface := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
 	var kubeHostportsChainRules [][]string
 	natChains := bytes.NewBuffer(nil)

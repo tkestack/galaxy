@@ -14,6 +14,7 @@ import (
 	"github.com/containernetworking/cni/pkg/version"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 )
 
 var (
@@ -78,7 +79,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 			}
 		}
 		if len(ports) != 0 {
-			if err := setupPortMapping("cni0", ports); err != nil {
+			if err := portmapping.SetupPortMapping("cni0", ports); err != nil {
 				return fmt.Errorf("failed to setup port mapping %v: %v", ports, err)
 			}
 		}
@@ -112,7 +113,7 @@ func cmdDel(args *skel.CmdArgs) error {
 			return fmt.Errorf("failed to read ports %v", err)
 		}
 		if len(ports) != 0 {
-			if err := cleanPortMapping("cni0", ports); err != nil {
+			if err := portmapping.CleanPortMapping("cni0", ports); err != nil {
 				return fmt.Errorf("failed to delete port mapping %v: %v", ports, err)
 			}
 		}
