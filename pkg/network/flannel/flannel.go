@@ -142,6 +142,10 @@ func delegateAdd(args *skel.CmdArgs, netconf map[string]interface{}) (*types.Res
 		return nil, err
 	}
 
+	// We'll need to configure veth device in container's netns during bridge
+	// network setup. We can't embed bridge network setup and must do it in a
+	// new process, because switching netns in golang is very dangerous.
+	// See https://github.com/containernetworking/cni/issues/262
 	return invoke.ExecPluginWithResult(pluginPath, netconfBytes, &invoke.Args{
 		Command:     "ADD",
 		ContainerID: args.ContainerID,
