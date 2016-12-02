@@ -28,11 +28,11 @@ echo "   loopback"
 go build -o bin/loopback -v $cni_package/plugins/main/loopback
 echo "   bridge"
 go build -o bin/${bin_prefix}-bridge -v $cni_package/plugins/main/bridge
-echo "   flannel"
-go build -o bin/${bin_prefix}-flannel -v $cni_package/plugins/meta/flannel
+#echo "   flannel"
+#go build -o bin/${bin_prefix}-flannel -v $cni_package/plugins/meta/flannel
 
 # build galaxy cni plugins
-PLUGINS="$GOPATH/src/$package/cni/*"
+PLUGINS="$GOPATH/src/$package/cni/sdn"
 for d in $PLUGINS; do
 	if [ -d $d ]; then
 		plugin=$(basename $d)

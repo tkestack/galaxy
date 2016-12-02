@@ -20,10 +20,7 @@ kubernetes network cni plugin
 
 %install
 install -d $RPM_BUILD_ROOT/opt/cni/bin/
-install -p -m 755 bin/galaxy-k8s-hybrid $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-hybrid
-install -p -m 755 bin/galaxy-k8s-cni $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-cni
-install -p -m 755 bin/galaxy-k8s-vlan $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-vlan
-install -p -m 755 bin/galaxy-flannel $RPM_BUILD_ROOT/opt/cni/bin/galaxy-flannel
+install -p -m 755 bin/galaxy-sdn $RPM_BUILD_ROOT/opt/cni/bin/galaxy-sdn
 install -p -m 755 bin/galaxy-bridge $RPM_BUILD_ROOT/opt/cni/bin/galaxy-bridge
 install -p -m 755 bin/loopback $RPM_BUILD_ROOT/opt/cni/bin/loopback
 install -p -m 755 bin/host-local $RPM_BUILD_ROOT/opt/cni/bin/host-local
@@ -41,10 +38,7 @@ install -d $RPM_BUILD_ROOT/etc/sysconfig/
 install -p -m 644 hack/v2/galaxy-config $RPM_BUILD_ROOT/etc/sysconfig/galaxy-config
 
 %files
-/opt/cni/bin/galaxy-k8s-hybrid
-/opt/cni/bin/galaxy-k8s-cni
-/opt/cni/bin/galaxy-k8s-vlan
-/opt/cni/bin/galaxy-flannel
+/opt/cni/bin/galaxy-sdn
 /opt/cni/bin/galaxy-bridge
 /opt/cni/bin/loopback
 /opt/cni/bin/host-local
