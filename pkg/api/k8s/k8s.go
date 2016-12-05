@@ -33,7 +33,7 @@ func ParseK8SCNIArgs(args string) (map[string]string, error) {
 		if len(part) != 2 {
 			continue
 		}
-		kvMap[part[0]] = part[1]
+		kvMap[strings.TrimSpace(part[0])] = strings.TrimSpace(part[1])
 	}
 	if _, ok := kvMap[K8S_POD_NAME]; !ok {
 		return kvMap, fmt.Errorf("invalid args, k8s_pod_name is unknown: %s", args)

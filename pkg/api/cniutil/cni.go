@@ -21,6 +21,9 @@ const (
 	CNI_NETNS       = "CNI_NETNS"
 	CNI_IFNAME      = "CNI_IFNAME"
 	CNI_PATH        = "CNI_PATH"
+
+	COMMAND_ADD = "ADD"
+	COMMAND_DEL = "DEL"
 )
 
 // like net.IPNet but adds JSON marshalling and unmarshalling
