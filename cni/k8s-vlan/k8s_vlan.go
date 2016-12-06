@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/version"
+	"github.com/vishvananda/netlink"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
@@ -22,6 +24,8 @@ type IPAMConf struct {
 	QueryURI    string `json:"query_uri"`
 	AllocateURI string `json:"allocate_uri"`
 	NodeIP      string `json:"node_ip"`
+	// get node ip from which network device
+	Devices string `json:"devices"`
 }
 
 func init() {
@@ -77,6 +81,32 @@ func loadIPAMConf(bytes []byte) (*IPAMConf, error) {
 	conf := &IPAMConf{}
 	if err := json.Unmarshal(bytes, conf); err != nil {
 		return nil, fmt.Errorf("failed to load netconf: %v", err)
+	}
+	if conf.NodeIP == "" {
+		if conf.Devices == "" {
+			return nil, fmt.Errorf("no node ip configured")
+		}
+		devices := strings.Split(conf.Devices, ",")
+		if len(devices) == 0 {
+			return nil, fmt.Errorf("no node ip configured")
+		}
+		for _, dev := range devices {
+			nic, err := netlink.LinkByName(dev)
+			if err != nil {
+				continue
+			}
+			addr, err := netlink.AddrList(nic, netlink.FAMILY_V4)
+			if err != nil {
+				continue
+			}
+			if len(addr) == 1 {
+				conf.NodeIP = addr[0].IPNet.String()
+				break
+			}
+		}
+		if conf.NodeIP == "" {
+			return nil, fmt.Errorf("no node ip configured")
+		}
 	}
 	return conf, nil
 }
