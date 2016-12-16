@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -11,9 +12,16 @@ import (
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/version"
+	"github.com/vishvananda/netlink"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/apiswitch"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	"io/ioutil"
+)
+
+const (
+	stateDir = "/var/lib/cni/galaxy"
 )
 
 type NetConf struct {
@@ -23,6 +31,8 @@ type NetConf struct {
 	URL        string `json:"url"`
 	NetworkURI string `json:"network_uri"`
 	NodeIP     string `json:"node_ip"`
+	// get node ip from which network device
+	Devices string `json:"devices"`
 }
 
 func init() {
@@ -37,18 +47,36 @@ func loadConf(bytes []byte) (*NetConf, error) {
 	if err := json.Unmarshal(bytes, conf); err != nil {
 		return nil, fmt.Errorf("failed to load hybrid netconf: %v", err)
 	}
+	if conf.NodeIP == "" {
+		if conf.Devices == "" {
+			return nil, fmt.Errorf("no node ip configured")
+		}
+		devices := strings.Split(conf.Devices, ",")
+		if len(devices) == 0 {
+			return nil, fmt.Errorf("no node ip configured")
+		}
+		for _, dev := range devices {
+			nic, err := netlink.LinkByName(dev)
+			if err != nil {
+				continue
+			}
+			addr, err := netlink.AddrList(nic, netlink.FAMILY_V4)
+			if err != nil {
+				continue
+			}
+			if len(addr) == 1 {
+				conf.NodeIP = addr[0].IPNet.String()
+				break
+			}
+		}
+		if conf.NodeIP == "" {
+			return nil, fmt.Errorf("no node ip configured")
+		}
+	}
 	return conf, nil
 }
 
 func cmdAdd(args *skel.CmdArgs) error {
-	return cmd(args, true)
-}
-
-func cmdDel(args *skel.CmdArgs) error {
-	return cmd(args, false)
-}
-
-func cmd(args *skel.CmdArgs, add bool) error {
 	conf, err := loadConf(args.StdinData)
 	if err != nil {
 		return err
@@ -61,14 +89,15 @@ func cmd(args *skel.CmdArgs, add bool) error {
 	if err != nil {
 		return err
 	}
-	index := 0
-	// prints the result returned by the last network plugin
+	if len(networkInfo) == 0 {
+		return fmt.Errorf("No network info returned")
+	}
+	if err := saveNetworkInfo(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], networkInfo); err != nil {
+		return fmt.Errorf("Error save network info %v for %s: %v", networkInfo, kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], err)
+	}
 	var result *types.Result
-	//TODO handle default route
 	for k, v := range networkInfo {
 		if delegate, ok := conf.NetworkType[k]; ok {
-			os.Setenv(cniutil.CNI_IFNAME, fmt.Sprintf("eth%d", index))
-			index++
 			if len(v) != 0 {
 				//TODO test this situation
 				envs := os.Environ()
@@ -80,29 +109,68 @@ func cmd(args *skel.CmdArgs, add bool) error {
 					}
 				}
 				result, err = withEnv(envs, func() (*types.Result, error) {
-					return delegateCmd(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], delegate, add)
+					return delegateCmd(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], delegate, true)
 				})
-				if err != nil {
-					//TODO handle deleting previous succeed
-					return fmt.Errorf("failed to delegate setup network %s: %v", k, err)
-				}
 			} else {
-				result, err = delegateCmd(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], delegate, add)
-				if err != nil {
-					return fmt.Errorf("failed to delegate setup network %s: %v", k, err)
-				}
+				result, err = delegateCmd(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], delegate, true)
 			}
+			// configure only one network
+			break
 		} else {
 			return fmt.Errorf("No configures for network type %s", k)
 		}
 	}
-	if result == nil {
-		return fmt.Errorf("Network not configured %v", networkInfo)
+	if err != nil {
+		return err
 	}
-	if add {
-		return result.Print()
+	return result.Print()
+}
+
+func cmdDel(args *skel.CmdArgs) error {
+	conf, err := loadConf(args.StdinData)
+	if err != nil {
+		return err
 	}
-	return nil
+	kvMap, err := k8s.ParseK8SCNIArgs(args.Args)
+	if err != nil {
+		return err
+	}
+	networkInfo, err := consumeNetworkInfo(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID])
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Duplicated cmdDel invoked by kubelet
+			return nil
+		}
+		return fmt.Errorf("Error consume network info %v for %s: %v", networkInfo, kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], err)
+	}
+	if len(networkInfo) == 0 {
+		return fmt.Errorf("No network info returned")
+	}
+	for k, v := range networkInfo {
+		if delegate, ok := conf.NetworkType[k]; ok {
+			if len(v) != 0 {
+				//TODO test this situation
+				envs := os.Environ()
+				//append additional args
+				for i, env := range envs {
+					if strings.HasPrefix(env, cniutil.CNI_ARGS) {
+						envs[i] = fmt.Sprintf("%s;%s", env, cniutil.BuildCNIArgs(v))
+						break
+					}
+				}
+				_, err = withEnv(envs, func() (*types.Result, error) {
+					return delegateCmd(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], delegate, false)
+				})
+			} else {
+				_, err = delegateCmd(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], delegate, false)
+			}
+			// configure only one network
+			break
+		} else {
+			return fmt.Errorf("No configures for network type %s", k)
+		}
+	}
+	return err
 }
 
 func main() {
@@ -141,4 +209,31 @@ func setEnv(envs []string) {
 		}
 		os.Setenv(parts[0], parts[1])
 	}
+}
+
+func saveNetworkInfo(containerID string, info apiswitch.NetworkInfo) error {
+	if err := os.MkdirAll(stateDir, 0700); err != nil {
+		return err
+	}
+	path := filepath.Join(stateDir, containerID)
+	data, err := json.Marshal(info)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(path, data, 0600)
+}
+
+func consumeNetworkInfo(containerID string) (apiswitch.NetworkInfo, error) {
+	m := make(map[string]map[string]string)
+	path := filepath.Join(stateDir, containerID)
+	defer os.Remove(path)
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return m, err
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return m, err
+	}
+	return m, nil
 }

@@ -246,7 +246,7 @@ func (d *VlanDriver) CreateVeth(result *types.Result, args *skel.CmdArgs, vlanId
 
 	netns, err := ns.GetNS(args.Netns)
 	if err != nil {
-		return fmt.Errorf("failed to open netns %q: %v", netns, err)
+		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
 	}
 	defer netns.Close()
 	// move sbox veth device to ns
@@ -266,7 +266,10 @@ func (d *VlanDriver) CreateVeth(result *types.Result, args *skel.CmdArgs, vlanId
 func (d *VlanDriver) DeleteVeth(args *skel.CmdArgs) error {
 	netns, err := ns.GetNS(args.Netns)
 	if err != nil {
-		return fmt.Errorf("failed to open netns %q: %v", netns, err)
+		if _, ok := err.(ns.NSPathNotExistErr); ok {
+			return nil
+		}
+		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
 	}
 	defer netns.Close()
 

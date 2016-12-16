@@ -1,4 +1,4 @@
-Name: galaxy
+Name: galaxy-fixip
 Version: %{version}
 Release: %{commit}%{?dist}
 Summary: kubernetes network cni plugin
