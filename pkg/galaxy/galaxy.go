@@ -3,6 +3,7 @@ package galaxy
 import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
 )
 
 type Galaxy struct {
@@ -28,6 +29,7 @@ func (g *Galaxy) newQuitChannel() chan error {
 
 func (g *Galaxy) Start() error {
 	g.cleaner.Run()
+	kernel.BridgeNFCallIptables(g.newQuitChannel())
 	return g.startServer()
 }
 

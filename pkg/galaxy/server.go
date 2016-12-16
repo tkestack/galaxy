@@ -1,12 +1,12 @@
 package galaxy
 
 import (
-	"fmt"
-	"net/http"
-	"time"
-	"os"
-	"net"
 	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	galaxyapi "git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy"
