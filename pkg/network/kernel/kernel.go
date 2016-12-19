@@ -15,7 +15,7 @@ func BridgeNFCallIptables(quit chan error) {
 		if err != nil {
 			glog.Warningf("Error open %s: %v", file, err)
 		}
-		if string(data) != "1" {
+		if string(data) != "1\n" {
 			glog.Warningf("%s unset", file)
 			if err := ioutil.WriteFile(file, []byte("1"), 0644); err != nil {
 				glog.Warningf("Error set kernel args %s: %v", file, err)

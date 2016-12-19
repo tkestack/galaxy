@@ -4,24 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 
-	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/vishvananda/netlink"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/apiswitch"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
-	"io/ioutil"
-)
-
-const (
-	stateDir = "/var/lib/cni/galaxy"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/remote"
 )
 
 type NetConf struct {
@@ -92,7 +85,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if len(networkInfo) == 0 {
 		return fmt.Errorf("No network info returned")
 	}
-	if err := saveNetworkInfo(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], networkInfo); err != nil {
+	if err := remote.SaveNetworkInfo(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], networkInfo); err != nil {
 		return fmt.Errorf("Error save network info %v for %s: %v", networkInfo, kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], err)
 	}
 	var result *types.Result
@@ -108,11 +101,11 @@ func cmdAdd(args *skel.CmdArgs) error {
 						break
 					}
 				}
-				result, err = withEnv(envs, func() (*types.Result, error) {
-					return delegateCmd(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], delegate, true)
+				result, err = remote.WithEnv(envs, func() (*types.Result, error) {
+					return cniutil.DelegateCmd(delegate, true)
 				})
 			} else {
-				result, err = delegateCmd(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], delegate, true)
+				result, err = cniutil.DelegateCmd(delegate, true)
 			}
 			// configure only one network
 			break
@@ -135,7 +128,7 @@ func cmdDel(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	networkInfo, err := consumeNetworkInfo(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID])
+	networkInfo, err := remote.ConsumeNetworkInfo(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID])
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Duplicated cmdDel invoked by kubelet
@@ -158,11 +151,11 @@ func cmdDel(args *skel.CmdArgs) error {
 						break
 					}
 				}
-				_, err = withEnv(envs, func() (*types.Result, error) {
-					return delegateCmd(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], delegate, false)
+				_, err = remote.WithEnv(envs, func() (*types.Result, error) {
+					return cniutil.DelegateCmd(delegate, false)
 				})
 			} else {
-				_, err = delegateCmd(kvMap[k8s.K8S_POD_INFRA_CONTAINER_ID], delegate, false)
+				_, err = cniutil.DelegateCmd(delegate, false)
 			}
 			// configure only one network
 			break
@@ -175,65 +168,4 @@ func cmdDel(args *skel.CmdArgs) error {
 
 func main() {
 	skel.PluginMain(cmdAdd, cmdDel, version.Legacy)
-}
-
-func delegateCmd(cid string, netconf map[string]interface{}, add bool) (*types.Result, error) {
-	netconfBytes, err := json.Marshal(netconf)
-	if err != nil {
-		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
-	}
-
-	if add {
-		result, err := invoke.DelegateAdd(netconf["type"].(string), netconfBytes)
-		if err != nil {
-			return nil, err
-		}
-		return result, nil
-	}
-	return nil, invoke.DelegateDel(netconf["type"].(string), netconfBytes)
-}
-
-func withEnv(envs []string, f func() (*types.Result, error)) (*types.Result, error) {
-	origin := os.Environ()
-	setEnv(envs)
-	defer setEnv(origin)
-	return f()
-}
-
-func setEnv(envs []string) {
-	os.Clearenv()
-	for _, env := range envs {
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		os.Setenv(parts[0], parts[1])
-	}
-}
-
-func saveNetworkInfo(containerID string, info apiswitch.NetworkInfo) error {
-	if err := os.MkdirAll(stateDir, 0700); err != nil {
-		return err
-	}
-	path := filepath.Join(stateDir, containerID)
-	data, err := json.Marshal(info)
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(path, data, 0600)
-}
-
-func consumeNetworkInfo(containerID string) (apiswitch.NetworkInfo, error) {
-	m := make(map[string]map[string]string)
-	path := filepath.Join(stateDir, containerID)
-	defer os.Remove(path)
-
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		return m, err
-	}
-	if err := json.Unmarshal(data, &m); err != nil {
-		return m, err
-	}
-	return m, nil
 }

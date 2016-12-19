@@ -3,8 +3,8 @@ Description=galaxy, networking daemon
 After=network.target
 
 [Service]
-EnvironmentFile=/etc/sysconfig/galaxy-config
-ExecStart=/usr/bin/galaxy $ARGS
+EnvironmentFile=-/etc/sysconfig/galaxy-config
+ExecStart=/usr/bin/galaxy -network-conf=${NETWORK_CONF} $ARGS
 Restart=always
 RestartSec=5
 

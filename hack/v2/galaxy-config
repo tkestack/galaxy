@@ -1,1 +1,2 @@
-ARGS="-logtostderr"
+NETWORK_CONF='{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true},"subnetFile":"/run/flannel/subnet.env"},"galaxy-k8s-vlan":{"device":"eth1"}}'
+ARGS="-logtostderr -iface='eth1,docker,bond1'"

@@ -2,6 +2,7 @@ package galaxy
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net"
 	"net/http"
@@ -10,9 +11,20 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	galaxyapi "git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/flannel"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/remote"
+	"github.com/containernetworking/cni/pkg/types"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
+)
+
+var (
+	flagHybrid      = flag.Bool("hybrid", true, "whether or not calling apiswitch for network mode")
+	flagMaster      = flag.String("master", "", "URL of galaxy master controller, currently apiswitch")
+	flagNetworkConf = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
 )
 
 func (g *Galaxy) startServer() error {
@@ -68,19 +80,82 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 		defer func() {
 			glog.Infof("%v, data %s, err %v, %s-", req, string(data), err, start.Format(time.StampMicro))
 		}()
-		result, err1 := flannel.CmdAdd(req.CmdArgs)
+		result, err1 := g.cmdAdd(req)
 		if err1 != nil {
 			err = err1
 		} else {
 			if result != nil {
 				data, err = json.Marshal(result)
+				err = setupPortMapping(req.Ports, req.ContainerID, result)
 			}
 		}
 	} else if req.Command == cniutil.COMMAND_DEL {
 		defer glog.Infof("%v err %v, %s-", req, err, start.Format(time.StampMicro))
-		err = flannel.CmdDel(req.CmdArgs)
+		err = g.cmdDel(req)
+		if err == nil {
+			err = cleanupPortMapping(req.ContainerID)
+		}
 	} else {
 		err = fmt.Errorf("unkown command %s", req.Command)
 	}
 	return
+}
+
+func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (*types.Result, error) {
+	if !*flagHybrid {
+		req.CmdArgs.StdinData = g.flannelConf
+		return flannel.CmdAdd(req.CmdArgs)
+	}
+	return remote.CmdAdd(req, *flagMaster, flags.GetNodeIP(), g.netConf)
+}
+
+func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest) error {
+	if !*flagHybrid {
+		req.CmdArgs.StdinData = g.flannelConf
+		return flannel.CmdDel(req.CmdArgs)
+	}
+	return remote.CmdDel(req, g.netConf)
+}
+
+func setupPortMapping(portStr, containerID string, result *types.Result) error {
+	ports, err := k8s.ParsePorts(portStr)
+	if err != nil {
+		return err
+	}
+	if err := k8s.SavePort(containerID, portStr); err != nil {
+		return fmt.Errorf("failed to save ports %v", err)
+	}
+	// we have to fulfill ip field of the current pod
+	if result.IP4 == nil {
+		return fmt.Errorf("CNI plugin reported no IPv4 address")
+	}
+	ip4 := result.IP4.IP.IP.To4()
+	if ip4 == nil {
+		return fmt.Errorf("CNI plugin reported an invalid IPv4 address: %+v.", result.IP4)
+	}
+	for _, p := range ports {
+		p.PodIP = ip4.String()
+	}
+	if len(ports) != 0 {
+		if err := portmapping.SetupPortMapping("cni0", ports); err != nil {
+			return fmt.Errorf("failed to setup port mapping %v: %v", ports, err)
+		}
+	}
+	return nil
+}
+
+func cleanupPortMapping(containerID string) error {
+	ports, err := k8s.ConsumePort(containerID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read ports %v", err)
+	}
+	if len(ports) != 0 {
+		if err := portmapping.CleanPortMapping("cni0", ports); err != nil {
+			return fmt.Errorf("failed to delete port mapping %v: %v", ports, err)
+		}
+	}
+	return nil
 }

@@ -30,6 +30,8 @@ type PodRequest struct {
 	PodNamespace string
 	// kubernetes pod name
 	PodName string
+	// kubernetes pod ports
+	Ports string
 	// Channel for returning the operation result to the CNIServer
 	Result chan *PodResult
 	// Args
@@ -80,30 +82,30 @@ func CniRequestToPodRequest(r *http.Request) (*PodRequest, error) {
 	if !ok {
 		return nil, fmt.Errorf("missing %s", cniutil.CNI_PATH)
 	}
-
-	argsStr, ok := cr.Env[cniutil.CNI_ARGS]
+	req.Args, ok = cr.Env[cniutil.CNI_ARGS]
 	if !ok {
 		return nil, fmt.Errorf("missing %s", cniutil.CNI_ARGS)
 	}
 
-	cniArgs, err := k8s.ParseK8SCNIArgs(argsStr)
+	cniArgs, err := k8s.ParseK8SCNIArgs(req.Args)
 	if err != nil {
 		return nil, err
 	}
 
 	req.PodNamespace, ok = cniArgs[k8s.K8S_POD_NAMESPACE]
-	if err != nil {
+	if !ok {
 		return nil, fmt.Errorf("missing %s", k8s.K8S_POD_NAMESPACE)
 	}
 
 	req.PodName, ok = cniArgs[k8s.K8S_POD_NAME]
-	if err != nil {
+	if !ok {
 		return nil, fmt.Errorf("missing %s", k8s.K8S_POD_NAME)
 	}
+	req.Ports = cniArgs[k8s.K8S_PORTS]
 
 	return req, nil
 }
 
 func (req *PodRequest) String() string {
-	return fmt.Sprintf("pod %s_%s, %s, %s, %s, %s, %s", req.PodName, req.PodNamespace, req.Command, req.ContainerID, req.Netns, req.IfName, req.Path)
+	return fmt.Sprintf("%s %s_%s, %s, %s, %s", req.Command, req.PodName, req.PodNamespace, req.ContainerID, req.Netns, req.Args)
 }

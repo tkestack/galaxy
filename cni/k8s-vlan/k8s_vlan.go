@@ -21,7 +21,6 @@ var (
 type IPAMConf struct {
 	//ipam url, currently its the apiswitch
 	URL         string `json:"url"`
-	QueryURI    string `json:"query_uri"`
 	AllocateURI string `json:"allocate_uri"`
 	NodeIP      string `json:"node_ip"`
 	// get node ip from which network device
@@ -107,6 +106,9 @@ func loadIPAMConf(bytes []byte) (*IPAMConf, error) {
 		if conf.NodeIP == "" {
 			return nil, fmt.Errorf("no node ip configured")
 		}
+	}
+	if conf.AllocateURI == "" {
+		conf.AllocateURI = "v2/network/floatingip/%s/allocate/%s"
 	}
 	return conf, nil
 }

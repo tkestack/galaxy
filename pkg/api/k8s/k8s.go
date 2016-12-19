@@ -3,6 +3,9 @@ package k8s
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -20,6 +23,8 @@ const (
 	K8S_POD_NAME               = "K8S_POD_NAME"
 	K8S_POD_INFRA_CONTAINER_ID = "K8S_POD_INFRA_CONTAINER_ID"
 	K8S_PORTS                  = "K8S_PORTS"
+
+	stateDir = "/var/lib/cni/galaxy/port"
 )
 
 func ParseK8SCNIArgs(args string) (map[string]string, error) {
@@ -64,4 +69,30 @@ type Port struct {
 	PodName string `json:"podName"`
 
 	PodIP string `json:"podIP"`
+}
+
+func SavePort(containerID string, portStr string) error {
+	if err := os.MkdirAll(stateDir, 0700); err != nil {
+		return err
+	}
+	path := filepath.Join(stateDir, containerID)
+	return ioutil.WriteFile(path, []byte(portStr), 0600)
+}
+
+func ConsumePort(containerID string) ([]*Port, error) {
+	path := filepath.Join(stateDir, containerID)
+	defer os.Remove(path)
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, nil
+	}
+	var ports []*Port
+	if err := json.Unmarshal(data, &ports); err != nil {
+		return nil, err
+	}
+	return ports, nil
 }
