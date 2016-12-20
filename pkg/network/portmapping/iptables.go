@@ -9,7 +9,6 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 
-	iptablesproxy "k8s.io/kubernetes/pkg/proxy/iptables"
 	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/kubernetes/pkg/util/exec"
 	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
@@ -20,6 +19,8 @@ const (
 	kubeHostportsChain utiliptables.Chain = "KUBE-HOSTPORTS"
 	// prefix for hostport chains
 	kubeHostportChainPrefix string = "KUBE-HP-"
+
+	KubeMarkMasqChain utiliptables.Chain = "KUBE-MARK-MASQ"
 )
 
 func SetupPortMapping(natInterfaceName string, ports []*k8s.Port) error {
@@ -57,7 +58,7 @@ func SetupPortMapping(natInterfaceName string, ports []*k8s.Port) error {
 		args = []string{
 			"-A", string(hostportChain),
 			"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
-			"-s", containerPort.PodIP, "-j", string(iptablesproxy.KubeMarkMasqChain),
+			"-s", containerPort.PodIP, "-j", string(KubeMarkMasqChain),
 		}
 		writeLine(natRules, args...)
 
@@ -184,7 +185,7 @@ func setupPortMappingForAllPods(natInterfaceName string, ports []*k8s.Port) erro
 		args = []string{
 			"-A", string(hostportChain),
 			"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
-			"-s", containerPort.PodIP, "-j", string(iptablesproxy.KubeMarkMasqChain),
+			"-s", containerPort.PodIP, "-j", string(KubeMarkMasqChain),
 		}
 		writeLine(natRules, args...)
 

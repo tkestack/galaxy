@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/cni/pkg/invoke"
 )
 
 const (
@@ -217,7 +217,7 @@ func CmdAdd(args *skel.CmdArgs) (*types.Result, error) {
 		"type":   "host-local",
 		"subnet": fenv.sn.String(),
 		"routes": []types.Route{
-			types.Route{
+			{
 				Dst: *fenv.nw,
 			},
 		},

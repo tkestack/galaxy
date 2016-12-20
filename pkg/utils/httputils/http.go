@@ -23,7 +23,7 @@ func NewClient(timeout time.Duration, retry uint32) *HttpClient {
 }
 
 func NewDefaultClient() *HttpClient {
-	return NewClient(3*time.Second, 5)
+	return NewClient(5*time.Second, 5)
 }
 
 func (c *HttpClient) Post(url string, bodyType string, body io.Reader) (resp *http.Response, err error) {

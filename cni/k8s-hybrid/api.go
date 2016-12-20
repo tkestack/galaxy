@@ -15,6 +15,20 @@ func getNetworkInfo(conf *NetConf, kvMap map[string]string) (apiswitch.NetworkIn
 	client := httputils.NewDefaultClient()
 	resp, err := client.Post(fmt.Sprintf("%s/%s", conf.URL, fmt.Sprintf(conf.NetworkURI, kvMap[k8s.K8S_POD_NAME], conf.NodeIP)), "application/json", nil)
 	if err == nil {
+		if resp.StatusCode != 200 {
+			if resp.StatusCode == 400 {
+				// Pod is not a gaiastack app
+				infos := make(map[string]map[string]string)
+				infos["galaxy-flannel"] = nil
+				return infos, nil
+			}
+			defer resp.Body.Close()
+			data, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("apiswitch http response 500: %s", string(data))
+		}
 		defer resp.Body.Close()
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {

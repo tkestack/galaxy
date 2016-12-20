@@ -6,6 +6,12 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/flannel"
+	"github.com/containernetworking/cni/pkg/invoke"
+	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/containernetworking/cni/pkg/types"
+	"github.com/golang/glog"
 )
 
 const (
@@ -86,4 +92,72 @@ func BuildCNIArgs(args map[string]string) string {
 		entries = append(entries, fmt.Sprintf("%s=%s", k, v))
 	}
 	return strings.Join(entries, ";")
+}
+
+func DelegateCmd(netconf map[string]interface{}, add bool) (*types.Result, error) {
+	netconfBytes, err := json.Marshal(netconf)
+	if err != nil {
+		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
+	}
+
+	if add {
+		result, err := invoke.DelegateAdd(netconf["type"].(string), netconfBytes)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
+	return nil, invoke.DelegateDel(netconf["type"].(string), netconfBytes)
+}
+
+func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs) (*types.Result, error) {
+	netconfBytes, err := json.Marshal(netconf)
+	if err != nil {
+		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
+	}
+
+	if netconf["type"] == "galaxy-flannel" {
+		args.StdinData = netconfBytes
+		return flannel.CmdAdd(args)
+	} else {
+		pluginPath, err := invoke.FindInPath(netconf["type"].(string), strings.Split(args.Path, ":"))
+		if err != nil {
+			return nil, err
+		}
+		glog.Infof("delegate add %s args %s conf %s", args.ContainerID, args.Args, string(netconfBytes))
+		return invoke.ExecPluginWithResult(pluginPath, netconfBytes, &invoke.Args{
+			Command:       "ADD",
+			ContainerID:   args.ContainerID,
+			NetNS:         args.Netns,
+			PluginArgsStr: args.Args,
+			IfName:        args.IfName,
+			Path:          args.Path,
+		})
+	}
+}
+
+func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs) error {
+	netconfBytes, err := json.Marshal(netconf)
+	if err != nil {
+		return fmt.Errorf("error serializing delegate netconf: %v", err)
+	}
+
+	if netconf["type"] == "galaxy-flannel" {
+		args.StdinData = netconfBytes
+		return flannel.CmdDel(args)
+	} else {
+		pluginPath, err := invoke.FindInPath(netconf["type"].(string), strings.Split(args.Path, ":"))
+		if err != nil {
+			return err
+		}
+		glog.Infof("delegate del %s args %s conf %s", args.ContainerID, args.Args, string(netconfBytes))
+		return invoke.ExecPluginWithoutResult(pluginPath, netconfBytes, &invoke.Args{
+			Command:       "DEL",
+			ContainerID:   args.ContainerID,
+			NetNS:         args.Netns,
+			PluginArgsStr: args.Args,
+			IfName:        args.IfName,
+			Path:          args.Path,
+		})
+	}
 }
