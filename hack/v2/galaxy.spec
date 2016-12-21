@@ -25,6 +25,7 @@ install -p -m 755 bin/galaxy-k8s-vlan $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-vla
 install -p -m 755 bin/galaxy-bridge $RPM_BUILD_ROOT/opt/cni/bin/galaxy-bridge
 install -p -m 755 bin/loopback $RPM_BUILD_ROOT/opt/cni/bin/loopback
 install -p -m 755 bin/host-local $RPM_BUILD_ROOT/opt/cni/bin/host-local
+install -p -m 755 tools/qcloud/network_opt $RPM_BUILD_ROOT/opt/cni/bin/network_opt
 
 install -d $RPM_BUILD_ROOT/etc/cni/net.d/
 install -p -m 644 hack/v2/galaxy.conf $RPM_BUILD_ROOT/etc/cni/net.d/galaxy.conf
@@ -44,6 +45,7 @@ install -p -m 644 hack/v2/galaxy-config $RPM_BUILD_ROOT/etc/sysconfig/galaxy-con
 /opt/cni/bin/galaxy-bridge
 /opt/cni/bin/loopback
 /opt/cni/bin/host-local
+/opt/cni/bin/network_opt
 /%{_bindir}/galaxy
 /%{_unitdir}/galaxy.service
 
