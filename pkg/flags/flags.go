@@ -10,14 +10,12 @@ import (
 )
 
 var (
-	flagIface = flag.String("iface", "eth1,docker", "interface to use (CIDR or name) for inter-host communication")
+	flagIface string = flag.String("iface", "eth1,docker", "interface to use (CIDR or name) for inter-host communication")
+	nodeIP    string = strings.TrimSpace(*flagIface)
+	once      sync.Once
 )
 
 func GetNodeIP() string {
-	var (
-		once   sync.Once
-		nodeIP string = strings.TrimSpace(*flagIface)
-	)
 	once.Do(func() {
 		if nodeIP == "" {
 			glog.Fatal("iface unconfigured")
