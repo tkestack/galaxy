@@ -21,7 +21,7 @@ const (
 )
 
 func CmdAdd(req *galaxyapi.PodRequest, url, nodeIP string, netConf map[string]map[string]interface{}) (*types.Result, error) {
-	networkInfo, err := getNetworkInfo(url, nodeIP, req.PodName)
+	networkInfo, err := getNetworkInfo(url, nodeIP, req.PodName, req.PodNamespace)
 	if err != nil {
 		return nil, err
 	}
@@ -71,10 +71,11 @@ func CmdDel(req *galaxyapi.PodRequest, netConf map[string]map[string]interface{}
 	return fmt.Errorf("No network info returned")
 }
 
-func getNetworkInfo(url, nodeIP, podName string) (apiswitch.NetworkInfo, error) {
+func getNetworkInfo(url, nodeIP, podName, podNamespace string) (apiswitch.NetworkInfo, error) {
 	var networkInfo apiswitch.NetworkInfo
 	client := httputils.NewDefaultClient()
-	resp, err := client.Post(fmt.Sprintf("%s/%s", url, fmt.Sprintf(networkTypeURI, podName, nodeIP)), "application/json", nil)
+	podFullName := fmt.Sprintf("%s_%s", podName, podNamespace)
+	resp, err := client.Post(fmt.Sprintf("%s/%s", url, fmt.Sprintf(networkTypeURI, podFullName, nodeIP)), "application/json", nil)
 	if err == nil {
 		if resp.StatusCode != 200 {
 			if resp.StatusCode == 400 {
