@@ -13,7 +13,8 @@ import (
 func getNetworkInfo(conf *NetConf, kvMap map[string]string) (apiswitch.NetworkInfo, error) {
 	var networkInfo apiswitch.NetworkInfo
 	client := httputils.NewDefaultClient()
-	resp, err := client.Post(fmt.Sprintf("%s/%s", conf.URL, fmt.Sprintf(conf.NetworkURI, kvMap[k8s.K8S_POD_NAME], conf.NodeIP)), "application/json", nil)
+	podName := fmt.Sprintf("%s_%s", kvMap[k8s.K8S_POD_NAME], kvMap[k8s.K8S_POD_NAMESPACE])
+	resp, err := client.Post(fmt.Sprintf("%s/%s", conf.URL, fmt.Sprintf(conf.NetworkURI, podName, conf.NodeIP)), "application/json", nil)
 	if err == nil {
 		if resp.StatusCode != 200 {
 			if resp.StatusCode == 400 {

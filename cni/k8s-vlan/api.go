@@ -20,7 +20,8 @@ func allocate(conf *IPAMConf, args string, kvMap map[string]string) (*types.Resu
 	var ipInfo *apiswitch.IPInfo
 	if ipInfo = tryGetIPInfo(args); ipInfo == nil {
 		client := httputils.NewDefaultClient()
-		resp, err := client.Post(fmt.Sprintf("%s/%s", conf.URL, fmt.Sprintf(conf.AllocateURI, kvMap[k8s.K8S_POD_NAME], conf.NodeIP)), "application/json", nil)
+		podName := fmt.Sprintf("%s_%s", kvMap[k8s.K8S_POD_NAME], kvMap[k8s.K8S_POD_NAMESPACE])
+		resp, err := client.Post(fmt.Sprintf("%s/%s", conf.URL, fmt.Sprintf(conf.AllocateURI, podName, conf.NodeIP)), "application/json", nil)
 		if err == nil {
 			defer resp.Body.Close()
 			data, err := ioutil.ReadAll(resp.Body)
