@@ -9,7 +9,7 @@ CONTAINER_NAME=galaxy
 GITCOMMITNUM=$(git log --oneline|wc -l|sed -e 's/^[ \t]*//')
 GITVERSION=$V.0
 VERSION=${GITVERSION}.2
-NAME=galaxy
+NAME=galaxy-open
 RPMNAME=${NAME}-${VERSION}-${GITCOMMITNUM}.tl2.x86_64.rpm
 RPMFILE=${CURDIR}/bin/x86_64/${RPMNAME}
 BIND_DIR=bin/${NAME}-${VERSION}
@@ -40,5 +40,5 @@ docker cp ${CURDIR}/bin/${NAME}-${VERSION}.tar.gz ${CONTAINER_NAME}:/root/rpmbui
 docker cp ${CURDIR}/hack/v${V}/galaxy.spec ${CONTAINER_NAME}:/root/rpmbuild/SPECS/
 docker start -ai ${CONTAINER_NAME}
 size=$(ls -l ${CURDIR}/bin/x86_64/${RPMNAME} | awk '{print $5}')
-#curl -v 'http://gaia.repo.oa.com/upload_file?filesize='${size}'&filename='${RPMNAME}'&dirtype=1' -T ${RPMFILE}
-#curl -v 'http://gaia.repo.oa.com/update_repo?dirtype=1'
+curl -v 'http://gaia.repo.oa.com/upload_file?filesize='${size}'&filename='${RPMNAME}'&dirtype=1' -T ${RPMFILE}
+curl -v 'http://gaia.repo.oa.com/update_repo?dirtype=1'

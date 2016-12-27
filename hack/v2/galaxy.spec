@@ -1,4 +1,4 @@
-Name: galaxy
+Name: galaxy-open
 Version: %{version}
 Release: %{commit}%{?dist}
 Summary: kubernetes network cni plugin
