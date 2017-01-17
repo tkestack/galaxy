@@ -24,7 +24,7 @@ import (
 var (
 	flagHybrid      = flag.Bool("hybrid", true, "whether or not calling apiswitch for network mode")
 	flagMaster      = flag.String("master", "", "URL of galaxy master controller, currently apiswitch")
-	flagNetworkConf = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
+	flagNetworkConf = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
 )
 
 func (g *Galaxy) startServer() error {
