@@ -39,6 +39,12 @@ func GetNodeIP() string {
 				continue
 			}
 			if len(addr) == 1 {
+				if addr[0].IPNet != nil && addr[0].IP != nil {
+					if addr[0].IP.IsLoopback() {
+						glog.Infof("ignore loopback address %s on device %s", addr[0].IPNet.String(), dev)
+						continue
+					}
+				}
 				nodeIP = addr[0].IPNet.String()
 				return
 			}
