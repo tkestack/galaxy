@@ -6,15 +6,19 @@
 :DOCKER - [0:0]
 :KUBE-FIREWALL - [0:0]
 :KUBE-SERVICES - [0:0]
--A INPUT -s 192.168.0.0/24 -p tcp -m tcp --dport 2375 -j ACCEPT
--A INPUT -s 172.16.0.0/12 -p tcp -m tcp --dport 2375 -j ACCEPT
--A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 2375 -j ACCEPT
--A INPUT -p tcp -m addrtype --src-type LOCAL -m tcp --dport 2375 -j ACCEPT
--A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 10250 -j ACCEPT
--A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 10255 -j ACCEPT
--A INPUT -p tcp -m tcp --dport 2375 -j DROP
--A INPUT -p tcp -m tcp --dport 10250 -j DROP
--A INPUT -p tcp -m tcp --dport 10255 -j DROP
+-A INPUT -s 10.0.0.0/8 -p tcp -j ACCEPT
+-A INPUT -s 10.0.0.0/8 -p udp -j ACCEPT
+-A INPUT -s 172.16.0.0/12 -p tcp -j ACCEPT
+-A INPUT -s 172.16.0.0/12 -p udp -j ACCEPT
+-A INPUT -s 192.168.0.0/16 -p tcp -j ACCEPT
+-A INPUT -s 192.168.0.0/16 -p udp -j ACCEPT
+-A INPUT -p tcp -m addrtype --src-type LOCAL -j ACCEPT
+-A INPUT -p udp -m addrtype --src-type LOCAL -j ACCEPT
+-A INPUT -p tcp -m multiport --dport 22,80,8080,8081 -j ACCEPT
+-A INPUT -p udp -m multiport --dport 22,80,8080,8081 -j ACCEPT
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -p tcp -j DROP
+-A INPUT -p udp -j DROP
 -A INPUT -j KUBE-FIREWALL
 -A FORWARD -o docker0 -j DOCKER
 -A FORWARD -o docker0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
