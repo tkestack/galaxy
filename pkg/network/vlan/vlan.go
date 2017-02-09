@@ -188,14 +188,8 @@ func (d *VlanDriver) CreateVeth(result *types.Result, args *skel.CmdArgs, vlanId
 	if vlanId != 0 {
 		bridgeName = fmt.Sprintf("%s%d", bridgePrefix, vlanId)
 	}
-	hostIfName, err := utils.GenerateIfaceName(fmt.Sprintf("%s-h", vethPrefix), vethLen)
-	if err != nil {
-		return err
-	}
-	containerIfName, err := utils.GenerateIfaceName(fmt.Sprintf("%s-s", vethPrefix), vethLen)
-	if err != nil {
-		return err
-	}
+	hostIfName := fmt.Sprintf("%s-h%s", vethPrefix, args.ContainerID[0:9])
+	containerIfName := fmt.Sprintf("%s-s%s", vethPrefix, args.ContainerID[0:9])
 	// Generate and add the interface pipe host <-> sandbox
 	veth := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0},
