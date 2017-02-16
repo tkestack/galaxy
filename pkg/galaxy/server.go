@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
@@ -102,6 +103,9 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 }
 
 func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (*types.Result, error) {
+	if err := disableIPv6(req.Netns); err != nil {
+		glog.Warningf("Error disable ipv6 %v", err)
+	}
 	if !*flagHybrid {
 		req.CmdArgs.StdinData = g.flannelConf
 		return flannel.CmdAdd(req.CmdArgs)
@@ -156,6 +160,19 @@ func cleanupPortMapping(containerID string) error {
 		if err := portmapping.CleanPortMapping("cni0", ports); err != nil {
 			return fmt.Errorf("failed to delete port mapping %v: %v", ports, err)
 		}
+	}
+	return nil
+}
+
+func disableIPv6(path string) error {
+	cmd := &exec.Cmd{
+		Path:   "/opt/cni/bin/disable-ipv6",
+		Args:   append([]string{"set-ipv6"}, path),
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("reexec to set IPv6 failed: %v", err)
 	}
 	return nil
 }

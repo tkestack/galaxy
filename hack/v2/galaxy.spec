@@ -20,6 +20,7 @@ kubernetes network cni plugin
 
 %install
 install -d $RPM_BUILD_ROOT/opt/cni/bin/
+install -p -m 755 bin/disable-ipv6 $RPM_BUILD_ROOT/opt/cni/bin/disable-ipv6
 install -p -m 755 bin/galaxy-sdn $RPM_BUILD_ROOT/opt/cni/bin/galaxy-sdn
 install -p -m 755 bin/galaxy-k8s-vlan $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-vlan
 install -p -m 755 bin/galaxy-bridge $RPM_BUILD_ROOT/opt/cni/bin/galaxy-bridge
@@ -40,6 +41,7 @@ install -d $RPM_BUILD_ROOT/etc/sysconfig/
 install -p -m 644 hack/v2/galaxy-config $RPM_BUILD_ROOT/etc/sysconfig/galaxy-config
 
 %files
+/opt/cni/bin/disable-ipv6
 /opt/cni/bin/galaxy-sdn
 /opt/cni/bin/galaxy-k8s-vlan
 /opt/cni/bin/galaxy-bridge

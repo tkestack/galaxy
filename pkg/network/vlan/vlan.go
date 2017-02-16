@@ -248,8 +248,7 @@ func (d *VlanDriver) CreateVeth(result *types.Result, args *skel.CmdArgs, vlanId
 		return fmt.Errorf("failed to move sbox device %q to netns: %v", sbox.Attrs().Name, err)
 	}
 	return netns.Do(func(_ ns.NetNS) error {
-		err := netlink.LinkSetName(sbox, args.IfName)
-		if err != nil {
+		if err := netlink.LinkSetName(sbox, args.IfName); err != nil {
 			return fmt.Errorf("failed to rename sbox device %q to %q: %v", sbox.Attrs().Name, args.IfName, err)
 		}
 		// Add IP and routes to sbox, including default route

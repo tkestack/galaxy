@@ -18,6 +18,9 @@ function cleanup() {
 	rm $cur_dir/go/src/$package
 }
 trap cleanup EXIT
+echo "Building tools"
+echo "   disable-ipv6"
+go build -o bin/disable-ipv6 -v $package/cmd/disable-ipv6
 echo "Building ipam plugins"
 echo "   host-local"
 # build host-local ipam plugin
