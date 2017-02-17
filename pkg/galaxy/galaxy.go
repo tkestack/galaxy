@@ -8,6 +8,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
 	"github.com/golang/glog"
 )
@@ -41,6 +42,7 @@ func (g *Galaxy) newQuitChannel() chan error {
 func (g *Galaxy) Start() error {
 	g.cleaner.Run()
 	kernel.BridgeNFCallIptables(g.newQuitChannel())
+	firewall.SetupEbtables(g.newQuitChannel())
 	return g.startServer()
 }
 

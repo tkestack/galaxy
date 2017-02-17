@@ -7,6 +7,7 @@ License: MIT
 Requires: /bin/sh
 BuildRequires: pkgconfig(systemd)
 Requires: systemd-units
+Requires: ebtables
 Source: %{name}-%{version}.tar.gz
 
 %description
@@ -39,6 +40,7 @@ install -p -m 644 hack/v2/galaxy.service $RPM_BUILD_ROOT/%{_unitdir}/galaxy.serv
 
 install -d $RPM_BUILD_ROOT/etc/sysconfig/
 install -p -m 644 hack/v2/galaxy-config $RPM_BUILD_ROOT/etc/sysconfig/galaxy-config
+install -p -m 644 hack/v2/galaxy-ebtable-filter $RPM_BUILD_ROOT/etc/sysconfig/galaxy-ebtable-filter
 
 %files
 /opt/cni/bin/disable-ipv6
@@ -54,6 +56,7 @@ install -p -m 644 hack/v2/galaxy-config $RPM_BUILD_ROOT/etc/sysconfig/galaxy-con
 %config(noreplace) /etc/cni/net.d/galaxy.conf
 %config(noreplace) /%{_unitdir}/galaxy.service
 %config(missingok) /etc/sysconfig/galaxy-config
+%config(missingok,noreplace) /etc/sysconfig/galaxy-ebtable-filter
 
 %define __debug_install_post   \
    %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} "%{_builddir}/%{?buildsubdir}"\

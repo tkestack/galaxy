@@ -11,8 +11,8 @@ import (
 
 var (
 	flagIface *string = flag.String("iface", "eth1,docker,bond1", "interface to use (CIDR or name) for inter-host communication")
-	nodeIP     string
-	once       sync.Once
+	nodeIP    string
+	once      sync.Once
 )
 
 func GetNodeIP() string {
