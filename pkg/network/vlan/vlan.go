@@ -13,6 +13,7 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 )
 
 const (
@@ -62,7 +63,8 @@ func (d *VlanDriver) SetupBridge() error {
 	if err != nil {
 		return fmt.Errorf("Errror getting ipv4 address %v", err)
 	}
-	if len(v4Addr) == 0 {
+	filteredAddr := network.FilterLoopbackAddr(v4Addr)
+	if len(filteredAddr) == 0 {
 		bri, err := netlink.LinkByName(defaultBridge)
 		if err != nil {
 			return fmt.Errorf("Error getting bri device %s: %v", defaultBridge, err)
@@ -70,7 +72,7 @@ func (d *VlanDriver) SetupBridge() error {
 		if bri.Attrs().Index != device.Attrs().MasterIndex {
 			return fmt.Errorf("No available address found on device %s", d.Device)
 		}
-	} else if len(v4Addr) > 1 {
+	} else if len(filteredAddr) > 1 {
 		return fmt.Errorf("Multiple v4 address on device %s", d.Device)
 	} else {
 		bri, err := getOrCreateBridge(defaultBridge, device.Attrs().HardwareAddr)
@@ -96,19 +98,19 @@ func (d *VlanDriver) SetupBridge() error {
 					}
 				}()
 			}
-			if err = netlink.AddrDel(device, &v4Addr[0]); err != nil {
+			if err = netlink.AddrDel(device, &filteredAddr[0]); err != nil {
 				return fmt.Errorf("Failed to remove v4address from device %s: %v", d.Device, err)
 			}
 			defer func() {
 				if err != nil {
-					if err = netlink.AddrAdd(device, &v4Addr[0]); err != nil {
+					if err = netlink.AddrAdd(device, &filteredAddr[0]); err != nil {
 						//glog.Warningf("Failed to rollback v4address to device %s: %v, address %v", device, err, v4Addr[0])
 					}
 				}
 			}()
-			v4Addr[0].Label = ""
-			if err = netlink.AddrAdd(bri, &v4Addr[0]); err != nil {
-				return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", defaultBridge, err, v4Addr[0])
+			filteredAddr[0].Label = ""
+			if err = netlink.AddrAdd(bri, &filteredAddr[0]); err != nil {
+				return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", defaultBridge, err, filteredAddr[0])
 			}
 			if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: defaultBridge}}); err != nil {
 				return fmt.Errorf("Failed to add device %s to bridge device %s: %v", d.Device, defaultBridge, err)

@@ -2,11 +2,13 @@ package flags
 
 import (
 	"flag"
-	"github.com/golang/glog"
-	"github.com/vishvananda/netlink"
 	"net"
 	"strings"
 	"sync"
+
+	"github.com/golang/glog"
+	"github.com/vishvananda/netlink"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 )
 
 var (
@@ -34,19 +36,17 @@ func GetNodeIP() string {
 			if err != nil {
 				continue
 			}
-			addr, err := netlink.AddrList(nic, netlink.FAMILY_V4)
+			addrs, err := netlink.AddrList(nic, netlink.FAMILY_V4)
 			if err != nil {
 				continue
 			}
-			if len(addr) == 1 {
-				if addr[0].IPNet != nil && addr[0].IP != nil {
-					if addr[0].IP.IsLoopback() {
-						glog.Infof("ignore loopback address %s on device %s", addr[0].IPNet.String(), dev)
-						continue
-					}
-				}
-				nodeIP = addr[0].IPNet.String()
+			filteredAddr := network.FilterLoopbackAddr(addrs)
+			if len(filteredAddr) == 1 {
+				nodeIP = filteredAddr[0].IPNet.String()
 				return
+			} else if len(filteredAddr) > 1 {
+				glog.Warningf("multiple address %v found on device %s, ignore this device", filteredAddr, dev)
+				continue
 			}
 		}
 		glog.Fatalf("cann't find valid node ip from ifaces %s", nodeIP)
