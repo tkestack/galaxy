@@ -43,3 +43,9 @@
 [submodule "vendor/github.com/opencontainers/runc"]
 	path = vendor/github.com/opencontainers/runc
 	url = https://github.com/opencontainers/runc
+[submodule "vendor/github.com/coreos/go-semver"]
+	path = vendor/github.com/coreos/go-semver
+	url = https://github.com/coreos/go-semver
+[submodule "vendor/github.com/godbus/dbus"]
+	path = vendor/github.com/godbus/dbus
+	url = https://vendor/github.com/godbus/dbus
