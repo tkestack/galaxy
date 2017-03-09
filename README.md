@@ -11,6 +11,13 @@ git clone --recursive http://git.code.oa.com/gaiastack/galaxy.git
 git clone http://git.code.oa.com/gaiastack/galaxy.git
 git submodule init
 git submodule update
+# remove vendor directory of submodules to get compiled by go build
+rm -rf vendor/k8s.io/kubernetes/vendor
+rm -rf vendor/github.com/containernetworking/cni/vendor
+git update-index --assume-unchanged vendor/k8s.io/kubernetes
+git update-index --assume-unchanged vendor/github.com/containernetworking/cni
+# track the changes again before update a dependency
+git update-index --no-assume-unchanged <path/to/file>
 
 # manage dependencies
 go get github.com/kovetskiy/manul
