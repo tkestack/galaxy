@@ -8,6 +8,7 @@ Requires: /bin/sh
 BuildRequires: pkgconfig(systemd)
 Requires: systemd-units
 Requires: ebtables
+Requires: iputils
 Source: %{name}-%{version}.tar.gz
 
 %description

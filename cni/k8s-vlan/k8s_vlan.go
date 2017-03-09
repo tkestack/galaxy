@@ -3,10 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"runtime"
 	"strings"
 
+	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/vishvananda/netlink"
 
@@ -60,6 +63,9 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err := d.CreateVeth(result, args, vlanId); err != nil {
 		return err
 	}
+	//send Gratuitous ARP to let switch knows IP floats onto this node
+	//ignore errors as we can't print logs and we do this as best as we can
+	sendGratuitousARP(result, args)
 	result.DNS = conf.DNS
 	return result.Print()
 }
@@ -111,4 +117,21 @@ func loadIPAMConf(bytes []byte) (*IPAMConf, error) {
 		conf.AllocateURI = "v2/network/floatingip/%s/allocate/%s"
 	}
 	return conf, nil
+}
+
+func sendGratuitousARP(result *types.Result, args *skel.CmdArgs) error {
+	arping, err := exec.LookPath("arping")
+	if err != nil {
+		return fmt.Errorf("unable to locate arping")
+	}
+	command := exec.Command(arping, "-c", "2", "-A", "-I", args.IfName, result.IP4.IP.IP.String())
+	netns, err := ns.GetNS(args.Netns)
+	if err != nil {
+		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
+	}
+	defer netns.Close()
+	return netns.Do(func(_ ns.NetNS) error {
+		_, err = command.CombinedOutput()
+		return err
+	})
 }
