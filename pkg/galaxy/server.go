@@ -23,7 +23,6 @@ import (
 )
 
 var (
-	flagHybrid      = flag.Bool("hybrid", true, "whether or not calling apiswitch for network mode")
 	flagMaster      = flag.String("master", "", "URL of galaxy master controller, currently apiswitch")
 	flagNetworkConf = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
 )
@@ -106,7 +105,7 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (*types.Result, error) {
 	if err := disableIPv6(req.Netns); err != nil {
 		glog.Warningf("Error disable ipv6 %v", err)
 	}
-	if !*flagHybrid {
+	if *flagMaster == "" {
 		req.CmdArgs.StdinData = g.flannelConf
 		return flannel.CmdAdd(req.CmdArgs)
 	}
@@ -114,7 +113,7 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (*types.Result, error) {
 }
 
 func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest) error {
-	if !*flagHybrid {
+	if *flagMaster == "" {
 		req.CmdArgs.StdinData = g.flannelConf
 		return flannel.CmdDel(req.CmdArgs)
 	}
