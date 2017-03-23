@@ -73,8 +73,6 @@ func (d *VlanDriver) SetupBridge() error {
 		if bri.Attrs().Index != device.Attrs().MasterIndex {
 			return fmt.Errorf("No available address found on device %s", d.Device)
 		}
-	} else if len(filteredAddr) > 1 {
-		return fmt.Errorf("Multiple v4 address on device %s", d.Device)
 	} else {
 		bri, err := getOrCreateBridge(defaultBridge, device.Attrs().HardwareAddr)
 		if err != nil {
@@ -99,20 +97,24 @@ func (d *VlanDriver) SetupBridge() error {
 					}
 				}()
 			}
-			if err = netlink.AddrDel(device, &filteredAddr[0]); err != nil {
-				return fmt.Errorf("Failed to remove v4address from device %s: %v", d.Device, err)
-			}
-			defer func() {
-				if err != nil {
-					if err = netlink.AddrAdd(device, &filteredAddr[0]); err != nil {
-						//glog.Warningf("Failed to rollback v4address to device %s: %v, address %v", device, err, v4Addr[0])
-					}
+			for i := range filteredAddr {
+				if err = netlink.AddrDel(device, &filteredAddr[i]); err != nil {
+					return fmt.Errorf("Failed to remove v4address from device %s: %v", d.Device, err)
 				}
-			}()
-			filteredAddr[0].Label = ""
-			if err = netlink.AddrAdd(bri, &filteredAddr[0]); err != nil {
-				if !strings.Contains(err.Error(), "file exists") {
-					return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", defaultBridge, err, filteredAddr[0])
+				defer func() {
+					if err != nil {
+						if err = netlink.AddrAdd(device, &filteredAddr[i]); err != nil {
+							//glog.Warningf("Failed to rollback v4address to device %s: %v, address %v", device, err, v4Addr[0])
+						}
+					}
+				}()
+				filteredAddr[i].Label = ""
+				if err = netlink.AddrAdd(bri, &filteredAddr[i]); err != nil {
+					if !strings.Contains(err.Error(), "file exists") {
+						return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", defaultBridge, err, filteredAddr[i])
+					} else {
+						err = nil
+					}
 				}
 			}
 			if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: defaultBridge}}); err != nil {
