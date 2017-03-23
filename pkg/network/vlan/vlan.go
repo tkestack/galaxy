@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/containernetworking/cni/pkg/ipam"
@@ -110,7 +111,9 @@ func (d *VlanDriver) SetupBridge() error {
 			}()
 			filteredAddr[0].Label = ""
 			if err = netlink.AddrAdd(bri, &filteredAddr[0]); err != nil {
-				return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", defaultBridge, err, filteredAddr[0])
+				if !strings.Contains(err.Error(), "file exists") {
+					return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", defaultBridge, err, filteredAddr[0])
+				}
 			}
 			if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: defaultBridge}}); err != nil {
 				return fmt.Errorf("Failed to add device %s to bridge device %s: %v", d.Device, defaultBridge, err)
