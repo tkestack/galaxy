@@ -5,10 +5,10 @@ import (
 	"syscall"
 	"time"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 	log "github.com/golang/glog"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 )
 
 var flagDevice = flag.String("device", "", "device name to listen")

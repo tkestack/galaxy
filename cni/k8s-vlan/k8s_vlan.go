@@ -15,6 +15,7 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 )
 
 var (
@@ -60,7 +61,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err := d.CreateVlanDevice(vlanId); err != nil {
 		return err
 	}
-	if err := d.CreateVeth(result, args, vlanId); err != nil {
+	if err := utils.ConnectsHostWithContainer(result, args, d.BridgeNameForVlan(vlanId)); err != nil {
 		return err
 	}
 	//send Gratuitous ARP to let switch knows IP floats onto this node
@@ -71,7 +72,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 }
 
 func cmdDel(args *skel.CmdArgs) error {
-	if err := d.DeleteVeth(args); err != nil {
+	if err := utils.DeleteVeth(args.Netns, args.IfName); err != nil {
 		return err
 	}
 	return nil

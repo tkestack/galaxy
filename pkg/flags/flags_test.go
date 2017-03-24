@@ -3,14 +3,15 @@ package flags
 import (
 	"testing"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/netns"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 	"github.com/vishvananda/netlink"
+
+	"git.code.oa.com/gaiastack/galaxy/pkg/network"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/netns"
 )
 
 func TestNodeIP(t *testing.T) {
 	flagIface = &string{"lo"}
-	netns.NsInvoke(func(){
+	netns.NsInvoke(func() {
 		lo, err := netlink.LinkByName("lo")
 		if err != nil {
 			t.Fatal(err)

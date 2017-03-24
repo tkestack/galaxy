@@ -5,9 +5,10 @@ import (
 	"net"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
-	"github.com/golang/glog"
-	"github.com/containernetworking/cni/pkg/types"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/containernetworking/cni/pkg/types"
+	"github.com/golang/glog"
 )
 
 var (
@@ -21,7 +22,7 @@ var (
 /*
  ./setupvlan -logtostderr -device bond1
  ip netns add ctn2; ./setupvlan -logtostderr -device bond1 -netns=/var/run/netns/ctn2 -ip=10.2.1.111/24 -gateway=10.2.1.1
- */
+*/
 func main() {
 	flag.Parse()
 	d := &vlan.VlanDriver{}
@@ -50,7 +51,7 @@ func main() {
 			glog.Fatalf("Error creating vlan device %v", err)
 		}
 	}
-	if err := d.CreateVeth(&types.Result{
+	if err := utils.ConnectsHostWithContainer(&types.Result{
 		IP4: &types.IPConfig{
 			IP:      *ipNet,
 			Gateway: gateway,
@@ -61,7 +62,7 @@ func main() {
 				},
 			}},
 		},
-	}, &skel.CmdArgs{Netns: *flagNetns, IfName: "eth0"}, uint16(*flagVlan)); err != nil {
+	}, &skel.CmdArgs{Netns: *flagNetns, IfName: "eth0"}, d.BridgeNameForVlan(uint16(*flagVlan))); err != nil {
 		glog.Fatalf("Error creating veth %v", err)
 	}
 	glog.Infof("privisioned container %s", *flagNetns)
