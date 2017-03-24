@@ -34,6 +34,10 @@ go build -o bin/${bin_prefix}-bridge -v $cni_package/plugins/main/bridge
 #echo "   flannel"
 #go build -o bin/${bin_prefix}-flannel -v $cni_package/plugins/meta/flannel
 
+# hack for remove vendor of cni repo when building galaxy binaries
+echo `pwd`
+mv vendor/$cni_package/vendor vendor/$cni_package/back_vendor
+
 # build galaxy cni plugins
 PLUGINS="$GOPATH/src/$package/cni/k8s-vlan $GOPATH/src/$package/cni/sdn"
 for d in $PLUGINS; do
@@ -47,3 +51,5 @@ done
 # build galaxy
 echo "Building galaxy"
 go build -o bin/galaxy -v $package/cmd/galaxy
+
+mv vendor/$cni_package/back_vendor vendor/$cni_package/vendor
