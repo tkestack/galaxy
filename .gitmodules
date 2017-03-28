@@ -48,4 +48,4 @@
 	url = https://github.com/coreos/go-semver
 [submodule "vendor/github.com/godbus/dbus"]
 	path = vendor/github.com/godbus/dbus
-	url = https://vendor/github.com/godbus/dbus
+	url = https://github.com/godbus/dbus
