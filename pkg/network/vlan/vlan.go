@@ -13,8 +13,8 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/vishvananda/netlink"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 )
 
 const (
@@ -190,104 +190,10 @@ func (d *VlanDriver) CreateVlanDevice(vlanId uint16) error {
 	return nil
 }
 
-func (d *VlanDriver) CreateVeth(result *types.Result, args *skel.CmdArgs, vlanId uint16) error {
+func (d *VlanDriver) BridgeNameForVlan(vlanId uint16) string {
 	bridgeName := defaultBridge
 	if vlanId != 0 {
 		bridgeName = fmt.Sprintf("%s%d", bridgePrefix, vlanId)
 	}
-	hostIfName := fmt.Sprintf("%s-h%s", vethPrefix, args.ContainerID[0:9])
-	containerIfName := fmt.Sprintf("%s-s%s", vethPrefix, args.ContainerID[0:9])
-	// Generate and add the interface pipe host <-> sandbox
-	veth := &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0},
-		PeerName:  containerIfName}
-	if err := netlink.LinkAdd(veth); err != nil {
-		return fmt.Errorf("failed to add the host %q <=> sandbox %q pair interfaces: %v", hostIfName, containerIfName, err)
-	}
-
-	// Get the host side pipe interface handler
-	host, err := netlink.LinkByName(hostIfName)
-	if err != nil {
-		return fmt.Errorf("failed to find host side interface %q: %v", hostIfName, err)
-	}
-	defer func() {
-		if err != nil {
-			netlink.LinkDel(host)
-		}
-	}()
-
-	// Get the sandbox side pipe interface handler
-	sbox, err := netlink.LinkByName(containerIfName)
-	if err != nil {
-		return fmt.Errorf("failed to find sandbox side interface %q: %v", containerIfName, err)
-	}
-	defer func() {
-		if err != nil {
-			netlink.LinkDel(sbox)
-		}
-	}()
-
-	// Attach host side pipe interface into the bridge
-	if err = utils.AddToBridge(hostIfName, bridgeName); err != nil {
-		return fmt.Errorf("adding interface %q to bridge %q failed: %v", hostIfName, bridgeName, err)
-	}
-	// Down the interface before configuring mac address.
-	if err = netlink.LinkSetDown(sbox); err != nil {
-		return fmt.Errorf("could not set link down for container interface %q: %v", containerIfName, err)
-	}
-
-	if err = netlink.LinkSetHardwareAddr(sbox, utils.GenerateMACFromIP(result.IP4.IP.IP)); err != nil {
-		return fmt.Errorf("could not set mac address for container interface %q: %v", containerIfName, err)
-	}
-
-	// Up the host interface after finishing all netlink configuration
-	if err = netlink.LinkSetUp(host); err != nil {
-		return fmt.Errorf("could not set link up for host interface %q: %v", hostIfName, err)
-	}
-
-	netns, err := ns.GetNS(args.Netns)
-	if err != nil {
-		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
-	}
-	defer netns.Close()
-	// move sbox veth device to ns
-	if err = netlink.LinkSetNsFd(sbox, int(netns.Fd())); err != nil {
-		return fmt.Errorf("failed to move sbox device %q to netns: %v", sbox.Attrs().Name, err)
-	}
-	return netns.Do(func(_ ns.NetNS) error {
-		if err := netlink.LinkSetName(sbox, args.IfName); err != nil {
-			return fmt.Errorf("failed to rename sbox device %q to %q: %v", sbox.Attrs().Name, args.IfName, err)
-		}
-		// Add IP and routes to sbox, including default route
-		return ipam.ConfigureIface(args.IfName, result)
-	})
-}
-
-func (d *VlanDriver) DeleteVeth(args *skel.CmdArgs) error {
-	netns, err := ns.GetNS(args.Netns)
-	if err != nil {
-		if _, ok := err.(ns.NSPathNotExistErr); ok {
-			return nil
-		}
-		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
-	}
-	defer netns.Close()
-
-	return netns.Do(func(_ ns.NetNS) error {
-		// get sbox device
-		sbox, err := netlink.LinkByName(args.IfName)
-		if err != nil {
-			return fmt.Errorf("failed to lookup sbox device %q: %v", args.IfName, err)
-		}
-
-		// shutdown sbox device
-		if err = netlink.LinkSetDown(sbox); err != nil {
-			return fmt.Errorf("failed to down sbox device %q: %v", sbox.Attrs().Name, err)
-		}
-
-		if err = netlink.LinkDel(sbox); err != nil {
-			return fmt.Errorf("failed to delete sbox device %q: %v", sbox.Attrs().Name, err)
-		}
-		return nil
-	})
+	return bridgeName
 }

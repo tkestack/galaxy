@@ -9,6 +9,10 @@ import (
 	"net"
 	"strings"
 
+	"github.com/containernetworking/cni/pkg/ipam"
+	"github.com/containernetworking/cni/pkg/ns"
+	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/containernetworking/cni/pkg/types"
 	"github.com/vishvananda/netlink"
 )
 
@@ -112,4 +116,124 @@ func GenerateIfaceName(prefix string, len int) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("could not generate interface name")
+}
+
+// DeleteVeth deletes veth device inside the container
+func DeleteVeth(netnsPath, ifName string) error {
+	netns, err := ns.GetNS(netnsPath)
+	if err != nil {
+		if _, ok := err.(ns.NSPathNotExistErr); ok {
+			return nil
+		}
+		return fmt.Errorf("failed to open netns %q: %v", netnsPath, err)
+	}
+	defer netns.Close()
+
+	return netns.Do(func(_ ns.NetNS) error {
+		// get sbox device
+		sbox, err := netlink.LinkByName(ifName)
+		if err != nil {
+			return fmt.Errorf("failed to lookup sbox device %q: %v", ifName, err)
+		}
+
+		// shutdown sbox device
+		if err = netlink.LinkSetDown(sbox); err != nil {
+			return fmt.Errorf("failed to down sbox device %q: %v", sbox.Attrs().Name, err)
+		}
+
+		if err = netlink.LinkDel(sbox); err != nil {
+			return fmt.Errorf("failed to delete sbox device %q: %v", sbox.Attrs().Name, err)
+		}
+		return nil
+	})
+}
+
+func HostVethName(containerId string) string {
+	return fmt.Sprintf("veth-h%s", containerId[0:9])
+}
+
+func ContainerVethName(containerId string) string {
+	return fmt.Sprintf("veth-s%s", containerId[0:9])
+}
+
+func CreateVeth(containerID string) (netlink.Link, netlink.Link, error) {
+	hostIfName := HostVethName(containerID)
+	containerIfName := ContainerVethName(containerID)
+	// Generate and add the interface pipe host <-> sandbox
+	veth := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0},
+		PeerName:  containerIfName}
+	if err := netlink.LinkAdd(veth); err != nil {
+		return nil, nil, fmt.Errorf("failed to add the host %q <=> sandbox %q pair interfaces: %v", hostIfName, containerIfName, err)
+	}
+
+	// Get the host side pipe interface handler
+	host, err := netlink.LinkByName(hostIfName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to find host side interface %q: %v", hostIfName, err)
+	}
+
+	// Get the sandbox side pipe interface handler
+	sbox, err := netlink.LinkByName(containerIfName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to find sandbox side interface %q: %v", containerIfName, err)
+	}
+
+	return host, sbox, nil
+}
+
+// ConnectsHostWithContainer creates veth device pairs and connects container with host
+// If bridgeName specified, it attaches host side veth device to the bridge
+func ConnectsHostWithContainer(result *types.Result, args *skel.CmdArgs, bridgeName string) error {
+	host, sbox, err := CreateVeth(args.ContainerID)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			if host != nil {
+				netlink.LinkDel(host)
+			}
+			if sbox != nil {
+				netlink.LinkDel(sbox)
+			}
+		}
+	}()
+
+	if bridgeName != "" {
+		// Attach host side pipe interface into the bridge
+		if err = AddToBridge(host.Attrs().Name, bridgeName); err != nil {
+			return fmt.Errorf("adding interface %q to bridge %q failed: %v", host.Attrs().Name, bridgeName, err)
+		}
+	}
+	// Down the interface before configuring mac address.
+	if err = netlink.LinkSetDown(sbox); err != nil {
+		return fmt.Errorf("could not set link down for container interface %q: %v", sbox.Attrs().Name, err)
+	}
+
+	if err = netlink.LinkSetHardwareAddr(sbox, GenerateMACFromIP(result.IP4.IP.IP)); err != nil {
+		return fmt.Errorf("could not set mac address for container interface %q: %v", sbox.Attrs().Name, err)
+	}
+
+	// Up the host interface after finishing all netlink configuration
+	if err = netlink.LinkSetUp(host); err != nil {
+		return fmt.Errorf("could not set link up for host interface %q: %v", host.Attrs().Name, err)
+	}
+
+	netns, err := ns.GetNS(args.Netns)
+	if err != nil {
+		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
+	}
+	defer netns.Close()
+	// move sbox veth device to ns
+	if err = netlink.LinkSetNsFd(sbox, int(netns.Fd())); err != nil {
+		return fmt.Errorf("failed to move sbox device %q to netns: %v", sbox.Attrs().Name, err)
+	}
+	return netns.Do(func(_ ns.NetNS) error {
+		if err := netlink.LinkSetName(sbox, args.IfName); err != nil {
+			return fmt.Errorf("failed to rename sbox device %q to %q: %v", sbox.Attrs().Name, args.IfName, err)
+		}
+		// Add IP and routes to sbox, including default route
+		return ipam.ConfigureIface(args.IfName, result)
+	})
 }

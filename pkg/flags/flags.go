@@ -8,6 +8,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/vishvananda/netlink"
+
 	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 )
 

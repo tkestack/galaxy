@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"runtime"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
 	"github.com/containernetworking/cni/pkg/ipam"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/version"
+
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 )
 
 var (
@@ -40,10 +42,9 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err := d.CreateVlanDevice(0); err != nil {
 		return err
 	}
-	if err := d.CreateVeth(result, args, 0); err != nil {
+	if err := utils.ConnectsHostWithContainer(result, args, ""); err != nil {
 		return err
 	}
-
 	result.DNS = conf.DNS
 	return result.Print()
 }
@@ -53,11 +54,9 @@ func cmdDel(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-
-	if err := d.DeleteVeth(args); err != nil {
+	if err := utils.DeleteVeth(args.Netns, args.IfName); err != nil {
 		return err
 	}
-
 	if err := ipam.ExecDel(conf.IPAM.Type, args.StdinData); err != nil {
 		return err
 	}

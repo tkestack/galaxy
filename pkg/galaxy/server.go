@@ -63,7 +63,7 @@ func (g *Galaxy) cni(r *restful.Request, w *restful.Response) {
 	}
 	result, err := g.requestFunc(req)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("%v", err), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("%v", err), http.StatusInternalServerError)
 	} else {
 		// Empty response JSON means success with no body
 		w.Header().Set("Content-Type", "application/json")
