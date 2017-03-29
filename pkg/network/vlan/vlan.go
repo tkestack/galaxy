@@ -7,9 +7,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/containernetworking/cni/pkg/ipam"
-	"github.com/containernetworking/cni/pkg/ns"
-	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/vishvananda/netlink"
 
