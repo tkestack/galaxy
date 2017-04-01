@@ -26,12 +26,17 @@ func init() {
 	runtime.LockOSThread()
 }
 
-func loadConf(bytes []byte) (*types.NetConf, error) {
-	conf := &types.NetConf{}
-	if err := json.Unmarshal(bytes, conf); err != nil {
-		return nil, fmt.Errorf("failed to load netconf: %v", err)
+type VethConf struct {
+	types.NetConf
+	Mtu int `json:"mtu"`
+}
+
+func loadConf(bytes []byte) (*VethConf, error) {
+	n := &VethConf{}
+	if err := json.Unmarshal(bytes, n); err != nil {
+		return nil, fmt.Errorf("failed to load vethconf: %v", err)
 	}
-	return conf, nil
+	return n, nil
 }
 
 func addHostRoute(containerIP *net.IPNet, vethHostName string) error {
@@ -48,7 +53,7 @@ func addHostRoute(containerIP *net.IPNet, vethHostName string) error {
 	return nil
 }
 
-func connectsHostWithContainer(result *types.Result, args *skel.CmdArgs) error {
+func connectsHostWithContainer(result *types.Result, args *skel.CmdArgs, conf *VethConf) error {
 	mask32 := net.IPv4Mask(255, 255, 255, 255)
 	linkLocalAddress := net.IPv4(169, 254, 1, 1)
 	defaultDst := net.IPNet{IP: net.IPv4(0, 0, 0, 0), Mask: net.IPv4Mask(0, 0, 0, 0)}
@@ -68,7 +73,7 @@ func connectsHostWithContainer(result *types.Result, args *skel.CmdArgs) error {
 			{Dst: defaultDst, GW: linkLocalAddress},
 		},
 	}
-	host, sbox, err := utils.CreateVeth(args.ContainerID)
+	host, sbox, err := utils.CreateVeth(args.ContainerID, conf.Mtu)
 	if err != nil {
 		return err
 	}
@@ -162,7 +167,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if result.IP4 == nil {
 		return fmt.Errorf("IPAM plugin returned missing IPv4 config")
 	}
-	if err := connectsHostWithContainer(result, args); err != nil {
+	if err := connectsHostWithContainer(result, args, conf); err != nil {
 		return err
 	}
 	if err := addHostRoute(&result.IP4.IP, utils.HostVethName(args.ContainerID)); err != nil {
