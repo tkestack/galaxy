@@ -156,12 +156,12 @@ func ContainerVethName(containerId string) string {
 	return fmt.Sprintf("veth-s%s", containerId[0:9])
 }
 
-func CreateVeth(containerID string) (netlink.Link, netlink.Link, error) {
+func CreateVeth(containerID string, mtu int) (netlink.Link, netlink.Link, error) {
 	hostIfName := HostVethName(containerID)
 	containerIfName := ContainerVethName(containerID)
 	// Generate and add the interface pipe host <-> sandbox
 	veth := &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0},
+		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0, MTU: mtu},
 		PeerName:  containerIfName}
 	if err := netlink.LinkAdd(veth); err != nil {
 		return nil, nil, fmt.Errorf("failed to add the host %q <=> sandbox %q pair interfaces: %v", hostIfName, containerIfName, err)
@@ -185,7 +185,7 @@ func CreateVeth(containerID string) (netlink.Link, netlink.Link, error) {
 // ConnectsHostWithContainer creates veth device pairs and connects container with host
 // If bridgeName specified, it attaches host side veth device to the bridge
 func ConnectsHostWithContainer(result *types.Result, args *skel.CmdArgs, bridgeName string) error {
-	host, sbox, err := CreateVeth(args.ContainerID)
+	host, sbox, err := CreateVeth(args.ContainerID, 1500)
 	if err != nil {
 		return err
 	}
