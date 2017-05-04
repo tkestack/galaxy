@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os/exec"
 	"strings"
 
 	"github.com/containernetworking/cni/pkg/ipam"
@@ -235,5 +236,22 @@ func ConnectsHostWithContainer(result *types.Result, args *skel.CmdArgs, bridgeN
 		}
 		// Add IP and routes to sbox, including default route
 		return ipam.ConfigureIface(args.IfName, result)
+	})
+}
+
+func SendGratuitousARP(result *types.Result, args *skel.CmdArgs) error {
+	arping, err := exec.LookPath("arping")
+	if err != nil {
+		return fmt.Errorf("unable to locate arping")
+	}
+	command := exec.Command(arping, "-c", "2", "-A", "-I", args.IfName, result.IP4.IP.IP.String())
+	netns, err := ns.GetNS(args.Netns)
+	if err != nil {
+		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
+	}
+	defer netns.Close()
+	return netns.Do(func(_ ns.NetNS) error {
+		_, err = command.CombinedOutput()
+		return err
 	})
 }
