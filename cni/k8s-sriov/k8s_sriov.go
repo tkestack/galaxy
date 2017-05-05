@@ -116,7 +116,7 @@ func setupVF(conf *NetConf, result *types.Result, podifName string, vlan int, ne
 	}
 
 	// get the ifname sriov vf num
-	vfTotal, err := getsriovNumfs(ifName, kindTotalVfs)
+	vfTotal, err := getSriovNumVfs(ifName, kindTotalVfs)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func setupVF(conf *NetConf, result *types.Result, podifName string, vlan int, ne
 		return fmt.Errorf("no virtual function in the device %q: %v", ifName)
 	}
 
-	vfNums, err := getsriovNumfs(ifName, kindNumVfs)
+	vfNums, err := getSriovNumVfs(ifName, kindNumVfs)
 	if err != nil {
 		return err
 	}
@@ -133,11 +133,11 @@ func setupVF(conf *NetConf, result *types.Result, podifName string, vlan int, ne
 	minVfNum := min(vfTotal, conf.VFNum)
 	if vfNums < minVfNum {
 		if vfNums != 0 {
-			if err := setsriovNumfs(ifName, 0); err != nil {
+			if err := setSriovNumVfs(ifName, 0); err != nil {
 				return err
 			}
 		}
-		if err := setsriovNumfs(ifName, minVfNum); err != nil {
+		if err := setSriovNumVfs(ifName, minVfNum); err != nil {
 			return err
 		}
 	}
@@ -195,11 +195,6 @@ func setupVF(conf *NetConf, result *types.Result, podifName string, vlan int, ne
 	}
 
 	return netns.Do(func(_ ns.NetNS) error {
-		if lo, err := netlink.LinkByName("lo"); err != nil {
-			return fmt.Errorf("failed to lookup device lo: %v", err)
-		} else if err := netlink.LinkSetUp(lo); err != nil {
-			return fmt.Errorf("failed to set lo UP: %v", err)
-		}
 		err := renameLink(vfName, podifName)
 		if err != nil {
 			return fmt.Errorf("failed to rename %d vf of the device %q to %q: %v", vfIdx, vfName, ifName, err)
@@ -257,7 +252,7 @@ func renameLink(curName, newName string) error {
 	return netlink.LinkSetName(link, newName)
 }
 
-func getsriovNumfs(ifName string, kind string) (int, error) {
+func getSriovNumVfs(ifName string, kind string) (int, error) {
 	var vfTotal int
 
 	sriovFile := fmt.Sprintf("/sys/class/net/%s/device/%s", ifName, kind)
@@ -283,7 +278,7 @@ func getsriovNumfs(ifName string, kind string) (int, error) {
 	return vfTotal, nil
 }
 
-func setsriovNumfs(ifName string, nums int) error {
+func setSriovNumVfs(ifName string, nums int) error {
 	sriovFile := fmt.Sprintf("/sys/class/net/%s/device/%s", ifName, kindNumVfs)
 	if _, err := os.Lstat(sriovFile); err != nil {
 		return fmt.Errorf("failed to open the %s of device %q: %v", kindNumVfs, ifName, err)
