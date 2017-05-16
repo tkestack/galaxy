@@ -106,6 +106,7 @@ func main() {
 // code from https://raw.githubusercontent.com/Intel-Corp/sriov-cni/master/sriov/sriov.go
 
 func setupVF(conf *NetConf, result *types.Result, podifName string, vlan int, netns ns.NetNS) error {
+	cpus := runtime.NumCPU()
 	ifName := conf.Device
 	var vfIdx int
 	var infos []os.FileInfo
@@ -194,13 +195,27 @@ func setupVF(conf *NetConf, result *types.Result, podifName string, vlan int, ne
 		return fmt.Errorf("failed to move vf %d to netns: %v", vfIdx, err)
 	}
 
-	return netns.Do(func(_ ns.NetNS) error {
+	if err = netns.Do(func(_ ns.NetNS) error {
 		err := renameLink(vfName, podifName)
 		if err != nil {
 			return fmt.Errorf("failed to rename %d vf of the device %q to %q: %v", vfIdx, vfName, ifName, err)
 		}
 		return ipam.ConfigureIface(podifName, result)
-	})
+	}); err != nil {
+		return err
+	}
+	hiDir := fmt.Sprintf("/sys/class/net/%s/device/virtfn%d/msi_irqs", ifName, vfIdx)
+	if infos, err = ioutil.ReadDir(hiDir); err == nil {
+		for i := range infos {
+			hiNum, err := strconv.Atoi(infos[i].Name())
+			if err == nil {
+				selectedCPU := fmt.Sprintf("%d", hiNum%cpus)
+				irqFile := fmt.Sprintf("/proc/irq/%d/smp_affinity_list", hiNum)
+				ioutil.WriteFile(irqFile, []byte(selectedCPU), 0644)
+			}
+		}
+	}
+	return nil
 }
 
 func releaseVF(podifName string, netns ns.NetNS) error {
