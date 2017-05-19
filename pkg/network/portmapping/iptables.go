@@ -9,6 +9,8 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 
+	"github.com/golang/glog"
+
 	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/kubernetes/pkg/util/exec"
 	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
@@ -94,7 +96,7 @@ func (h *PortMappingHandler) SetupPortMapping(natInterfaceName string, ports []*
 	return nil
 }
 
-func (h *PortMappingHandler) CleanPortMapping(natInterfaceName string, ports []*k8s.Port) error {
+func (h *PortMappingHandler) CleanPortMapping(natInterfaceName string, ports []*k8s.Port) {
 	var kubeHostportsChainRules [][]string
 	natChains := bytes.NewBuffer(nil)
 	natRules := bytes.NewBuffer(nil)
@@ -120,16 +122,20 @@ func (h *PortMappingHandler) CleanPortMapping(natInterfaceName string, ports []*
 	natLines := append(natChains.Bytes(), natRules.Bytes()...)
 
 	for _, rule := range kubeHostportsChainRules {
-		if err := h.DeleteRule(utiliptables.TableNAT, kubeHostportsChain, rule...); err != nil {
-			return fmt.Errorf("failed to delete rule %s: %v", rule, err)
+		for i := 0; i < 3; i++ {
+			if err := h.DeleteRule(utiliptables.TableNAT, kubeHostportsChain, rule...); err != nil {
+				if strings.Contains(err.Error(), "Resource temporarily unavailable") {
+					continue
+				}
+				glog.Errorf("failed to delete rule %s: %v", rule, err)
+			}
+			break
 		}
 	}
 	err := h.RestoreAll(natLines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
 	if err != nil {
-		return fmt.Errorf("Failed to execute iptables-restore for ruls %s: %v", string(natLines), err)
+		glog.Errorf("Failed to execute iptables-restore for rules %s: %v", string(natLines), err)
 	}
-
-	return nil
 }
 
 // setupPortMappingForAllPods setup iptables for all pods at start time

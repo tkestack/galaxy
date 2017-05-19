@@ -156,9 +156,7 @@ func (g *Galaxy) cleanupPortMapping(containerID string) error {
 		return fmt.Errorf("failed to read ports %v", err)
 	}
 	if len(ports) != 0 {
-		if err := g.pmhandler.CleanPortMapping("cni0", ports); err != nil {
-			return fmt.Errorf("failed to delete port mapping %v: %v", ports, err)
-		}
+		g.pmhandler.CleanPortMapping("cni0", ports)
 	}
 	return nil
 }

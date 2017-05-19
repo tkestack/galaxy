@@ -229,6 +229,10 @@ func CmdAdd(args *skel.CmdArgs) (*types.Result, error) {
 func CmdDel(args *skel.CmdArgs) error {
 	netconfBytes, err := consumeScratchNetConf(args.ContainerID)
 	if err != nil {
+		// kubelet invokes twice cmdDel, if file not exist, be silence
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
 
