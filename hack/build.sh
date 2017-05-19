@@ -39,7 +39,7 @@ echo `pwd`
 mv vendor/$cni_package/vendor vendor/$cni_package/back_vendor
 
 # build galaxy cni plugins
-PLUGINS="$GOPATH/src/$package/cni/k8s-vlan $GOPATH/src/$package/cni/sdn $GOPATH/src/$package/cni/veth"
+PLUGINS="$GOPATH/src/$package/cni/k8s-vlan $GOPATH/src/$package/cni/sdn $GOPATH/src/$package/cni/veth $GOPATH/src/$package/cni/k8s-sriov"
 for d in $PLUGINS; do
 	if [ -d $d ]; then
 		plugin=$(basename $d)
