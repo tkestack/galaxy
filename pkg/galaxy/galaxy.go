@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/golang/glog"
+
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
-	"github.com/golang/glog"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 )
 
 type Galaxy struct {
@@ -18,6 +20,7 @@ type Galaxy struct {
 	cleaner      gc.GC
 	netConf      map[string]map[string]interface{}
 	flannelConf  []byte
+	pmhandler    *portmapping.PortMappingHandler
 }
 
 func NewGalaxy() (*Galaxy, error) {
@@ -30,6 +33,7 @@ func NewGalaxy() (*Galaxy, error) {
 		return nil, err
 	}
 	g.cleaner = gc.NewFlannelGC(dockerClient, g.newQuitChannel(), g.newQuitChannel())
+	g.pmhandler = portmapping.New()
 	return g, nil
 }
 
@@ -43,6 +47,7 @@ func (g *Galaxy) Start() error {
 	g.cleaner.Run()
 	kernel.BridgeNFCallIptables(g.newQuitChannel())
 	firewall.SetupEbtables(g.newQuitChannel())
+	firewall.EnsureIptables(g.pmhandler, g.newQuitChannel())
 	return g.startServer()
 }
 

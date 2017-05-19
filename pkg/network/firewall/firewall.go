@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"time"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 	"git.code.oa.com/gaiastack/galaxy/pkg/wait"
 	"github.com/golang/glog"
 )
@@ -33,4 +34,12 @@ func SetupEbtables(quit chan error) {
 		}
 		glog.Infof("executed ebtables restore %s", string(ret))
 	}, 5*time.Minute, quit)
+}
+
+func EnsureIptables(h *portmapping.PortMappingHandler, quit chan error) {
+	go wait.UntilQuitSignal("ensure iptables rules", func() {
+		if err := h.EnsureBasicRule(); err != nil {
+			glog.Warningf("failed to ensure iptables rules")
+		}
+	}, 1*time.Minute, quit)
 }

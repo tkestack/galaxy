@@ -23,12 +23,17 @@ const (
 	KubeMarkMasqChain utiliptables.Chain = "KUBE-MARK-MASQ"
 )
 
-func SetupPortMapping(natInterfaceName string, ports []*k8s.Port) error {
-	iptInterface := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
-	if err := ensureBasicRule(natInterfaceName, iptInterface); err != nil {
-		return err
-	}
+type PortMappingHandler struct {
+	utiliptables.Interface
+}
 
+func New() *PortMappingHandler {
+	return &PortMappingHandler{
+		Interface: utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4),
+	}
+}
+
+func (h *PortMappingHandler) SetupPortMapping(natInterfaceName string, ports []*k8s.Port) error {
 	var kubeHostportsChainRules [][]string
 	natChains := bytes.NewBuffer(nil)
 	natRules := bytes.NewBuffer(nil)
@@ -76,21 +81,20 @@ func SetupPortMapping(natInterfaceName string, ports []*k8s.Port) error {
 	writeLine(natRules, "COMMIT")
 
 	natLines := append(natChains.Bytes(), natRules.Bytes()...)
-	err := iptInterface.RestoreAll(natLines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
+	err := h.RestoreAll(natLines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
 	if err != nil {
 		return fmt.Errorf("Failed to execute iptables-restore for ruls %s: %v", string(natLines), err)
 	}
 
 	for _, rule := range kubeHostportsChainRules {
-		if _, err := iptInterface.EnsureRule(utiliptables.Append, utiliptables.TableNAT, kubeHostportsChain, rule...); err != nil {
+		if _, err := h.EnsureRule(utiliptables.Append, utiliptables.TableNAT, kubeHostportsChain, rule...); err != nil {
 			return fmt.Errorf("failed to add rule %s: %v", rule, err)
 		}
 	}
 	return nil
 }
 
-func CleanPortMapping(natInterfaceName string, ports []*k8s.Port) error {
-	iptInterface := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
+func (h *PortMappingHandler) CleanPortMapping(natInterfaceName string, ports []*k8s.Port) error {
 	var kubeHostportsChainRules [][]string
 	natChains := bytes.NewBuffer(nil)
 	natRules := bytes.NewBuffer(nil)
@@ -116,11 +120,11 @@ func CleanPortMapping(natInterfaceName string, ports []*k8s.Port) error {
 	natLines := append(natChains.Bytes(), natRules.Bytes()...)
 
 	for _, rule := range kubeHostportsChainRules {
-		if err := iptInterface.DeleteRule(utiliptables.TableNAT, kubeHostportsChain, rule...); err != nil {
+		if err := h.DeleteRule(utiliptables.TableNAT, kubeHostportsChain, rule...); err != nil {
 			return fmt.Errorf("failed to delete rule %s: %v", rule, err)
 		}
 	}
-	err := iptInterface.RestoreAll(natLines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
+	err := h.RestoreAll(natLines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
 	if err != nil {
 		return fmt.Errorf("Failed to execute iptables-restore for ruls %s: %v", string(natLines), err)
 	}
@@ -266,4 +270,9 @@ func ensureBasicRule(natInterfaceName string, iptInterface utiliptables.Interfac
 		return fmt.Errorf("Failed to ensure that %s chain %s jumps to MASQUERADE: %v", utiliptables.TableNAT, utiliptables.ChainPostrouting, err)
 	}
 	return nil
+}
+
+// Ensure basic rules of Host Port iptables
+func (h *PortMappingHandler) EnsureBasicRule() error {
+	return ensureBasicRule("cni0", h.Interface)
 }

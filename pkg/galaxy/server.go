@@ -15,8 +15,8 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/flannel"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/remote"
+
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
@@ -86,14 +86,14 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 		} else {
 			if result != nil {
 				data, err = json.Marshal(result)
-				err = setupPortMapping(req.Ports, req.ContainerID, result)
+				err = g.setupPortMapping(req.Ports, req.ContainerID, result)
 			}
 		}
 	} else if req.Command == cniutil.COMMAND_DEL {
 		defer glog.Infof("%v err %v, %s-", req, err, start.Format(time.StampMicro))
 		err = g.cmdDel(req)
 		if err == nil {
-			err = cleanupPortMapping(req.ContainerID)
+			err = g.cleanupPortMapping(req.ContainerID)
 		}
 	} else {
 		err = fmt.Errorf("unkown command %s", req.Command)
@@ -120,7 +120,7 @@ func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest) error {
 	return remote.CmdDel(req, g.netConf)
 }
 
-func setupPortMapping(portStr, containerID string, result *types.Result) error {
+func (g *Galaxy) setupPortMapping(portStr, containerID string, result *types.Result) error {
 	ports, err := k8s.ParsePorts(portStr)
 	if err != nil {
 		return err
@@ -140,14 +140,14 @@ func setupPortMapping(portStr, containerID string, result *types.Result) error {
 		p.PodIP = ip4.String()
 	}
 	if len(ports) != 0 {
-		if err := portmapping.SetupPortMapping("cni0", ports); err != nil {
+		if err := g.pmhandler.SetupPortMapping("cni0", ports); err != nil {
 			return fmt.Errorf("failed to setup port mapping %v: %v", ports, err)
 		}
 	}
 	return nil
 }
 
-func cleanupPortMapping(containerID string) error {
+func (g *Galaxy) cleanupPortMapping(containerID string) error {
 	ports, err := k8s.ConsumePort(containerID)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -156,7 +156,7 @@ func cleanupPortMapping(containerID string) error {
 		return fmt.Errorf("failed to read ports %v", err)
 	}
 	if len(ports) != 0 {
-		if err := portmapping.CleanPortMapping("cni0", ports); err != nil {
+		if err := g.pmhandler.CleanPortMapping("cni0", ports); err != nil {
 			return fmt.Errorf("failed to delete port mapping %v: %v", ports, err)
 		}
 	}
