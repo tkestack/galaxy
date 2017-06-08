@@ -28,7 +28,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	if err := d.SetupBridge(); err != nil {
+	if err := d.Init(); err != nil {
 		return fmt.Errorf("failed to setup bridge %v", err)
 	}
 	// run the IPAM plugin and get back the config to apply
@@ -39,10 +39,10 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if result.IP4 == nil {
 		return fmt.Errorf("IPAM plugin returned missing IPv4 config")
 	}
-	if err := d.CreateVlanDevice(0); err != nil {
+	if err := d.CreateBridgeAndVlanDevice(0); err != nil {
 		return err
 	}
-	if err := utils.ConnectsHostWithContainer(result, args, ""); err != nil {
+	if err := utils.VethConnectsHostWithContainer(result, args, ""); err != nil {
 		return err
 	}
 	result.DNS = conf.DNS

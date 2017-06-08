@@ -30,7 +30,7 @@ func main() {
 		glog.Fatal("device unset")
 	}
 	d.NetConf = &vlan.NetConf{Device: *flagDevice}
-	if err := d.SetupBridge(); err != nil {
+	if err := d.Init(); err != nil {
 		glog.Fatalf("Error setting up bridge %v", err)
 	}
 	glog.Infof("setuped bridge docker")
@@ -47,11 +47,11 @@ func main() {
 		glog.Fatalf("invalid gateway %s", *flagGateway)
 	}
 	if *flagVlan != 0 {
-		if err := d.CreateVlanDevice(uint16(*flagVlan)); err != nil {
+		if err := d.CreateBridgeAndVlanDevice(uint16(*flagVlan)); err != nil {
 			glog.Fatalf("Error creating vlan device %v", err)
 		}
 	}
-	if err := utils.ConnectsHostWithContainer(&types.Result{
+	if err := utils.VethConnectsHostWithContainer(&types.Result{
 		IP4: &types.IPConfig{
 			IP:      *ipNet,
 			Gateway: gateway,

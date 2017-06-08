@@ -33,7 +33,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	if err := d.SetupBridge(); err != nil {
+	if err := d.Init(); err != nil {
 		return fmt.Errorf("failed to setup bridge %v", err)
 	}
 	kvMap, err := k8s.ParseK8SCNIArgs(args.Args)
@@ -44,11 +44,20 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	if err := d.CreateVlanDevice(vlanId); err != nil {
-		return err
-	}
-	if err := utils.ConnectsHostWithContainer(result, args, d.BridgeNameForVlan(vlanId)); err != nil {
-		return err
+	if d.MacVlanMode() {
+		if err := d.CreateVlanDevice(vlanId); err != nil {
+			return err
+		}
+		if err := utils.MacVlanConnectsHostWithContainer(result, args, d.DeviceIndex); err != nil {
+			return err
+		}
+	} else {
+		if err := d.CreateBridgeAndVlanDevice(vlanId); err != nil {
+			return err
+		}
+		if err := utils.VethConnectsHostWithContainer(result, args, d.BridgeNameForVlan(vlanId)); err != nil {
+			return err
+		}
 	}
 	//send Gratuitous ARP to let switch knows IP floats onto this node
 	//ignore errors as we can't print logs and we do this as best as we can
