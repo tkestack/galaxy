@@ -157,6 +157,10 @@ func ContainerVethName(containerId string) string {
 	return fmt.Sprintf("veth-s%s", containerId[0:9])
 }
 
+func HostMacVlanName(containerId string) string {
+	return fmt.Sprintf("mv-%s", containerId[0:9])
+}
+
 func CreateVeth(containerID string, mtu int) (netlink.Link, netlink.Link, error) {
 	hostIfName := HostVethName(containerID)
 	containerIfName := ContainerVethName(containerID)
@@ -183,9 +187,9 @@ func CreateVeth(containerID string, mtu int) (netlink.Link, netlink.Link, error)
 	return host, sbox, nil
 }
 
-// ConnectsHostWithContainer creates veth device pairs and connects container with host
+// VethConnectsHostWithContainer creates veth device pairs and connects container with host
 // If bridgeName specified, it attaches host side veth device to the bridge
-func ConnectsHostWithContainer(result *types.Result, args *skel.CmdArgs, bridgeName string) error {
+func VethConnectsHostWithContainer(result *types.Result, args *skel.CmdArgs, bridgeName string) error {
 	host, sbox, err := CreateVeth(args.ContainerID, 1500)
 	if err != nil {
 		return err
@@ -200,43 +204,20 @@ func ConnectsHostWithContainer(result *types.Result, args *skel.CmdArgs, bridgeN
 			}
 		}
 	}()
-
 	if bridgeName != "" {
 		// Attach host side pipe interface into the bridge
 		if err = AddToBridge(host.Attrs().Name, bridgeName); err != nil {
 			return fmt.Errorf("adding interface %q to bridge %q failed: %v", host.Attrs().Name, bridgeName, err)
 		}
 	}
-	// Down the interface before configuring mac address.
-	if err = netlink.LinkSetDown(sbox); err != nil {
-		return fmt.Errorf("could not set link down for container interface %q: %v", sbox.Attrs().Name, err)
-	}
-
-	if err = netlink.LinkSetHardwareAddr(sbox, GenerateMACFromIP(result.IP4.IP.IP)); err != nil {
-		return fmt.Errorf("could not set mac address for container interface %q: %v", sbox.Attrs().Name, err)
-	}
-
 	// Up the host interface after finishing all netlink configuration
 	if err = netlink.LinkSetUp(host); err != nil {
 		return fmt.Errorf("could not set link up for host interface %q: %v", host.Attrs().Name, err)
 	}
-
-	netns, err := ns.GetNS(args.Netns)
-	if err != nil {
-		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
+	if err = configSboxDevice(result, args, sbox); err != nil {
+		return err
 	}
-	defer netns.Close()
-	// move sbox veth device to ns
-	if err = netlink.LinkSetNsFd(sbox, int(netns.Fd())); err != nil {
-		return fmt.Errorf("failed to move sbox device %q to netns: %v", sbox.Attrs().Name, err)
-	}
-	return netns.Do(func(_ ns.NetNS) error {
-		if err := netlink.LinkSetName(sbox, args.IfName); err != nil {
-			return fmt.Errorf("failed to rename sbox device %q to %q: %v", sbox.Attrs().Name, args.IfName, err)
-		}
-		// Add IP and routes to sbox, including default route
-		return ipam.ConfigureIface(args.IfName, result)
-	})
+	return nil
 }
 
 func SendGratuitousARP(result *types.Result, args *skel.CmdArgs) error {
@@ -253,5 +234,55 @@ func SendGratuitousARP(result *types.Result, args *skel.CmdArgs) error {
 	return netns.Do(func(_ ns.NetNS) error {
 		_, err = command.CombinedOutput()
 		return err
+	})
+}
+
+// MacVlanConnectsHostWithContainer creates macvlan device onto parent and connects container with host
+func MacVlanConnectsHostWithContainer(result *types.Result, args *skel.CmdArgs, parent int) error {
+	var err error
+	macVlan := &netlink.Macvlan{
+		Mode:netlink.MACVLAN_MODE_BRIDGE,
+		LinkAttrs: netlink.LinkAttrs{
+			Name:        HostMacVlanName(args.ContainerID),
+			MTU:         1500,
+			ParentIndex: parent,
+	}}
+	if err := netlink.LinkAdd(macVlan); err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			netlink.LinkDel(macVlan)
+		}
+	}()
+	if err = configSboxDevice(result, args, macVlan); err != nil {
+		return err
+	}
+	return nil
+}
+
+func configSboxDevice(result *types.Result, args *skel.CmdArgs, sbox netlink.Link) error {
+	// Down the interface before configuring mac address.
+	if err := netlink.LinkSetDown(sbox); err != nil {
+		return fmt.Errorf("could not set link down for container interface %q: %v", sbox.Attrs().Name, err)
+	}
+	if err := netlink.LinkSetHardwareAddr(sbox, GenerateMACFromIP(result.IP4.IP.IP)); err != nil {
+		return fmt.Errorf("could not set mac address for container interface %q: %v", sbox.Attrs().Name, err)
+	}
+	netns, err := ns.GetNS(args.Netns)
+	if err != nil {
+		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
+	}
+	defer netns.Close()
+	// move sbox device to ns
+	if err = netlink.LinkSetNsFd(sbox, int(netns.Fd())); err != nil {
+		return fmt.Errorf("failed to move sbox device %q to netns: %v", sbox.Attrs().Name, err)
+	}
+	return netns.Do(func(_ ns.NetNS) error {
+		if err := netlink.LinkSetName(sbox, args.IfName); err != nil {
+			return fmt.Errorf("failed to rename sbox device %q to %q: %v", sbox.Attrs().Name, args.IfName, err)
+		}
+		// Add IP and routes to sbox, including default route
+		return ipam.ConfigureIface(args.IfName, result)
 	})
 }
