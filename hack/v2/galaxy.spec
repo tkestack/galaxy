@@ -26,7 +26,7 @@ install -p -m 755 bin/disable-ipv6 $RPM_BUILD_ROOT/opt/cni/bin/disable-ipv6
 install -p -m 755 bin/galaxy-veth $RPM_BUILD_ROOT/opt/cni/bin/galaxy-veth
 install -p -m 755 bin/galaxy-sdn $RPM_BUILD_ROOT/opt/cni/bin/galaxy-sdn
 install -p -m 755 bin/galaxy-k8s-vlan $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-vlan
-install -p -m 755 bin/galaxy-k8s-vlan $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-sriov
+install -p -m 755 bin/galaxy-k8s-sriov $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-sriov
 install -p -m 755 bin/galaxy-bridge $RPM_BUILD_ROOT/opt/cni/bin/galaxy-bridge
 install -p -m 755 bin/loopback $RPM_BUILD_ROOT/opt/cni/bin/loopback
 install -p -m 755 bin/host-local $RPM_BUILD_ROOT/opt/cni/bin/host-local
