@@ -85,7 +85,9 @@ func (g *Galaxy) parseConfig() error {
 		if v == nil {
 			g.netConf[k] = make(map[string]interface{})
 		}
-		g.netConf[k]["type"] = k
+		if _, ok := g.netConf[k]["type"]; !ok {
+			g.netConf[k]["type"] = k
+		}
 	}
 	if _, ok := g.netConf["galaxy-k8s-vlan"]; ok {
 		g.netConf["galaxy-k8s-vlan"]["url"] = *flagMaster
@@ -97,5 +99,6 @@ func (g *Galaxy) parseConfig() error {
 			return err
 		}
 	}
+	glog.Infof("normalized network config %v", g.netConf)
 	return nil
 }
