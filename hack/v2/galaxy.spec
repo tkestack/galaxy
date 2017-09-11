@@ -43,6 +43,7 @@ install -p -m 644 hack/v2/galaxy.service $RPM_BUILD_ROOT/%{_unitdir}/galaxy.serv
 
 install -d $RPM_BUILD_ROOT/etc/sysconfig/
 install -p -m 644 hack/v2/galaxy-config $RPM_BUILD_ROOT/etc/sysconfig/galaxy-config
+install -p -m 644 hack/v2/galaxy-ebtable-filter $RPM_BUILD_ROOT/etc/sysconfig/galaxy-ebtable-filter
 
 %files
 /opt/cni/bin/disable-ipv6
@@ -56,6 +57,7 @@ install -p -m 644 hack/v2/galaxy-config $RPM_BUILD_ROOT/etc/sysconfig/galaxy-con
 /opt/cni/bin/network_opt
 /%{_bindir}/galaxy
 /%{_unitdir}/galaxy.service
+%config(missingok,noreplace) /etc/sysconfig/galaxy-ebtable-filter
 
 %config(noreplace) /etc/cni/net.d/galaxy.conf
 %config(noreplace) /%{_unitdir}/galaxy.service
