@@ -25,6 +25,8 @@ import (
 var (
 	flagMaster      = flag.String("master", "", "URL of galaxy master controller, currently apiswitch")
 	flagNetworkConf = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
+	flagBridgeNFCallIptables = flag.Bool("bridge-nf-call-iptables", true, "ensure bridge-nf-call-iptables is set/unset")
+	flagEbtableRules = flag.Bool("ebtable-rules", false, "whether galaxy should ensure ebtable-rules")
 )
 
 func (g *Galaxy) startServer() error {
