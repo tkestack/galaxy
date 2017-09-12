@@ -45,8 +45,10 @@ func (g *Galaxy) newQuitChannel() chan error {
 
 func (g *Galaxy) Start() error {
 	g.cleaner.Run()
-	kernel.BridgeNFCallIptables(g.newQuitChannel())
-	firewall.SetupEbtables(g.newQuitChannel())
+	kernel.BridgeNFCallIptables(g.newQuitChannel(), *flagBridgeNFCallIptables)
+	if *flagEbtableRules {
+		firewall.SetupEbtables(g.newQuitChannel())
+	}
 	firewall.EnsureIptables(g.pmhandler, g.newQuitChannel())
 	return g.startServer()
 }
