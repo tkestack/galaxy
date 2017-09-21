@@ -7,3 +7,4 @@
 -A FORWARD -d BGA -i bond1 -j DROP
 -A FORWARD -d BGA -j DROP
 -A OUTPUT -d BGA -j DROP
+
