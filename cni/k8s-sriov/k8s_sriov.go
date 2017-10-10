@@ -17,6 +17,7 @@ import (
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/version"
+	"github.com/golang/glog"
 	"github.com/vishvananda/netlink"
 )
 
@@ -132,15 +133,13 @@ func setupVF(conf *NetConf, result *types.Result, podifName string, vlan int, ne
 	}
 
 	minVfNum := min(vfTotal, conf.VFNum)
-	if vfNums < minVfNum {
-		if vfNums != 0 {
-			if err := setSriovNumVfs(ifName, 0); err != nil {
-				return err
-			}
-		}
+	// only set vf when `sriov_numvfs` is 0
+	if vfNums == 0 {
 		if err := setSriovNumVfs(ifName, minVfNum); err != nil {
 			return err
 		}
+	} else if vfNums < minVfNum {
+		glog.Warning("sriov_numvfs is set but small")
 	}
 
 	for vf := 0; vf <= (minVfNum - 1); vf++ {
@@ -180,10 +179,8 @@ func setupVF(conf *NetConf, result *types.Result, podifName string, vlan int, ne
 		return fmt.Errorf("failed to lookup vf device %q: %v", vfName, err)
 	}
 
-	if vlan != 0 {
-		if err = netlink.LinkSetVfVlan(m, vfIdx, vlan); err != nil {
-			return fmt.Errorf("failed to set vf %d vlan: %v", vfIdx, err)
-		}
+	if err = netlink.LinkSetVfVlan(m, vfIdx, vlan); err != nil {
+		return fmt.Errorf("failed to set vf %d vlan: %v", vfIdx, err)
 	}
 
 	if err = netlink.LinkSetUp(vfDev); err != nil {
