@@ -20,6 +20,7 @@ import:
 - package: github.com/emicklei/go-restful
   version: 89ef8af493ab468a45a42bb0d89a06fccdd2fb22 
 - package: github.com/golang/glog
+  version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - package: github.com/vishvananda/netlink
   version: da7420cab5e209195f5f7387fccd4c7f48758d30
   subpackages:
