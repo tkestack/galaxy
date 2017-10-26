@@ -4,7 +4,8 @@ After=network.target
 
 [Service]
 EnvironmentFile=-/etc/sysconfig/galaxy-config
-ExecStart=/usr/bin/galaxy -network-conf=${NETWORK_CONF} $ARGS
+EnvironmentFile=-/etc/kubernetes/kubelet
+ExecStart=/usr/bin/galaxy -network-conf=${NETWORK_CONF} $ARGS ${KUBELET_API_SERVER}
 Restart=always
 RestartSec=5
 
