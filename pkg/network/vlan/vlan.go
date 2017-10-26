@@ -28,7 +28,7 @@ type VlanDriver struct {
 	// The device id of physical device which is to be the parent of all vlan devices, eg.eth1
 	vlanParentIndex int
 	// The device id of NetConf.Device or created vlan device
-	DeviceIndex     int
+	DeviceIndex int
 	sync.Mutex
 }
 
@@ -222,6 +222,6 @@ func (d *VlanDriver) createVlanDevice(vlanId uint16) (netlink.Link, error) {
 	return vlan, nil
 }
 
-func (d * VlanDriver) MacVlanMode() bool {
+func (d *VlanDriver) MacVlanMode() bool {
 	return d.Switch == "macvlan"
 }

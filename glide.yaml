@@ -1,0 +1,48 @@
+package: git.code.oa.com/gaiastack/galaxy
+import:
+- package: github.com/containernetworking/cni
+  version: 0e09ad29df1eda8c0e15f8b6c4c7784a42e125bf
+  subpackages:
+  - pkg/invoke
+  - pkg/ip
+  - pkg/ipam
+  - pkg/ns
+  - pkg/skel
+  - pkg/types
+  - pkg/version
+- package: github.com/docker/engine-api
+  version: dea108d3aa0c67d7162a3fd8aa65f38a430019fd
+  subpackages:
+  - client
+  - types
+- package: github.com/docker/distribution 
+  version: cd27f179f2c10c5d300e6d09025b538c475b0d51 
+- package: github.com/emicklei/go-restful
+  version: 89ef8af493ab468a45a42bb0d89a06fccdd2fb22 
+- package: github.com/golang/glog
+- package: github.com/vishvananda/netlink
+  version: da7420cab5e209195f5f7387fccd4c7f48758d30
+  subpackages:
+  - nl
+- package: github.com/vishvananda/netns
+  version: 8ba1072b58e0c2a240eb5f6120165c7776c3e7b8 
+- package: golang.org/x/net
+  version: e90d6d0afc4c315a0d87a568ae68577cc15149a0
+  subpackages:
+  - context
+- package: k8s.io/client-go
+  repo: http://git.code.oa.com/gaiastack/client-go.git
+  version: 9406961b8137e25996998cffd97af2b14b4a2e25
+  subpackages:
+  - 1.4/kubernetes
+  - 1.4/pkg/api
+  - 1.4/pkg/api/v1
+  - 1.4/pkg/util/wait
+  - 1.4/tools/cache
+- package: k8s.io/kubernetes
+  version: dd746bbe6ad332502aec6ee4eadb85fe7f1f088b
+  repo: http://git.code.oa.com/gaia/kubernetes.git
+  subpackages:
+  - pkg/util/dbus
+  - pkg/util/exec
+  - pkg/util/iptables

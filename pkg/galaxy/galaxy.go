@@ -13,6 +13,9 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
+
+	"k8s.io/client-go/1.4/kubernetes"
+	"k8s.io/client-go/1.4/tools/clientcmd"
 )
 
 type Galaxy struct {
@@ -21,6 +24,7 @@ type Galaxy struct {
 	netConf      map[string]map[string]interface{}
 	flannelConf  []byte
 	pmhandler    *portmapping.PortMappingHandler
+	client       *kubernetes.Clientset
 }
 
 func NewGalaxy() (*Galaxy, error) {
@@ -44,6 +48,7 @@ func (g *Galaxy) newQuitChannel() chan error {
 }
 
 func (g *Galaxy) Start() error {
+	g.initk8sClient()
 	g.cleaner.Run()
 	kernel.BridgeNFCallIptables(g.newQuitChannel(), *flagBridgeNFCallIptables)
 	if *flagEbtableRules {
@@ -103,4 +108,24 @@ func (g *Galaxy) parseConfig() error {
 	}
 	glog.Infof("normalized network config %v", g.netConf)
 	return nil
+}
+
+func (g *Galaxy) initk8sClient() {
+	if *flagApiServer == "" {
+		glog.Infof("apiserver address unknown")
+		return
+	}
+	clientConfig, err := clientcmd.BuildConfigFromFlags(*flagApiServer, "")
+	if err != nil {
+		glog.Fatalf("Invalid client config: error(%v)", err)
+	}
+	clientConfig.QPS = 1000.0
+	clientConfig.Burst = 2000
+	glog.Infof("QPS: %e, Burst: %d", clientConfig.QPS, clientConfig.Burst)
+
+	g.client, err = kubernetes.NewForConfig(clientConfig)
+	if err != nil {
+		glog.Fatalf("Can not generate client from config: error(%v)", err)
+	}
+	glog.Infof("apiserver address %s", *flagApiServer)
 }

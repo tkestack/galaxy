@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	apierr "k8s.io/client-go/1.4/pkg/api/errors"
 )
 
 /*
@@ -24,7 +26,9 @@ const (
 	K8S_POD_INFRA_CONTAINER_ID = "K8S_POD_INFRA_CONTAINER_ID"
 	K8S_PORTS                  = "K8S_PORTS"
 
-	stateDir = "/var/lib/cni/galaxy/port"
+	stateDir                   = "/var/lib/cni/galaxy/port"
+	PortMappingAnnotation      = "network.kubernetes.io/portmapping"
+	PortMappingPortsAnnotation = "network.kubernetes.io/portmappingports"
 )
 
 func ParseK8SCNIArgs(args string) (map[string]string, error) {
@@ -58,7 +62,7 @@ func ParsePorts(portStr string) ([]*Port, error) {
 }
 
 type Port struct {
-	// This must be a valid port number, 0 < x < 65536.
+	// This must be a valid port number, 0 <= x < 65536.
 	// If HostNetwork is specified, this must match ContainerPort.
 	HostPort int32 `json:"hostPort"`
 	// Required: This must be a valid port number, 0 < x < 65536.
@@ -71,12 +75,12 @@ type Port struct {
 	PodIP string `json:"podIP"`
 }
 
-func SavePort(containerID string, portStr string) error {
+func SavePort(containerID string, data []byte) error {
 	if err := os.MkdirAll(stateDir, 0700); err != nil {
 		return err
 	}
 	path := filepath.Join(stateDir, containerID)
-	return ioutil.WriteFile(path, []byte(portStr), 0600)
+	return ioutil.WriteFile(path, data, 0600)
 }
 
 func ConsumePort(containerID string) ([]*Port, error) {
@@ -95,4 +99,13 @@ func ConsumePort(containerID string) ([]*Port, error) {
 		return nil, err
 	}
 	return ports, nil
+}
+
+// GetPodFullName returns a name that uniquely identifies a pod.
+func GetPodFullName(podName, namespace string) string {
+	return podName + "_" + namespace
+}
+
+func ShouldRetry(err error) bool {
+	return apierr.IsConflict(err) || apierr.IsServerTimeout(err)
 }

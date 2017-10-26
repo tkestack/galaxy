@@ -241,12 +241,12 @@ func SendGratuitousARP(result *types.Result, args *skel.CmdArgs) error {
 func MacVlanConnectsHostWithContainer(result *types.Result, args *skel.CmdArgs, parent int) error {
 	var err error
 	macVlan := &netlink.Macvlan{
-		Mode:netlink.MACVLAN_MODE_BRIDGE,
+		Mode: netlink.MACVLAN_MODE_BRIDGE,
 		LinkAttrs: netlink.LinkAttrs{
 			Name:        HostMacVlanName(args.ContainerID),
 			MTU:         1500,
 			ParentIndex: parent,
-	}}
+		}}
 	if err := netlink.LinkAdd(macVlan); err != nil {
 		return err
 	}

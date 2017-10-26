@@ -6,6 +6,7 @@ import (
 	"encoding/base32"
 	"fmt"
 	"strings"
+	"sync"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 
@@ -27,11 +28,14 @@ const (
 
 type PortMappingHandler struct {
 	utiliptables.Interface
+	podPortMap map[string]map[hostport]closeable
+	sync.Mutex
 }
 
 func New() *PortMappingHandler {
 	return &PortMappingHandler{
-		Interface: utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4),
+		Interface:  utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4),
+		podPortMap: make(map[string]map[hostport]closeable),
 	}
 }
 

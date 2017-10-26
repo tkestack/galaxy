@@ -9,12 +9,12 @@ package=git.code.oa.com/gaiastack/galaxy
 cni_package=github.com/containernetworking/cni
 
 mkdir -p go/src/`dirname $package`
-ln -s $cur_dir $cur_dir/go/src/$package
+ln -sfn $cur_dir $cur_dir/go/src/$package
 export GOPATH=$cur_dir/go
-mkdir -p `dirname $GOPATH/src/$cni_package`
-ln -s $GOPATH/src/$package/vendor/$cni_package $GOPATH/src/$cni_package
+echo getting cni package ..
+go get -d $cni_package/pkg/types
+cd $GOPATH/src/$cni_package && git checkout 0e09ad29df1eda8c0e15f8b6c4c7784a42e125bf && cd -
 function cleanup() {
-	rm $GOPATH/src/$cni_package
 	rm $cur_dir/go/src/$package
 }
 trap cleanup EXIT
@@ -34,10 +34,6 @@ go build -o bin/${bin_prefix}-bridge -v $cni_package/plugins/main/bridge
 #echo "   flannel"
 #go build -o bin/${bin_prefix}-flannel -v $cni_package/plugins/meta/flannel
 
-# hack for remove vendor of cni repo when building galaxy binaries
-echo `pwd`
-mv vendor/$cni_package/vendor vendor/$cni_package/back_vendor
-
 # build galaxy cni plugins
 PLUGINS="$GOPATH/src/$package/cni/k8s-vlan $GOPATH/src/$package/cni/sdn $GOPATH/src/$package/cni/veth $GOPATH/src/$package/cni/k8s-sriov"
 for d in $PLUGINS; do
@@ -51,5 +47,3 @@ done
 # build galaxy
 echo "Building galaxy"
 go build -o bin/galaxy -v $package/cmd/galaxy
-
-mv vendor/$cni_package/back_vendor vendor/$cni_package/vendor
