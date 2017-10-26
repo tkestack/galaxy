@@ -20,13 +20,15 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
+	"k8s.io/client-go/1.4/pkg/util/wait"
 )
 
 var (
-	flagMaster      = flag.String("master", "", "URL of galaxy master controller, currently apiswitch")
-	flagNetworkConf = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
+	flagMaster               = flag.String("master", "", "URL of galaxy master controller, currently apiswitch")
+	flagNetworkConf          = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
 	flagBridgeNFCallIptables = flag.Bool("bridge-nf-call-iptables", true, "ensure bridge-nf-call-iptables is set/unset")
-	flagEbtableRules = flag.Bool("ebtable-rules", false, "whether galaxy should ensure ebtable-rules")
+	flagEbtableRules         = flag.Bool("ebtable-rules", false, "whether galaxy should ensure ebtable-rules")
+	flagApiServer            = flag.String("api-servers", "", "The address of apiserver")
 )
 
 func (g *Galaxy) startServer() error {
@@ -88,14 +90,14 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 		} else {
 			if result != nil {
 				data, err = json.Marshal(result)
-				err = g.setupPortMapping(req.Ports, req.ContainerID, result)
+				err = g.setupPortMapping(req, req.Ports, req.ContainerID, result)
 			}
 		}
 	} else if req.Command == cniutil.COMMAND_DEL {
 		defer glog.Infof("%v err %v, %s-", req, err, start.Format(time.StampMicro))
 		err = g.cmdDel(req)
 		if err == nil {
-			err = g.cleanupPortMapping(req.ContainerID)
+			err = g.cleanupPortMapping(req)
 		}
 	} else {
 		err = fmt.Errorf("unkown command %s", req.Command)
@@ -122,12 +124,30 @@ func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest) error {
 	return remote.CmdDel(req, g.netConf)
 }
 
-func (g *Galaxy) setupPortMapping(portStr, containerID string, result *types.Result) error {
+func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerID string, result *types.Result) error {
+	if g.client == nil {
+		return nil
+	}
 	ports, err := k8s.ParsePorts(portStr)
 	if err != nil {
 		return err
 	}
-	if err := k8s.SavePort(containerID, portStr); err != nil {
+	if len(ports) == 0 {
+		return nil
+	}
+	pod, err := g.client.Pods(req.PodNamespace).Get(req.PodName)
+	if err != nil {
+		return fmt.Errorf("failed to get pod from apiserver: %v", err)
+	}
+	_, portMapping := pod.Annotations[k8s.PortMappingAnnotation]
+	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), portMapping, ports); err != nil {
+		return err
+	}
+	data, err := json.Marshal(ports)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ports: %v", err)
+	}
+	if err := k8s.SavePort(containerID, data); err != nil {
 		return fmt.Errorf("failed to save ports %v", err)
 	}
 	// we have to fulfill ip field of the current pod
@@ -141,16 +161,36 @@ func (g *Galaxy) setupPortMapping(portStr, containerID string, result *types.Res
 	for _, p := range ports {
 		p.PodIP = ip4.String()
 	}
-	if len(ports) != 0 {
-		if err := g.pmhandler.SetupPortMapping("cni0", ports); err != nil {
-			return fmt.Errorf("failed to setup port mapping %v: %v", ports, err)
+	if err := g.pmhandler.SetupPortMapping("cni0", ports); err != nil {
+		return fmt.Errorf("failed to setup port mapping %v: %v", ports, err)
+	}
+	if err := wait.Poll(10*time.Millisecond, 1*time.Minute, func() (bool, error) {
+		pod, err := g.client.Pods(req.PodNamespace).Get(req.PodName)
+		if err != nil {
+			return false, err
 		}
+		if pod.Annotations == nil {
+			pod.Annotations = make(map[string]string)
+		}
+		pod.Annotations[k8s.PortMappingPortsAnnotation] = string(data)
+		g.client.Pods(req.PodNamespace).Update(pod)
+		if err == nil {
+			return true, nil
+		}
+		glog.Error(err)
+		if k8s.ShouldRetry(err) {
+			return false, nil
+		}
+		return false, err
+	}); err != nil {
+		return fmt.Errorf("failed to update pod %s annotation", k8s.GetPodFullName(req.PodName, req.PodNamespace))
 	}
 	return nil
 }
 
-func (g *Galaxy) cleanupPortMapping(containerID string) error {
-	ports, err := k8s.ConsumePort(containerID)
+func (g *Galaxy) cleanupPortMapping(req *galaxyapi.PodRequest) error {
+	g.pmhandler.CloseHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace))
+	ports, err := k8s.ConsumePort(req.ContainerID)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
