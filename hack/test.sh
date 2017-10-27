@@ -13,5 +13,5 @@ create_go_path_tree
 (
   export GOPATH=${LOCAL_GOPATH}
   cd ${LOCAL_GOPATH}/src/${PKG_NAME}/
-  go test -v $(glide novendor)
+  go test -v $(glide novendor | grep -v '/go/')
 )
