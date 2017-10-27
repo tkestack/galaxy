@@ -4,34 +4,20 @@ hack/dockerbuild.sh(mac) or hack/build.sh(linux)
 
 # Development
 
+Galaxy uses [glide](https://github.com/Masterminds/glide)/[glide-vc](https://github.com/sgotti/glide-vc) to manager vendors
+
+Install glide/glide-vc
+
 ```
-git clone --recursive http://git.code.oa.com/gaiastack/galaxy.git
+curl https://glide.sh/get | sh
+go get github.com/sgotti/glide-vc
+```
 
-# or
-git clone http://git.code.oa.com/gaiastack/galaxy.git
-git submodule init
-git submodule update
-# remove vendor directory of submodules to get compiled by go build
-rm -rf vendor/k8s.io/kubernetes/vendor
-rm -rf vendor/github.com/containernetworking/cni/vendor
-git update-index --assume-unchanged vendor/k8s.io/kubernetes
-git update-index --assume-unchanged vendor/github.com/containernetworking/cni
-# track the changes again before update a dependency
-git update-index --no-assume-unchanged <path/to/file>
+Add/Update vendor
 
-# manage dependencies
-go get github.com/kovetskiy/manul
-# show dependencies
-manul -Q 
-# install new new dependencies
-manul -I
-# remove git submodules for specified/all dependencies
-manul -R
-# update a dependency
-cd vendor/github.com/containernetworking/cni
-git checkout $commit
-cd -
-git commit -am "Update ..."
+```
+hack/updatevendor.sh
+
 ```
 
 # Test
