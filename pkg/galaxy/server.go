@@ -173,17 +173,17 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerI
 			pod.Annotations = make(map[string]string)
 		}
 		pod.Annotations[k8s.PortMappingPortsAnnotation] = string(data)
-		g.client.Pods(req.PodNamespace).Update(pod)
+		_, err = g.client.Pods(req.PodNamespace).Update(pod)
 		if err == nil {
 			return true, nil
 		}
-		glog.Error(err)
+		glog.Warningf("failed to update pod %s annotation: %v", k8s.GetPodFullName(pod.Name, pod.Namespace), err)
 		if k8s.ShouldRetry(err) {
 			return false, nil
 		}
 		return false, err
 	}); err != nil {
-		return fmt.Errorf("failed to update pod %s annotation", k8s.GetPodFullName(req.PodName, req.PodNamespace))
+		return fmt.Errorf("failed to update pod %s annotation: %v", k8s.GetPodFullName(req.PodName, req.PodNamespace), err)
 	}
 	return nil
 }
