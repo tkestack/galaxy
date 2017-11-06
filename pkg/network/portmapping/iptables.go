@@ -250,7 +250,7 @@ func writeLine(buf *bytes.Buffer, words ...string) {
 // this because IPTables Chain Names must be <= 28 chars long, and the longer
 // they are the harder they are to read.
 func hostportChainName(port *k8s.Port, podFullName string) utiliptables.Chain {
-	hash := sha256.Sum256([]byte(string(port.HostPort) + string(port.Protocol) + podFullName))
+	hash := sha256.Sum256([]byte(string(port.HostPort) + string(port.Protocol) + string(port.ContainerPort) + podFullName))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return utiliptables.Chain(kubeHostportChainPrefix + encoded[:16])
 }
