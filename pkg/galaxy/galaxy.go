@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/golang/glog"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
@@ -15,6 +17,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 
 	"k8s.io/client-go/1.4/kubernetes"
+	"k8s.io/client-go/1.4/pkg/util/wait"
 	"k8s.io/client-go/1.4/tools/clientcmd"
 )
 
@@ -49,6 +52,7 @@ func (g *Galaxy) newQuitChannel() chan error {
 
 func (g *Galaxy) Start() error {
 	g.initk8sClient()
+	g.labelSubnet()
 	g.cleaner.Run()
 	kernel.BridgeNFCallIptables(g.newQuitChannel(), *flagBridgeNFCallIptables)
 	if *flagEbtableRules {
@@ -128,4 +132,43 @@ func (g *Galaxy) initk8sClient() {
 		glog.Fatalf("Can not generate client from config: error(%v)", err)
 	}
 	glog.Infof("apiserver address %s", *flagApiServer)
+}
+
+// labelSubnet labels kubelet on this node with subnet=IP-OnesInMask to provide rack information for kube-scheduler
+// rackfilter plugin to work
+func (g *Galaxy) labelSubnet() {
+	if g.client != nil {
+		if !(*flagLabelSubnet) {
+			return
+		}
+		go wait.Forever(func() {
+			nodeName := k8s.GetHostname("") //TODO get hostnameOverride from kubelet config
+			for i := 0; i < 5; i++ {
+				node, err := g.client.Nodes().Get(nodeName)
+				if err != nil {
+					glog.Warningf("failed to get node %s from apiserver", nodeName)
+					return
+				}
+				if node.Labels == nil {
+					node.Labels = make(map[string]string)
+				}
+				if subnet, ok := node.Labels["subnet"]; ok {
+					if subnet != strings.Replace(flags.GetNodeIP(), "/", "-", 1) {
+						glog.Infof("kubernete label subnet=%s is not created by galaxy. galaxy won't change this label", subnet, strings.Replace(flags.GetNodeIP(), "/", "-", 1))
+					}
+					return
+				}
+				node.Labels["subnet"] = strings.Replace(flags.GetNodeIP(), "/", "-", 1) //subnet=10.235.7.146-26
+				_, err = g.client.Nodes().Update(node)
+				if err == nil {
+					glog.Infof("created kubelet label subnet=%s", node.Labels["subnet"])
+					return
+				}
+				glog.Warningf("failed to update node label: %v", err)
+				if !k8s.ShouldRetry(err) {
+					return
+				}
+			}
+		}, 3*time.Minute)
+	}
 }

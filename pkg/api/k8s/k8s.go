@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/golang/glog"
 	apierr "k8s.io/client-go/1.4/pkg/api/errors"
 )
 
@@ -108,4 +109,18 @@ func GetPodFullName(podName, namespace string) string {
 
 func ShouldRetry(err error) bool {
 	return apierr.IsConflict(err) || apierr.IsServerTimeout(err)
+}
+
+// copied from kubelet
+// GetHostname returns OS's hostname if 'hostnameOverride' is empty; otherwise, return 'hostnameOverride'.
+func GetHostname(hostnameOverride string) string {
+	hostname := hostnameOverride
+	if hostname == "" {
+		nodename, err := os.Hostname()
+		if err != nil {
+			glog.Fatalf("Couldn't determine hostname: %v", err)
+		}
+		hostname = nodename
+	}
+	return strings.ToLower(strings.TrimSpace(hostname))
 }
