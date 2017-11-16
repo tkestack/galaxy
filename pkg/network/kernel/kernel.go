@@ -23,9 +23,11 @@ func BridgeNFCallIptables(quit chan error, set bool) {
 				}
 			}
 		} else {
-			glog.Warningf("%s seted, unsetting it", file)
-			if err := ioutil.WriteFile(file, []byte("0"), 0644); err != nil {
-				glog.Warningf("Error set kernel args %s: %v", file, err)
+			if string(data) != "0\n" {
+				glog.Warningf("%s seted, unsetting it", file)
+				if err := ioutil.WriteFile(file, []byte("0"), 0644); err != nil {
+					glog.Warningf("Error set kernel args %s: %v", file, err)
+				}
 			}
 		}
 	}, 5*time.Minute, quit)
