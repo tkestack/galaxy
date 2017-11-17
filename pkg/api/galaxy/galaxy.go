@@ -107,5 +107,5 @@ func CniRequestToPodRequest(r *http.Request) (*PodRequest, error) {
 }
 
 func (req *PodRequest) String() string {
-	return fmt.Sprintf("%s %s_%s, %s, %s", req.Command, req.PodName, req.PodNamespace, req.ContainerID, req.Netns)
+	return fmt.Sprintf("%s %s_%s, %s, %s, %s", req.Command, req.PodName, req.PodNamespace, req.ContainerID, req.Netns, req.Ports)
 }
