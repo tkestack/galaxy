@@ -27,6 +27,7 @@ var (
 	flagMaster               = flag.String("master", "", "URL of galaxy master controller, currently apiswitch")
 	flagNetworkConf          = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
 	flagBridgeNFCallIptables = flag.Bool("bridge-nf-call-iptables", true, "ensure bridge-nf-call-iptables is set/unset")
+	flagIPForward            = flag.Bool("ip-forward", true, "ensure ip-forward is set/unset")
 	flagEbtableRules         = flag.Bool("ebtable-rules", false, "whether galaxy should ensure ebtable-rules")
 	flagApiServer            = flag.String("api-servers", "", "The address of apiserver")
 	flagLabelSubnet          = flag.Bool("label-subnet", true, "whether galaxy should label the kubelet node with subnet={ip}-{onesInMask}, this label is used by rackfilter scheduler plugin")
