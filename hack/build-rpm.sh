@@ -39,6 +39,7 @@ docker create -it --name ${CONTAINER_NAME} -v ${CURDIR}/bin:/root/rpmbuild/RPMS 
 docker cp ${CURDIR}/bin/${NAME}-${VERSION}.tar.gz ${CONTAINER_NAME}:/root/rpmbuild/SOURCES/
 docker cp ${CURDIR}/hack/v${V}/galaxy.spec ${CONTAINER_NAME}:/root/rpmbuild/SPECS/
 docker start -ai ${CONTAINER_NAME}
+docker wait ${NAME}
 size=$(ls -l ${CURDIR}/bin/x86_64/${RPMNAME} | awk '{print $5}')
 curl -v 'http://gaia.repo.oa.com/upload_file?filesize='${size}'&filename='${RPMNAME}'&dirtype=1' -T ${RPMFILE}
 curl -v 'http://gaia.repo.oa.com/update_repo?dirtype=1'
