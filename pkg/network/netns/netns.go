@@ -21,3 +21,12 @@ func NsInvoke(f func()) {
 	f()
 	netns.Set(origns)
 }
+
+func NewNetnsForTest() func() {
+	runtime.LockOSThread()
+	ns, _ := netns.New()
+	return func() {
+		ns.Close()
+		runtime.UnlockOSThread()
+	}
+}

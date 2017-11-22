@@ -1,34 +1,54 @@
 package kernel
 
 import (
+	"fmt"
 	"io/ioutil"
+	"syscall"
 	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/wait"
 	"github.com/golang/glog"
 )
 
+var interval = 5 * time.Minute
+
 func BridgeNFCallIptables(quit chan error, set bool) {
-	file := "/proc/sys/net/bridge/bridge-nf-call-iptables"
-	go wait.UntilQuitSignal("ensure kernel args bridge-nf-call-iptables", func() {
+	expect := "1"
+	if !set {
+		expect = "0"
+	}
+	setArg(expect, "/proc/sys/net/bridge/bridge-nf-call-iptables", quit)
+}
+
+func IPForward(quit chan error, set bool) {
+	expect := "1"
+	if !set {
+		expect = "0"
+	}
+	setArg(expect, "/proc/sys/net/ipv4/ip_forward", quit)
+}
+
+func setArg(expect string, file string, quit chan error) {
+	go wait.UntilQuitSignal(fmt.Sprintf("ensure kernel args %s", file), func() {
 		data, err := ioutil.ReadFile(file)
 		if err != nil {
 			glog.Warningf("Error open %s: %v", file, err)
 		}
-		if set {
-			if string(data) != "1\n" {
-				glog.Warningf("%s unset, setting it", file)
-				if err := ioutil.WriteFile(file, []byte("1"), 0644); err != nil {
-					glog.Warningf("Error set kernel args %s: %v", file, err)
-				}
-			}
-		} else {
-			if string(data) != "0\n" {
-				glog.Warningf("%s seted, unsetting it", file)
-				if err := ioutil.WriteFile(file, []byte("0"), 0644); err != nil {
-					glog.Warningf("Error set kernel args %s: %v", file, err)
-				}
+		if string(data) != expect+"\n" {
+			glog.Warningf("%s unset, setting it", file)
+			if err := ioutil.WriteFile(file, []byte(expect), 0644); err != nil {
+				glog.Warningf("Error set kernel args %s: %v", file, err)
 			}
 		}
-	}, 5*time.Minute, quit)
+	}, interval, quit)
+}
+
+func remountSysfs() error {
+	if err := syscall.Mount("", "/", "none", syscall.MS_SLAVE|syscall.MS_REC, ""); err != nil {
+		return err
+	}
+	if err := syscall.Unmount("/sys", syscall.MNT_DETACH); err != nil {
+		return err
+	}
+	return syscall.Mount("", "/sys", "sysfs", 0, "")
 }

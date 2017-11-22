@@ -55,6 +55,7 @@ func (g *Galaxy) Start() error {
 	g.labelSubnet()
 	g.cleaner.Run()
 	kernel.BridgeNFCallIptables(g.newQuitChannel(), *flagBridgeNFCallIptables)
+	kernel.IPForward(g.newQuitChannel(), *flagIPForward)
 	if *flagEbtableRules {
 		firewall.SetupEbtables(g.newQuitChannel())
 	}
