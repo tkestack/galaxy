@@ -137,6 +137,17 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerI
 	if len(ports) == 0 {
 		return nil
 	}
+	// we have to fulfill ip field of the current pod
+	if result.IP4 == nil {
+		return fmt.Errorf("CNI plugin reported no IPv4 address")
+	}
+	ip4 := result.IP4.IP.IP.To4()
+	if ip4 == nil {
+		return fmt.Errorf("CNI plugin reported an invalid IPv4 address: %+v.", result.IP4)
+	}
+	for i := range ports {
+		ports[i].PodIP = ip4.String()
+	}
 	pod, err := g.client.Pods(req.PodNamespace).Get(req.PodName)
 	if err != nil {
 		return fmt.Errorf("failed to get pod from apiserver: %v", err)
@@ -151,17 +162,6 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerI
 	}
 	if err := k8s.SavePort(containerID, data); err != nil {
 		return fmt.Errorf("failed to save ports %v", err)
-	}
-	// we have to fulfill ip field of the current pod
-	if result.IP4 == nil {
-		return fmt.Errorf("CNI plugin reported no IPv4 address")
-	}
-	ip4 := result.IP4.IP.IP.To4()
-	if ip4 == nil {
-		return fmt.Errorf("CNI plugin reported an invalid IPv4 address: %+v.", result.IP4)
-	}
-	for _, p := range ports {
-		p.PodIP = ip4.String()
 	}
 	if err := g.pmhandler.SetupPortMapping("cni0", ports); err != nil {
 		return fmt.Errorf("failed to setup port mapping %v: %v", ports, err)
