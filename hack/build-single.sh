@@ -16,4 +16,5 @@ function cleanup() {
 }
 trap cleanup EXIT
 
-go build -o bin/binary -v $package/$BINARY
+BINARY_NAME=`echo ${BINARY} | awk -F/ '{print $2}'`
+go build -o bin/${BINARY_NAME} -v $package/$BINARY

@@ -2,8 +2,12 @@ package netns
 
 import (
 	"runtime"
+	"os"
+	"syscall"
+	"fmt"
 
 	"github.com/vishvananda/netns"
+	"github.com/golang/glog"
 )
 
 func NsInvoke(f func()) {
@@ -11,22 +15,69 @@ func NsInvoke(f func()) {
 	defer runtime.UnlockOSThread()
 
 	// Save the current network namespace
-	origns, _ := netns.Get()
+	origns, err := netns.Get()
+	if err != nil {
+		glog.Fatal(err)
+	}
 	defer origns.Close()
 
 	// Create a new network namespace
-	newns, _ := netns.New()
-	netns.Set(newns)
+	newns, err := netns.New()
+	if err != nil {
+		glog.Fatal(err)
+	}
+	err = netns.Set(newns)
+	if err != nil {
+		glog.Fatal(err)
+	}
 	defer newns.Close()
 	f()
 	netns.Set(origns)
 }
 
-func NewNetnsForTest() func() {
+func NewContainerForTest() func() {
 	runtime.LockOSThread()
-	ns, _ := netns.New()
+	originmnt, err := GetMntNS()
+	if err != nil {
+		glog.Fatal(err)
+	}
+	originnet, err := netns.Get()
+	if err != nil {
+		glog.Fatal(err)
+	}
+	if err := syscall.Unshare(syscall.CLONE_NEWNS|syscall.CLONE_NEWNET); err != nil {
+		glog.Fatal(err)
+	}
+	newmnt, err := GetMntNS()
+	if err != nil {
+		glog.Fatal(err)
+	}
+	newnet, err := netns.Get()
+	if err != nil {
+		glog.Fatal(err)
+	}
+	closables := []closable{&newnet, &newmnt, &originnet, &originmnt}
 	return func() {
-		ns.Close()
+		SetMntNS(originmnt)
+		netns.Set(originnet)
+		for i := range closables {
+			closables[i].Close()
+		}
 		runtime.UnlockOSThread()
 	}
+}
+
+type closable interface {
+	Close() error
+}
+
+// Get gets a handle to the current threads mount namespace.
+func GetMntNS() (netns.NsHandle, error) {
+	return netns.GetFromPath(fmt.Sprintf("/proc/%d/task/%d/ns/mnt", os.Getpid(), syscall.Gettid()))
+}
+
+// Set sets the current network namespace to the namespace represented
+// by NsHandle.
+func SetMntNS(ns netns.NsHandle) (err error) {
+	return netns.Setns(ns, syscall.CLONE_NEWNS)
 }

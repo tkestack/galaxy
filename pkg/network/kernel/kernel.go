@@ -50,5 +50,5 @@ func remountSysfs() error {
 	if err := syscall.Unmount("/sys", syscall.MNT_DETACH); err != nil {
 		return err
 	}
-	return syscall.Mount("", "/sys", "sysfs", 0, "")
+	return syscall.Mount("sysfs", "/sys", "sysfs", 0, "")
 }
