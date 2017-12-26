@@ -20,6 +20,9 @@ for i in ${CURDIR}/*; do
      cp -R $i ${BIND_DIR}
   fi
 done
+mkdir -p ${BIND_DIR}/go/src/github.com/containernetworking
+rm -rf ${BIND_DIR}/go/src/github.com/containernetworking/cni
+tar zxvf hack/cni.tar.gz -C ${BIND_DIR}/go/src/github.com/containernetworking/
 rm -rf ${CURDIR}/bin/${NAME}-${VERSION}.tar.gz
 tar cf ${CURDIR}/bin/${NAME}-${VERSION}.tar -C ${CURDIR}/bin .
 gzip -f ${CURDIR}/bin/${NAME}-${VERSION}.tar

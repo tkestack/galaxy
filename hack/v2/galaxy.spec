@@ -11,6 +11,9 @@ Requires: ebtables
 Requires: iputils
 Source: %{name}-%{version}.tar.gz
 
+%define __os_install_post %{nil}
+%define debug_package %{nil}
+
 %description
 kubernetes network cni plugin
 
@@ -62,7 +65,3 @@ install -p -m 644 hack/v2/galaxy-ebtable-filter $RPM_BUILD_ROOT/etc/sysconfig/ga
 %config(noreplace) /etc/cni/net.d/galaxy.conf
 %config(noreplace) /%{_unitdir}/galaxy.service
 %config(missingok) /etc/sysconfig/galaxy-config
-
-%define __debug_install_post   \
-   %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} "%{_builddir}/%{?buildsubdir}"\
-%{nil}
