@@ -1,0 +1,31 @@
+{
+  "kind": "Policy",
+  "apiVersion": "v1",
+  "predicates": [
+    {"name": "NoDiskConflict"},
+    {"name": "NoVolumeZoneConflict"},
+    {"name": "PodFitsHostPorts"},
+    {"name": "PodFitsResources"},
+    {"name": "PodFitsLocalDisk"},
+    {"name": "HostName"},
+    {"name": "MatchNodeSelector"},
+    {"name": "PodToleratesNodeTaints"},
+    {"name": "CheckNodeMemoryPressure"},
+    {"name": "CheckNodeDiskPressure"},
+    {"name": "MatchInterPodAffinity"}],
+  "priorities": [
+    {"name": "LeastRequestedPriority", "weight": 1},
+    {"name": "BalancedResourceAllocation", "weight": 1},
+    {"name": "ServiceSpreadingPriority", "weight": 1},
+    {"name": "NodePreferAvoidPodsPriority", "weight": 10000},
+    {"name": "NodeAffinityPriority", "weight": 1},
+    {"name": "TaintTolerationPriority", "weight": 1},
+    {"name": "InterPodAffinityPriority", "weight": 1}],
+  "extender": {
+    "url": "http://172.16.0.3/v1",
+    "filterVerb": "filter",
+    "prioritizeVerb": "prioritize",
+    "weight": 1,
+    "enableHttps": false
+  }
+}
