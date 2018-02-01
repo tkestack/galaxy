@@ -88,7 +88,7 @@ scheduler-policy-env-template配置框中填入以下样例
 
 ## 2. 自动从cmdb获取配置
 
-扩容、缩容机器后需要重启apiswitch和kube-scheduler，apiswitch从k8s读取所有计算节点的ip后，会自动从cmdb拉取可以给容器用的ip，并生成kube-scheduler rackfilter插件的配置文件写入configmap
+扩容、缩容机器后需要重启apiswitch和kube-scheduler，apiswitch从k8s读取所有计算节点的ip后，会自动从cmdb拉取可以给容器用的ip（不论ip与物理机固资绑定或者与VM固资绑定，都可以拉取到），并生成kube-scheduler rackfilter插件的配置文件写入configmap
 
 ### 套件配置apiswitch参数
 
