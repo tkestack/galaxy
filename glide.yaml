@@ -47,3 +47,6 @@ import:
   - pkg/util/dbus
   - pkg/util/exec
   - pkg/util/iptables
+- package: golang.org/x/sys/unix
+  repo: https://golang.org/x/sys
+  version: 076b546753157f758b316e59bcb51e6807c04057
