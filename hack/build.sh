@@ -38,7 +38,7 @@ go build -o bin/${bin_prefix}-bridge -v $cni_package/plugins/main/bridge
 #go build -o bin/${bin_prefix}-flannel -v $cni_package/plugins/meta/flannel
 
 # build galaxy cni plugins
-PLUGINS="$GOPATH/src/$package/cni/k8s-vlan $GOPATH/src/$package/cni/sdn $GOPATH/src/$package/cni/veth $GOPATH/src/$package/cni/k8s-sriov"
+PLUGINS="$GOPATH/src/$package/cni/k8s-vlan $GOPATH/src/$package/cni/sdn $GOPATH/src/$package/cni/veth $GOPATH/src/$package/cni/k8s-sriov $GOPATH/src/$package/cni/zhiyun-ipam"
 for d in $PLUGINS; do
 	if [ -d $d ]; then
 		plugin=$(basename $d)

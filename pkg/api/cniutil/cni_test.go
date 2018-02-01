@@ -1,4 +1,4 @@
-package apiswitch
+package cniutil
 
 import (
 	"encoding/json"

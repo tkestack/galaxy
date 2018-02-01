@@ -11,8 +11,6 @@ import (
 	"github.com/containernetworking/cni/pkg/skel"
 )
 
-const GalaxySocketPath string = "/var/run/galaxy.sock"
-
 // Request sent to the Galaxy by the Galaxy SDN CNI plugin
 type CNIRequest struct {
 	// CNI environment variables, like CNI_COMMAND and CNI_NETNS

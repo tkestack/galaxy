@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"os"
 
 	"github.com/golang/glog"
 
@@ -11,6 +13,11 @@ import (
 
 func main() {
 	defer glog.Flush()
+	flag.CommandLine.Usage = func() {
+		flag.Usage()
+		fmt.Fprintf(os.Stderr, "Note: \n")
+		fmt.Fprintf(os.Stderr, galaxy.Note)
+	}
 	flag.Parse()
 	galaxy, err := galaxy.NewGalaxy()
 	if err != nil {

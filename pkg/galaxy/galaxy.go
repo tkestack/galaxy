@@ -9,26 +9,36 @@ import (
 
 	"github.com/golang/glog"
 
+	zhiyunapi "git.code.oa.com/gaiastack/galaxy/cni/zhiyun-ipam/api"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	v1Cache "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/cache"
+	k8sutil "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/utils"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"k8s.io/client-go/1.4/kubernetes"
+	"k8s.io/client-go/1.4/pkg/api"
+	"k8s.io/client-go/1.4/pkg/api/v1"
+	"k8s.io/client-go/1.4/pkg/fields"
 	"k8s.io/client-go/1.4/pkg/util/wait"
+	"k8s.io/client-go/1.4/tools/cache"
 	"k8s.io/client-go/1.4/tools/clientcmd"
 )
 
 type Galaxy struct {
 	quitChannels []chan error
-	cleaner      gc.GC
+	dockerCli    *docker.DockerInterface
 	netConf      map[string]map[string]interface{}
-	flannelConf  []byte
 	pmhandler    *portmapping.PortMappingHandler
 	client       *kubernetes.Clientset
+	podStore     v1Cache.StoreToPodLister
+	ipamType     string
+	zhiyunConf   *zhiyunapi.Conf
 }
 
 func NewGalaxy() (*Galaxy, error) {
@@ -37,10 +47,10 @@ func NewGalaxy() (*Galaxy, error) {
 		return nil, err
 	}
 	g := &Galaxy{}
+	g.dockerCli = dockerClient
 	if err := g.parseConfig(); err != nil {
 		return nil, err
 	}
-	g.cleaner = gc.NewFlannelGC(dockerClient, g.newQuitChannel(), g.newQuitChannel())
 	g.pmhandler = portmapping.New()
 	return g, nil
 }
@@ -54,7 +64,10 @@ func (g *Galaxy) newQuitChannel() chan error {
 func (g *Galaxy) Start() error {
 	g.initk8sClient()
 	g.labelSubnet()
-	g.cleaner.Run()
+	gc.NewFlannelGC(g.dockerCli, g.newQuitChannel(), g.newQuitChannel())
+	if g.zhiyunConf != nil {
+		gc.NewZhiyunGC(g.dockerCli, g.newQuitChannel(), g.zhiyunConf).Run()
+	}
 	kernel.BridgeNFCallIptables(g.newQuitChannel(), *flagBridgeNFCallIptables)
 	kernel.IPForward(g.newQuitChannel(), *flagIPForward)
 	if *flagEbtableRules {
@@ -102,14 +115,26 @@ func (g *Galaxy) parseConfig() error {
 			g.netConf[k]["type"] = k
 		}
 	}
-	if _, ok := g.netConf["galaxy-k8s-vlan"]; ok {
-		g.netConf["galaxy-k8s-vlan"]["url"] = *flagMaster
-		g.netConf["galaxy-k8s-vlan"]["node_ip"] = flags.GetNodeIP()
-	}
-	if _, ok := g.netConf["galaxy-flannel"]; ok {
-		var err error
-		if g.flannelConf, err = json.Marshal(g.netConf["galaxy-flannel"]); err != nil {
-			return err
+	if vlanConfMap, ok := g.netConf[private.NetworkTypeUnderlay.CNIType]; ok {
+		vlanConfMap["url"] = *flagMaster
+		vlanConfMap["node_ip"] = flags.GetNodeIP()
+		if ipamObj, exist := vlanConfMap["ipam"]; exist {
+			if ipamMap, isMap := ipamObj.(map[string]interface{}); isMap {
+				ipamMap["node_ip"] = flags.GetNodeIP()
+				if typ, hasType := ipamMap["type"]; hasType {
+					if typeStr, isStr := typ.(string); isStr {
+						g.ipamType = typeStr
+						if typeStr == private.IPAMTypeZhiyun {
+							var zhiyunConf zhiyunapi.Conf
+							data, _ := json.Marshal(ipamMap)
+							if err := json.Unmarshal(data, &zhiyunConf); err != nil {
+								return fmt.Errorf("failed to unmarshal zhiyun conf %s: %v", string(data), err)
+							}
+							g.zhiyunConf = &zhiyunConf
+						}
+					}
+				}
+			}
 		}
 	}
 	glog.Infof("normalized network config %v", g.netConf)
@@ -117,11 +142,15 @@ func (g *Galaxy) parseConfig() error {
 }
 
 func (g *Galaxy) initk8sClient() {
-	if *flagApiServer == "" {
+	if *flagApiServer == "" && *flagKubeConf == "" {
+		// galaxy currently not support running in pod, so either flagApiServer or flagKubeConf should be specified
 		glog.Infof("apiserver address unknown")
+		if g.ipamType != "" {
+			glog.Fatalf("ipam type is %s, but apiserver address unknown", g.ipamType)
+		}
 		return
 	}
-	clientConfig, err := clientcmd.BuildConfigFromFlags(*flagApiServer, "")
+	clientConfig, err := clientcmd.BuildConfigFromFlags(*flagApiServer, *flagKubeConf)
 	if err != nil {
 		glog.Fatalf("Invalid client config: error(%v)", err)
 	}
@@ -133,7 +162,11 @@ func (g *Galaxy) initk8sClient() {
 	if err != nil {
 		glog.Fatalf("Can not generate client from config: error(%v)", err)
 	}
-	glog.Infof("apiserver address %s", *flagApiServer)
+	glog.Infof("apiserver address %s, kubeconf %s", *flagApiServer, *flagKubeConf)
+	lw := cache.NewListWatchFromClient(g.client.Core().GetRESTClient(), "pods", v1.NamespaceAll, fields.OneTermEqualSelector(api.PodHostField, k8s.GetHostname("")))
+	indexer, r := cache.NewNamespaceKeyedIndexerAndReflector(lw, &v1.Pod{}, 0)
+	go r.Run()
+	g.podStore = v1Cache.StoreToPodLister{Indexer: indexer}
 }
 
 // labelSubnet labels kubelet on this node with subnet=IP-OnesInMask to provide rack information for kube-scheduler
@@ -172,7 +205,7 @@ func (g *Galaxy) labelSubnet() {
 					return
 				}
 				glog.Warningf("failed to update node label: %v", err)
-				if !k8s.ShouldRetry(err) {
+				if !k8sutil.ShouldRetry(err) {
 					return
 				}
 			}

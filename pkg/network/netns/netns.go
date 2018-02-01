@@ -1,13 +1,13 @@
 package netns
 
 import (
-	"runtime"
-	"os"
-	"syscall"
 	"fmt"
+	"os"
+	"runtime"
+	"syscall"
 
-	"github.com/vishvananda/netns"
 	"github.com/golang/glog"
+	"github.com/vishvananda/netns"
 )
 
 func NsInvoke(f func()) {
@@ -45,7 +45,7 @@ func NewContainerForTest() func() {
 	if err != nil {
 		glog.Fatal(err)
 	}
-	if err := syscall.Unshare(syscall.CLONE_NEWNS|syscall.CLONE_NEWNET); err != nil {
+	if err := syscall.Unshare(syscall.CLONE_NEWNS | syscall.CLONE_NEWNET); err != nil {
 		glog.Fatal(err)
 	}
 	newmnt, err := GetMntNS()

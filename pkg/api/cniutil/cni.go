@@ -3,10 +3,14 @@ package cniutil
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/flannel"
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
@@ -30,6 +34,10 @@ const (
 
 	COMMAND_ADD = "ADD"
 	COMMAND_DEL = "DEL"
+)
+
+const (
+	IPInfoInArgs = "IPInfo"
 )
 
 // like net.IPNet but adds JSON marshalling and unmarshalling
@@ -116,7 +124,7 @@ func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs) (*types.Res
 		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
 	}
 
-	if netconf["type"] == "galaxy-flannel" {
+	if netconf["type"] == private.NetworkTypeOverlay.CNIType {
 		args.StdinData = netconfBytes
 		return flannel.CmdAdd(args)
 	} else {
@@ -142,7 +150,7 @@ func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs) error {
 		return fmt.Errorf("error serializing delegate netconf: %v", err)
 	}
 
-	if netconf["type"] == "galaxy-flannel" {
+	if netconf["type"] == private.NetworkTypeOverlay.CNIType {
 		args.StdinData = netconfBytes
 		return flannel.CmdDel(args)
 	} else {
@@ -159,5 +167,113 @@ func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs) error {
 			IfName:        args.IfName,
 			Path:          args.Path,
 		})
+	}
+}
+
+func CmdAdd(containerID string, cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, networkInfo NetworkInfo) (*types.Result, error) {
+	if len(networkInfo) == 0 {
+		return nil, fmt.Errorf("No network info returned")
+	}
+	if err := SaveNetworkInfo(containerID, networkInfo); err != nil {
+		return nil, fmt.Errorf("Error save network info %v for %s: %v", networkInfo, containerID, err)
+	}
+	var (
+		err    error
+		result *types.Result
+	)
+	for t, v := range networkInfo {
+		conf, ok := netConf[t]
+		if !ok {
+			return nil, fmt.Errorf("network %s not configured", t)
+		}
+		//append additional args from network info
+		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
+		result, err = DelegateAdd(conf, cmdArgs)
+		// configure only one network
+		break
+	}
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+type NetworkInfo map[string]map[string]string
+
+func CmdDel(containerID string, cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}) error {
+	networkInfo, err := ConsumeNetworkInfo(containerID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Duplicated cmdDel invoked by kubelet
+			return nil
+		}
+		return fmt.Errorf("Error consume network info %v for %s: %v", networkInfo, containerID, err)
+	}
+	for t, v := range networkInfo {
+		conf, ok := netConf[t]
+		if !ok {
+			return fmt.Errorf("network %s not configured", t)
+		}
+		//append additional args from network info
+		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
+		err = DelegateDel(conf, cmdArgs)
+		return err
+	}
+	return fmt.Errorf("No network info returned")
+}
+
+const (
+	stateDir = "/var/lib/cni/galaxy"
+)
+
+func SaveNetworkInfo(containerID string, info NetworkInfo) error {
+	if err := os.MkdirAll(stateDir, 0700); err != nil {
+		return err
+	}
+	path := filepath.Join(stateDir, containerID)
+	data, err := json.Marshal(info)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(path, data, 0600)
+}
+
+func ConsumeNetworkInfo(containerID string) (NetworkInfo, error) {
+	m := make(map[string]map[string]string)
+	path := filepath.Join(stateDir, containerID)
+	defer os.Remove(path)
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return m, err
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return m, err
+	}
+	return m, nil
+}
+
+/*
+	{"ip":"10.49.27.205/24","vlan":2,"gateway":"10.49.27.1"}
+*/
+type IPInfo struct {
+	IP             types.IPNet `json:"ip"`
+	Vlan           uint16      `json:"vlan"`
+	Gateway        net.IP      `json:"gateway"`
+	RoutableSubnet types.IPNet `json:"routable_subnet"`
+}
+
+func IPInfoToResult(ipInfo *IPInfo) *types.Result {
+	return &types.Result{
+		IP4: &types.IPConfig{
+			IP:      net.IPNet(ipInfo.IP),
+			Gateway: ipInfo.Gateway,
+			Routes: []types.Route{{
+				Dst: net.IPNet{
+					IP:   net.IPv4(0, 0, 0, 0),
+					Mask: net.IPv4Mask(0, 0, 0, 0),
+				},
+			}},
+		},
 	}
 }

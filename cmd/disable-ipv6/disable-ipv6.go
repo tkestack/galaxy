@@ -1,11 +1,11 @@
 package main
 
 import (
-	"os"
 	"fmt"
+	"os"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 	"git.code.oa.com/gaiastack/galaxy/pkg/cmdline"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 )
 
 func main() {
@@ -16,5 +16,3 @@ func main() {
 		}
 	})
 }
-
-

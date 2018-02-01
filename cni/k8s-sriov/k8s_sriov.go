@@ -9,8 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"git.code.oa.com/gaiastack/galaxy/cni/vlan-ipam"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	galaxyIpam "git.code.oa.com/gaiastack/galaxy/cni/ipam"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/ipam"
 	"github.com/containernetworking/cni/pkg/ns"
@@ -57,19 +56,10 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	ipamConf, err := vlan_ipam.LoadIPAMConf(args.StdinData)
+	vlanId, result, err := galaxyIpam.Allocate(conf.IPAM.Type, args)
 	if err != nil {
 		return err
 	}
-	kvMap, err := k8s.ParseK8SCNIArgs(args.Args)
-	if err != nil {
-		return err
-	}
-	result, vlanId, err := vlan_ipam.Allocate(ipamConf, args.Args, kvMap)
-	if err != nil {
-		return err
-	}
-
 	netns, err := ns.GetNS(args.Netns)
 	if err != nil {
 		return fmt.Errorf("failed to open netns %q: %v", netns, err)
@@ -96,8 +86,11 @@ func cmdDel(args *skel.CmdArgs) error {
 	if err = releaseVF(args.IfName, netns); err != nil {
 		return err
 	}
-
-	return nil
+	conf, err := loadConf(args.StdinData)
+	if err != nil {
+		return err
+	}
+	return galaxyIpam.Release(conf.IPAM.Type, args)
 }
 
 func main() {

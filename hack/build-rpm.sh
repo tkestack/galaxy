@@ -44,5 +44,7 @@ docker cp ${CURDIR}/hack/v${V}/galaxy.spec ${CONTAINER_NAME}:/root/rpmbuild/SPEC
 docker start -ai ${CONTAINER_NAME}
 docker wait ${NAME}
 size=$(ls -l ${CURDIR}/bin/x86_64/${RPMNAME} | awk '{print $5}')
-curl -v 'http://gaia.repo.oa.com/upload_file?filesize='${size}'&filename='${RPMNAME}'&dirtype=1' -T ${RPMFILE}
-curl -v 'http://gaia.repo.oa.com/update_repo?dirtype=1'
+if [ -z "$DEBUG" ]; then
+    curl -v 'http://gaia.repo.oa.com/upload_file?filesize='${size}'&filename='${RPMNAME}'&dirtype=1' -T ${RPMFILE}
+    curl -v 'http://gaia.repo.oa.com/update_repo?dirtype=1'
+fi

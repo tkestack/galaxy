@@ -1,0 +1,2 @@
+NETWORK_CONF='{"galaxy-flannel":{"delegate":{"type":"galaxy-veth","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"},"galaxy-k8s-vlan":{"device":"eth1","ipam":{"type":"galaxy-zhiyun-ipam"}}}'
+ARGS="-logtostderr=false -iface=eth1,docker,bond1 -log_dir=/gaia/k8s/log/galaxy -bridge-nf-call-iptables=false -ebtable-rules=false"
