@@ -3,6 +3,7 @@ package galaxy
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -159,7 +160,12 @@ func (g *Galaxy) labelSubnet() {
 					}
 					return
 				}
-				node.Labels["subnet"] = strings.Replace(flags.GetNodeIP(), "/", "-", 1) //subnet=10.235.7.146-26
+				_, ipNet, err := net.ParseCIDR(flags.GetNodeIP())
+				if err != nil {
+					glog.Errorf("invalid node ip %s", flags.GetNodeIP())
+					return
+				}
+				node.Labels["subnet"] = strings.Replace(ipNet.String(), "/", "-", 1) //cidr=10.235.7.146/24 -> subnet=10.235.7.0-24
 				_, err = g.client.Nodes().Update(node)
 				if err == nil {
 					glog.Infof("created kubelet label subnet=%s", node.Labels["subnet"])
