@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os/exec"
 	"strings"
 
+	"github.com/containernetworking/cni/pkg/ip"
 	"github.com/containernetworking/cni/pkg/ipam"
 	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/containernetworking/cni/pkg/skel"
@@ -209,10 +211,24 @@ func VethConnectsHostWithContainer(result *types.Result, args *skel.CmdArgs, bri
 		if err = AddToBridge(host.Attrs().Name, bridgeName); err != nil {
 			return fmt.Errorf("adding interface %q to bridge %q failed: %v", host.Attrs().Name, bridgeName, err)
 		}
+	} else {
+		// when vlanid=0 and in pure vlan mode, no bridge create, set proxy_arp instead
+		if err = SetProxyArp(host.Attrs().Name, true); err != nil {
+			fmt.Printf("error set proxyarp: %v", err)
+			return err
+		}
 	}
 	// Up the host interface after finishing all netlink configuration
 	if err = netlink.LinkSetUp(host); err != nil {
 		return fmt.Errorf("could not set link up for host interface %q: %v", host.Attrs().Name, err)
+	}
+	if bridgeName == "" {
+		desIP := result.IP4.IP.IP
+		ipn := net.IPNet{IP: desIP, Mask: net.CIDRMask(32, 32)}
+		if err = ip.AddRoute(&ipn, nil, host); err != nil {
+			fmt.Printf("error add route: %v %v %v %v", err, result.IP4.IP, host.Attrs().Index, host.Attrs().Name)
+			return err
+		}
 	}
 	if err = configSboxDevice(result, args, sbox); err != nil {
 		return err
@@ -285,4 +301,13 @@ func configSboxDevice(result *types.Result, args *skel.CmdArgs, sbox netlink.Lin
 		// Add IP and routes to sbox, including default route
 		return ipam.ConfigureIface(args.IfName, result)
 	})
+}
+
+func SetProxyArp(dev string, set bool) error {
+	file := fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/proxy_arp", dev)
+	val := "1\n"
+	if !set {
+		val = "0\n"
+	}
+	return ioutil.WriteFile(file, []byte(val), 0644)
 }

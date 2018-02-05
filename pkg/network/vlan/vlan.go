@@ -36,7 +36,7 @@ type NetConf struct {
 	types.NetConf
 	// The device which has IDC ip address, eg. eth1 or eth1.12 (A vlan device)
 	Device string `json:"device"`
-	// Supports macvlan or bridge, default bridge
+	// Supports macvlan, bridge or pure(which avoid create unnecessary bridge), default bridge
 	Switch string `json:"switch"`
 }
 
@@ -64,6 +64,9 @@ func (d *VlanDriver) Init() error {
 	}
 	if d.MacVlanMode() {
 		return nil
+	}
+	if d.PureMode() {
+		return utils.SetProxyArp(d.Device, true)
 	}
 	v4Addr, err := netlink.AddrList(device, netlink.FAMILY_V4)
 	if err != nil {
@@ -181,10 +184,18 @@ func (d *VlanDriver) CreateBridgeAndVlanDevice(vlanId uint16) error {
 	if err := netlink.LinkSetUp(bridge); err != nil {
 		return fmt.Errorf("Failed to set up bridge device %s: %v", bridgeIfName, err)
 	}
+	if d.PureMode() {
+		if err := utils.SetProxyArp(bridgeIfName, true); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (d *VlanDriver) BridgeNameForVlan(vlanId uint16) string {
+	if vlanId == 0 && d.PureMode() {
+		return ""
+	}
 	bridgeName := defaultBridge
 	if vlanId != 0 {
 		bridgeName = fmt.Sprintf("%s%d", bridgePrefix, vlanId)
@@ -224,4 +235,8 @@ func (d *VlanDriver) createVlanDevice(vlanId uint16) (netlink.Link, error) {
 
 func (d *VlanDriver) MacVlanMode() bool {
 	return d.Switch == "macvlan"
+}
+
+func (d *VlanDriver) PureMode() bool {
+	return d.Switch == "pure"
 }
