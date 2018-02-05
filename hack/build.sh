@@ -11,6 +11,7 @@ cni_package=github.com/containernetworking/cni
 mkdir -p go/src/`dirname $package`
 ln -sfn $cur_dir $cur_dir/go/src/$package
 export GOPATH=$cur_dir/go
+export GOOS=linux
 if [ ! -d $cur_dir/go/src/$cni_package ]; then
     echo getting cni package ..
     go get -d $cni_package/pkg/types
