@@ -11,7 +11,7 @@ GITVERSION=$V.6
 VERSION=${GITVERSION}.0
 NAME=galaxy
 RPMNAME=${NAME}-${VERSION}-${GITCOMMITNUM}.tl2.x86_64.rpm
-RPMFILE=${CURDIR}/bin/x86_64/${RPMNAME}
+RPMFILE=${CURDIR}/bin/${RPMNAME}
 BIND_DIR=bin/${NAME}-${VERSION}
 
 mkdir -p ${BIND_DIR}
@@ -29,9 +29,10 @@ gzip -f ${CURDIR}/bin/${NAME}-${VERSION}.tar
 trap "cleanup" EXIT SIGINT SIGTERM
 function cleanup () {
     rm -rf ${BIND_DIR}
+    rm -rf bin/*.tar.gz
     docker rm -vf ${CONTAINER_NAME}
 }
-docker create -it --name ${CONTAINER_NAME} -v ${CURDIR}/bin:/root/rpmbuild/RPMS \
+docker create -it --name ${CONTAINER_NAME} \
     -e GITVERSION=${GITVERSION} \
     -e GITCOMMITNUM=${GITCOMMITNUM} \
     -e VERSION=${VERSION} \
@@ -43,7 +44,8 @@ docker cp ${CURDIR}/bin/${NAME}-${VERSION}.tar.gz ${CONTAINER_NAME}:/root/rpmbui
 docker cp ${CURDIR}/hack/v${V}/galaxy.spec ${CONTAINER_NAME}:/root/rpmbuild/SPECS/
 docker start -ai ${CONTAINER_NAME}
 docker wait ${NAME}
-size=$(ls -l ${CURDIR}/bin/x86_64/${RPMNAME} | awk '{print $5}')
+docker cp ${CONTAINER_NAME}:/root/rpmbuild/RPMS/x86_64/${RPMNAME} bin/
+size=$(ls -l ${RPMFILE} | awk '{print $5}')
 if [ -z "$DEBUG" ]; then
     curl -v 'http://gaia.repo.oa.com/upload_file?filesize='${size}'&filename='${RPMNAME}'&dirtype=1' -T ${RPMFILE}
     curl -v 'http://gaia.repo.oa.com/update_repo?dirtype=1'
