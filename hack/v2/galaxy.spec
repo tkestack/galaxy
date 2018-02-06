@@ -31,6 +31,7 @@ install -p -m 755 bin/galaxy-sdn $RPM_BUILD_ROOT/opt/cni/bin/galaxy-sdn
 install -p -m 755 bin/galaxy-k8s-vlan $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-vlan
 install -p -m 755 bin/galaxy-k8s-sriov $RPM_BUILD_ROOT/opt/cni/bin/galaxy-k8s-sriov
 install -p -m 755 bin/galaxy-bridge $RPM_BUILD_ROOT/opt/cni/bin/galaxy-bridge
+install -p -m 755 bin/galaxy-zhiyun-ipam $RPM_BUILD_ROOT/opt/cni/bin/galaxy-zhiyun-ipam
 install -p -m 755 bin/loopback $RPM_BUILD_ROOT/opt/cni/bin/loopback
 install -p -m 755 bin/host-local $RPM_BUILD_ROOT/opt/cni/bin/host-local
 install -p -m 755 tools/qcloud/network_opt $RPM_BUILD_ROOT/opt/cni/bin/network_opt
@@ -55,6 +56,7 @@ install -p -m 644 hack/v2/galaxy-ebtable-filter $RPM_BUILD_ROOT/etc/sysconfig/ga
 /opt/cni/bin/galaxy-k8s-vlan
 /opt/cni/bin/galaxy-k8s-sriov
 /opt/cni/bin/galaxy-bridge
+/opt/cni/bin/galaxy-zhiyun-ipam
 /opt/cni/bin/loopback
 /opt/cni/bin/host-local
 /opt/cni/bin/network_opt

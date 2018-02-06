@@ -7,8 +7,7 @@ import (
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/version"
 
-	"git.code.oa.com/gaiastack/galaxy/cni/vlan-ipam"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	"git.code.oa.com/gaiastack/galaxy/cni/ipam"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 )
@@ -29,18 +28,10 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	ipamConf, err := vlan_ipam.LoadIPAMConf(args.StdinData)
-	if err != nil {
-		return err
-	}
 	if err := d.Init(); err != nil {
 		return fmt.Errorf("failed to setup bridge %v", err)
 	}
-	kvMap, err := k8s.ParseK8SCNIArgs(args.Args)
-	if err != nil {
-		return err
-	}
-	result, vlanId, err := vlan_ipam.Allocate(ipamConf, args.Args, kvMap)
+	vlanId, result, err := ipam.Allocate(conf.IPAM.Type, args)
 	if err != nil {
 		return err
 	}
@@ -70,7 +61,11 @@ func cmdDel(args *skel.CmdArgs) error {
 	if err := utils.DeleteVeth(args.Netns, args.IfName); err != nil {
 		return err
 	}
-	return nil
+	conf, err := d.LoadConf(args.StdinData)
+	if err != nil {
+		return err
+	}
+	return ipam.Release(conf.IPAM.Type, args)
 }
 
 func main() {

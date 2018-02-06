@@ -12,14 +12,15 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	galaxyapi "git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
-	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/flannel"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/remote"
+	k8sutil "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/utils"
 
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
+	"k8s.io/client-go/1.4/pkg/api/errors"
+	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/util/wait"
 )
 
@@ -30,21 +31,24 @@ var (
 	flagIPForward            = flag.Bool("ip-forward", true, "ensure ip-forward is set/unset")
 	flagEbtableRules         = flag.Bool("ebtable-rules", false, "whether galaxy should ensure ebtable-rules")
 	flagApiServer            = flag.String("api-servers", "", "The address of apiserver")
+	flagKubeConf             = flag.String("kubeconf", "", "kube configure file")
 	flagLabelSubnet          = flag.Bool("label-subnet", true, "whether galaxy should label the kubelet node with subnet={ip}-{onesInMask}, this label is used by rackfilter scheduler plugin")
+	flagIPFromAnnotation     = flag.Bool("ip-from-annotation", false, "whether galaxy gets ip info from pods' annotation")
+	Note                     = `If ipam type is from third party, e.g. zhiyun, galaxy invokes third party ipam binaries to allocate ip.`
 )
 
 func (g *Galaxy) startServer() error {
 	g.installHandlers()
-	if err := os.Remove(galaxyapi.GalaxySocketPath); err != nil {
+	if err := os.Remove(private.GalaxySocketPath); err != nil {
 		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to remove %s: %v", galaxyapi.GalaxySocketPath, err)
+			return fmt.Errorf("failed to remove %s: %v", private.GalaxySocketPath, err)
 		}
 	}
-	l, err := net.Listen("unix", galaxyapi.GalaxySocketPath)
+	l, err := net.Listen("unix", private.GalaxySocketPath)
 	if err != nil {
 		return fmt.Errorf("failed to listen on pod info socket: %v", err)
 	}
-	if err := os.Chmod(galaxyapi.GalaxySocketPath, 0600); err != nil {
+	if err := os.Chmod(private.GalaxySocketPath, 0600); err != nil {
 		l.Close()
 		return fmt.Errorf("failed to set pod info socket mode: %v", err)
 	}
@@ -111,19 +115,51 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (*types.Result, error) {
 	if err := disableIPv6(req.Netns); err != nil {
 		glog.Warningf("Error disable ipv6 %v", err)
 	}
-	if *flagMaster == "" {
-		req.CmdArgs.StdinData = g.flannelConf
-		return flannel.CmdAdd(req.CmdArgs)
+	// get network type from pods' labels
+	var (
+		networkInfo cniutil.NetworkInfo
+		pod         *v1.Pod
+	)
+	if err := wait.PollImmediate(time.Millisecond*500, 5*time.Second, func() (done bool, err error) {
+		pod, err = g.podStore.Pods(req.PodNamespace).Get(req.PodName)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				glog.Warningf("can't find pod %s_%s, retring", req.PodName, req.PodNamespace)
+				return false, nil
+			}
+			return false, err
+		}
+		if pod.Labels == nil || pod.Annotations == nil {
+			return false, nil
+		}
+		// If its underlay network and not a third party ipam
+		// wait for scheduler extender updating annotation
+		if private.NetworkTypeUnderlay.Has(pod.Labels[private.LabelKeyNetworkType]) && ((*flagMaster == "" && g.ipamType == "") || *flagIPFromAnnotation) {
+			if pod.Annotations[private.AnnotationKeyIPInfo] == "" {
+				glog.Warningf("wait for scheduler extender updating annotation of pod %s_%s", req.PodName, req.PodNamespace)
+				return false, nil
+			}
+		}
+		return true, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to get pod %s_%s: %v", req.PodName, req.PodNamespace, err)
 	}
-	return remote.CmdAdd(req, *flagMaster, flags.GetNodeIP(), g.netConf)
+	networkType := pod.Labels[private.LabelKeyNetworkType]
+	if private.NetworkTypeOverlay.Has(networkType) {
+		networkInfo = cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
+	} else if private.NetworkTypeUnderlay.Has(networkType) {
+		if pod.Annotations[private.AnnotationKeyIPInfo] != "" {
+			req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.IPInfoInArgs, pod.Annotations[private.AnnotationKeyIPInfo])
+		}
+		networkInfo = cniutil.NetworkInfo{private.NetworkTypeUnderlay.CNIType: {}}
+	} else {
+		return nil, fmt.Errorf("unsupported network type: %s", networkType)
+	}
+	return cniutil.CmdAdd(req.ContainerID, req.CmdArgs, g.netConf, networkInfo)
 }
 
 func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest) error {
-	if *flagMaster == "" {
-		req.CmdArgs.StdinData = g.flannelConf
-		return flannel.CmdDel(req.CmdArgs)
-	}
-	return remote.CmdDel(req, g.netConf)
+	return cniutil.CmdDel(req.ContainerID, req.CmdArgs, g.netConf)
 }
 
 func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerID string, result *types.Result) error {
@@ -180,7 +216,7 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerI
 			return true, nil
 		}
 		glog.Warningf("failed to update pod %s annotation: %v", k8s.GetPodFullName(pod.Name, pod.Namespace), err)
-		if k8s.ShouldRetry(err) {
+		if k8sutil.ShouldRetry(err) {
 			return false, nil
 		}
 		return false, err

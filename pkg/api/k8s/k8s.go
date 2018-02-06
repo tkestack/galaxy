@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
-	apierr "k8s.io/client-go/1.4/pkg/api/errors"
 )
 
 /*
@@ -105,10 +104,6 @@ func ConsumePort(containerID string) ([]*Port, error) {
 // GetPodFullName returns a name that uniquely identifies a pod.
 func GetPodFullName(podName, namespace string) string {
 	return podName + "_" + namespace
-}
-
-func ShouldRetry(err error) bool {
-	return apierr.IsConflict(err) || apierr.IsServerTimeout(err)
 }
 
 // copied from kubelet

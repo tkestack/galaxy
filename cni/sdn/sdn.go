@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	galaxyapi "git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/version"
@@ -108,6 +109,6 @@ func (p *cniPlugin) CmdDel(args *skel.CmdArgs) error {
 }
 
 func main() {
-	p := NewCNIPlugin(galaxyapi.GalaxySocketPath)
+	p := NewCNIPlugin(private.GalaxySocketPath)
 	skel.PluginMain(p.skelCmdAdd, p.CmdDel, version.Legacy)
 }
