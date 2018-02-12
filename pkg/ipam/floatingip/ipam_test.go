@@ -329,7 +329,7 @@ func TestQueryRoutableSubnetByKey(t *testing.T) {
 	if ips, err := ipam.Allocate([]string{"p1", "p2", "p3", "p4"}); err != nil || len(ips) != 4 {
 		t.Fatalf("ips %v err %v", ips, err)
 	}
-	subnets, err = ipam.QueryRoutableSubnetByKey("pod1")
+	subnets, err = ipam.QueryRoutableSubnetByKey("p1")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,8 +28,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
-
-	"k8s.io/client-go/1.4/pkg/util/wait"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 type DBConfig struct {

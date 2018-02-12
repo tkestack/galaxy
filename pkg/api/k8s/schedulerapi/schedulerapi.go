@@ -1,8 +1,8 @@
 package schedulerapi
 
 import (
-	"k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/types"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // These apis are not exported into client-go, copy them from k8s.io/kubernetes/plugin/pkg/scheduler/api/types.go
@@ -86,9 +86,9 @@ type LabelPreference struct {
 // nodes for a pod.
 type ExtenderArgs struct {
 	// Pod being scheduled
-	Pod v1.Pod `json:"pod"`
+	Pod corev1.Pod `json:"pod"`
 	// List of candidate nodes where the pod can be scheduled
-	Nodes v1.NodeList `json:"nodes"`
+	Nodes corev1.NodeList `json:"nodes"`
 }
 
 // FailedNodesMap represents the filtered out nodes, with node names and failure messages
@@ -97,7 +97,7 @@ type FailedNodesMap map[string]string
 // ExtenderFilterResult represents the results of a filter call to an extender
 type ExtenderFilterResult struct {
 	// Filtered set of nodes where the pod can be scheduled
-	Nodes v1.NodeList `json:"nodes,omitempty"`
+	Nodes corev1.NodeList `json:"nodes,omitempty"`
 	// Filtered out nodes where the pod can't be scheduled and the failure messages
 	FailedNodes FailedNodesMap `json:"failedNodes,omitempty"`
 	// Error message indicating failure

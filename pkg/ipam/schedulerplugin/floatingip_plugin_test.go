@@ -10,8 +10,9 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
-	"k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/util/sets"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 var (
@@ -34,6 +35,9 @@ func TestFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err = fipPlugin.Init(); err != nil {
+		t.Fatal(err)
+	}
 	nodeLabel := make(map[string]string)
 	nodeLabel["network"] = "floatingip"
 	objectLabel := make(map[string]string)
@@ -41,28 +45,35 @@ func TestFilter(t *testing.T) {
 	fipInvariantLabel := make(map[string]string)
 	fipInvariantLabel["floatingip"] = "invariant"
 	fipInvariantLabel["network"] = "FLOATINGIP"
-	nodes := []v1.Node{
+	nodes := []corev1.Node{
 		// no floating ip label node
 		{
 			ObjectMeta: v1.ObjectMeta{Name: node_unlabeld},
-			Status:     v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.49.27.2"}}},
+			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.49.27.2"}}},
 		},
 		// no floating ip configured node
 		{
 			ObjectMeta: v1.ObjectMeta{Name: node_hasNoIP, Labels: nodeLabel},
-			Status:     v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.48.27.2"}}},
+			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.48.27.2"}}},
 		},
 		// good node
 		{
 			ObjectMeta: v1.ObjectMeta{Name: node_10_49_27_3, Labels: nodeLabel},
-			Status:     v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.49.27.3"}}},
+			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.49.27.3"}}},
 		},
 		// good node
 		{
 			ObjectMeta: v1.ObjectMeta{Name: node_10_173_13_4, Labels: nodeLabel},
-			Status:     v1.NodeStatus{Addresses: []v1.NodeAddress{{Type: v1.NodeInternalIP, Address: "10.173.13.4"}}},
+			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.173.13.4"}}},
 		},
 	}
+	_, subnet1, _ := net.ParseCIDR("10.49.27.0/24")
+	_, subnet2, _ := net.ParseCIDR("10.48.27.0/24")
+	_, subnet3, _ := net.ParseCIDR("10.173.13.0/24")
+	fipPlugin.nodeSubnet[node_unlabeld] = subnet1
+	fipPlugin.nodeSubnet[node_hasNoIP] = subnet2
+	fipPlugin.nodeSubnet[node_10_49_27_3] = subnet1
+	fipPlugin.nodeSubnet[node_10_173_13_4] = subnet3
 	// cleans all allocates first
 	if err := fipPlugin.ipam.ReleaseByPrefix(""); err != nil {
 		t.Fatal(err)
@@ -124,7 +135,7 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	// forget the pod1, the ip should be reserved
-	if err := fipPlugin.RemovePod(pod); err != nil {
+	if err := fipPlugin.DeletePod(pod); err != nil {
 		t.Fatal(err)
 	}
 	if ipInfo, err := fipPlugin.ipam.QueryFirst("ns1_pod1-0"); err != nil || ipInfo == nil {
@@ -165,14 +176,18 @@ func TestFilter(t *testing.T) {
 	}
 }
 
-func checkFiltered(realFilterd []v1.Node, filtererd ...string) error {
+func checkFiltered(realFilterd []corev1.Node, filtererd ...string) error {
+	realNodeName := make([]string, len(realFilterd))
+	for i := range realFilterd {
+		realNodeName[i] = realFilterd[i].Name
+	}
 	expect := sets.NewString(filtererd...)
 	if expect.Len() != len(realFilterd) {
-		return fmt.Errorf("filtered nodes missmatch, expect %v, real %v", expect, realFilterd)
+		return fmt.Errorf("filtered nodes missmatch, expect %v, real %v", expect, realNodeName)
 	}
 	for i := range realFilterd {
 		if !expect.Has(realFilterd[i].Name) {
-			return fmt.Errorf("filtered nodes missmatch, expect %v, real %v", expect, realFilterd)
+			return fmt.Errorf("filtered nodes missmatch, expect %v, real %v", expect, realNodeName)
 		}
 	}
 	return nil
@@ -191,12 +206,12 @@ func checkFailed(realFailed schedulerapi.FailedNodesMap, failed ...string) error
 	return nil
 }
 
-func createPod(name, namespace string, labels map[string]string) *v1.Pod {
-	return &v1.Pod{ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels}}
+func createPod(name, namespace string, labels map[string]string) *corev1.Pod {
+	return &corev1.Pod{ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels}}
 }
 
 func TestResolveTAppPodName(t *testing.T) {
-	tests := map[string][]string{"default_fip-0": {"default", "fip", "0"}, "kube-system_fip-bj-111": {"kube-system", "fip-bj", "1111"}}
+	tests := map[string][]string{"default_fip-0": {"default", "fip", "0"}, "kube-system_fip-bj-111": {"kube-system", "fip-bj", "111"}}
 	for k, v := range tests {
 		tappname, podId, namespace := resolveTAppPodName(k)
 		if namespace != v[0] {

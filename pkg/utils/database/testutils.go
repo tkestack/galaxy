@@ -13,7 +13,7 @@ const (
     "protocol": "tcp",
     "addr": "localhost:3306",
     "username": "root",
-    "password": "123456",
+    "password": "root",
     "driver": "mysql",
     "name": "test",
     "maxConn": 10000

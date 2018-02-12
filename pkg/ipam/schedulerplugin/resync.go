@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
 	"github.com/golang/glog"
-	"k8s.io/client-go/1.4/pkg/api/v1"
-	gaiav1 "k8s.io/client-go/1.4/pkg/apis/gaia/v1alpha1"
-	"k8s.io/client-go/1.4/pkg/labels"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 func (p *FloatingIPPlugin) storeReady() bool {
@@ -52,7 +52,7 @@ func (p *FloatingIPPlugin) resyncPod() error {
 	if err != nil {
 		return err
 	}
-	existPods := map[string]*v1.Pod{}
+	existPods := map[string]*corev1.Pod{}
 	for i := range pods {
 		if evicted(pods[i]) {
 			// 5. existing pods but its status is evicted (TApp doesn't have evicted pods, it simply deletes pods which are evicted by kubelet)
@@ -72,7 +72,7 @@ func (p *FloatingIPPlugin) resyncPod() error {
 			continue
 		}
 		// we can't get labels of not exist pod, so get them from it's rs or tapp
-		var tapp *gaiav1.TApp
+		var tapp *tappv1.TApp
 		if existTapp, ok := tappMap[tappFullName]; ok {
 			tapp = existTapp
 		} else {
@@ -105,23 +105,23 @@ func (p *FloatingIPPlugin) resyncPod() error {
 	return nil
 }
 
-func (p *FloatingIPPlugin) getTAppMap() (map[string]*gaiav1.TApp, error) {
-	tApps, err := p.TAppLister.List()
+func (p *FloatingIPPlugin) getTAppMap() (map[string]*tappv1.TApp, error) {
+	tApps, err := p.TAppLister.List(labels.Everything())
 	if err != nil {
 		return nil, err
 	}
-	app2TApp := make(map[string]*gaiav1.TApp)
+	app2TApp := make(map[string]*tappv1.TApp)
 	for i := range tApps {
 		if !p.wantedObject(&tApps[i].ObjectMeta) {
 			continue
 		}
-		app2TApp[TAppFullName(&tApps[i])] = &tApps[i]
+		app2TApp[TAppFullName(tApps[i])] = tApps[i]
 	}
 	glog.V(4).Infof("%v", app2TApp)
 	return app2TApp, nil
 }
 
-func keyInDB(pod *v1.Pod) string {
+func keyInDB(pod *corev1.Pod) string {
 	return fmt.Sprintf("%s_%s", pod.Namespace, pod.Name)
 }
 
@@ -129,7 +129,7 @@ func fmtKey(name, namespace string) string {
 	return fmt.Sprintf("%s_%s", namespace, name)
 }
 
-func TAppFullName(tapp *gaiav1.TApp) string {
+func TAppFullName(tapp *tappv1.TApp) string {
 	return fmt.Sprintf("%s_%s", tapp.Namespace, tapp.Name)
 }
 
@@ -148,7 +148,7 @@ func resolveTAppPodName(podFullName string) (string, string, string) {
 	return parts[1][:lastIndex], parts[1][lastIndex+1:], parts[0]
 }
 
-func ownerIsTApp(pod *v1.Pod) bool {
+func ownerIsTApp(pod *corev1.Pod) bool {
 	for i := range pod.OwnerReferences {
 		if pod.OwnerReferences[i].Kind == "TApp" {
 			return true

@@ -6,9 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	"github.com/jinzhu/gorm"
-
-	util "k8s.io/kubernetes/pkg/util/net"
 )
 
 func TestDB(t *testing.T) {
@@ -25,7 +24,7 @@ func TestDB(t *testing.T) {
 	}
 	defer db.Shutdown()
 
-	fip := FloatingIP{Key: fmt.Sprintf("pod1"), IP: util.IPToInt(net.IPv4(10, 0, 0, 1))}
+	fip := FloatingIP{Key: fmt.Sprintf("pod1"), IP: nets.IPToInt(net.IPv4(10, 0, 0, 1))}
 	if err := db.conn.Create(&fip).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +51,7 @@ func TestDB(t *testing.T) {
 		}
 	}
 	if err := db.Transaction(
-		createOp(&FloatingIP{Key: "pod2", IP: util.IPToInt(net.IPv4(10, 0, 0, 2))}),
+		createOp(&FloatingIP{Key: "pod2", IP: nets.IPToInt(net.IPv4(10, 0, 0, 2))}),
 		createOp(&fip),
 	); err == nil {
 		t.Fatal(err)

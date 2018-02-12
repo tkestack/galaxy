@@ -19,9 +19,10 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
-	"k8s.io/client-go/1.4/pkg/api/errors"
-	"k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/util/wait"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 var (
@@ -118,7 +119,7 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (*types.Result, error) {
 	// get network type from pods' labels
 	var (
 		networkInfo cniutil.NetworkInfo
-		pod         *v1.Pod
+		pod         *corev1.Pod
 	)
 	if err := wait.PollImmediate(time.Millisecond*500, 5*time.Second, func() (done bool, err error) {
 		pod, err = g.podStore.Pods(req.PodNamespace).Get(req.PodName)
@@ -184,7 +185,7 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerI
 	for i := range ports {
 		ports[i].PodIP = ip4.String()
 	}
-	pod, err := g.client.Pods(req.PodNamespace).Get(req.PodName)
+	pod, err := g.client.CoreV1().Pods(req.PodNamespace).Get(req.PodName, v1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get pod from apiserver: %v", err)
 	}
@@ -203,7 +204,7 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerI
 		return fmt.Errorf("failed to setup port mapping %v: %v", ports, err)
 	}
 	if err := wait.Poll(10*time.Millisecond, 1*time.Minute, func() (bool, error) {
-		pod, err := g.client.Pods(req.PodNamespace).Get(req.PodName)
+		pod, err := g.client.CoreV1().Pods(req.PodNamespace).Get(req.PodName, v1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -211,7 +212,7 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerI
 			pod.Annotations = make(map[string]string)
 		}
 		pod.Annotations[k8s.PortMappingPortsAnnotation] = string(data)
-		_, err = g.client.Pods(req.PodNamespace).Update(pod)
+		_, err = g.client.CoreV1().Pods(req.PodNamespace).Update(pod)
 		if err == nil {
 			return true, nil
 		}

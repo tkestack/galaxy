@@ -36,7 +36,7 @@ docker create -it --name ${CONTAINER_NAME} \
     -e GITVERSION=${GITVERSION} \
     -e GITCOMMITNUM=${GITCOMMITNUM} \
     -e VERSION=${VERSION} \
-    docker.oa.com:8080/gaia/rpmbuilder:1.11 rpmbuild -bb --clean \
+    docker.oa.com:8080/gaia/k8s-builder:latest rpmbuild -bb --clean \
     --define="gitversion ${GITVERSION}" \
     --define="commit ${GITCOMMITNUM}" \
     --define="version ${VERSION}" /root/rpmbuild/SPECS/galaxy.spec

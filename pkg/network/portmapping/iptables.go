@@ -10,12 +10,10 @@ import (
 	"sync"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
-
+	utildbus "git.code.oa.com/gaiastack/galaxy/pkg/utils/dbus"
+	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
 	"github.com/golang/glog"
-
-	utildbus "k8s.io/kubernetes/pkg/util/dbus"
-	utilexec "k8s.io/kubernetes/pkg/util/exec"
-	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
+	utilexec "k8s.io/utils/exec"
 )
 
 const (
@@ -150,14 +148,15 @@ func setupPortMappingForAllPods(natInterfaceName string, ports []*k8s.Port) erro
 		return err
 	}
 
+	iptablesSaveRaw := bytes.NewBuffer(nil)
 	// Get iptables-save output so we can check for existing chains and rules.
 	// This will be a map of chain name to chain with rules as stored in iptables-save/iptables-restore
 	existingNATChains := make(map[utiliptables.Chain]string)
-	iptablesSaveRaw, err := iptInterface.Save(utiliptables.TableNAT)
+	err := iptInterface.SaveInto(utiliptables.TableNAT, iptablesSaveRaw)
 	if err != nil { // if we failed to get any rules
 		return fmt.Errorf("Failed to execute iptables-save, syncing all rules: %v", err)
 	} else { // otherwise parse the output
-		existingNATChains = utiliptables.GetChainLines(utiliptables.TableNAT, iptablesSaveRaw)
+		existingNATChains = utiliptables.GetChainLines(utiliptables.TableNAT, iptablesSaveRaw.Bytes())
 	}
 
 	natChains := bytes.NewBuffer(nil)

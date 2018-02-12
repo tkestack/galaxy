@@ -1,9 +1,9 @@
 package utils
 
 import (
-	apierr "k8s.io/client-go/1.4/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 func ShouldRetry(err error) bool {
-	return apierr.IsConflict(err) || apierr.IsServerTimeout(err)
+	return errors.IsConflict(err) || errors.IsServerTimeout(err)
 }

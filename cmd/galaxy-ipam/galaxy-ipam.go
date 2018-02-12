@@ -22,10 +22,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/pflag"
-	"k8s.io/kubernetes/pkg/util/flag"
-	"k8s.io/kubernetes/pkg/util/logs"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/flag"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/logs"
+	"github.com/spf13/pflag"
 )
 
 func main() {

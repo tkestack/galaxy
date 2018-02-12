@@ -9,18 +9,19 @@ import (
 	"sync"
 	"time"
 
+	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"github.com/golang/glog"
-	"k8s.io/client-go/1.4/pkg/api"
-	k8serrs "k8s.io/client-go/1.4/pkg/api/errors"
-	"k8s.io/client-go/1.4/pkg/api/v1"
-	gaiav1 "k8s.io/client-go/1.4/pkg/apis/gaia/v1alpha1"
-	"k8s.io/client-go/1.4/pkg/labels"
-	"k8s.io/client-go/1.4/pkg/runtime"
-	"k8s.io/client-go/1.4/pkg/util/sets"
-	"k8s.io/client-go/1.4/pkg/util/wait"
+	corev1 "k8s.io/api/core/v1"
+	metaErrs "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 var (
@@ -48,7 +49,7 @@ type FloatingIPPlugin struct {
 	*PluginFactoryArgs
 	lastFIPConf string
 	conf        *Conf
-	unreleased  chan *v1.Pod
+	unreleased  chan *corev1.Pod
 }
 
 func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin, error) {
@@ -72,37 +73,46 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		nodeSubnet:        make(map[string]*net.IPNet),
 		PluginFactoryArgs: args,
 		conf:              &conf,
-		unreleased:        make(chan *v1.Pod, 10),
+		unreleased:        make(chan *corev1.Pod, 10),
 	}
 	plugin.initSelector()
-	if len(conf.FloatingIPs) > 0 {
-		if err := ipam.ConfigurePool(conf.FloatingIPs); err != nil {
-			return nil, err
+	return plugin, nil
+}
+
+func (p *FloatingIPPlugin) Init() error {
+	if len(p.conf.FloatingIPs) > 0 {
+		if err := p.ipam.ConfigurePool(p.conf.FloatingIPs); err != nil {
+			return err
 		}
 	} else {
 		glog.Infof("empty floatingips from config, fetching from configmap")
 		if err := wait.PollInfinite(time.Millisecond*100, func() (done bool, err error) {
-			updated, err := plugin.updateConfigMap()
+			updated, err := p.updateConfigMap()
 			if err != nil {
 				glog.Warning(err)
 			}
 			return updated, nil
 		}); err != nil {
-			return nil, fmt.Errorf("failed to get floatingip config from configmap: %v", err)
+			return fmt.Errorf("failed to get floatingip config from configmap: %v", err)
 		}
-		go wait.Forever(func() {
-			if _, err := plugin.updateConfigMap(); err != nil {
+	}
+	return nil
+}
+
+func (p *FloatingIPPlugin) Run(stop chan struct{}) {
+	if len(p.conf.FloatingIPs) == 0 {
+		go wait.Until(func() {
+			if _, err := p.updateConfigMap(); err != nil {
 				glog.Warning(err)
 			}
-		}, time.Minute)
+		}, time.Minute, stop)
 	}
-	go wait.Forever(func() {
-		if err := plugin.resyncPod(); err != nil {
+	go wait.Until(func() {
+		if err := p.resyncPod(); err != nil {
 			glog.Warning(err)
 		}
-	}, time.Duration(conf.ResyncInterval)*time.Minute)
-	go plugin.loop()
-	return plugin, nil
+	}, time.Duration(p.conf.ResyncInterval)*time.Minute, stop)
+	go p.loop(stop)
 }
 
 func (p *FloatingIPPlugin) initSelector() error {
@@ -124,7 +134,7 @@ func (p *FloatingIPPlugin) initSelector() error {
 // updateConfigMap fetches the newest floatingips configmap and syncs in memory/db config,
 // returns true if updated.
 func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
-	cm, err := p.Client.ConfigMaps(p.conf.ConfigMapNamespace).Get(p.conf.ConfigMapName)
+	cm, err := p.Client.CoreV1().ConfigMaps(p.conf.ConfigMapNamespace).Get(p.conf.ConfigMapName, v1.GetOptions{})
 	if err != nil {
 		return false, fmt.Errorf("failed to get floatingip configmap %s_%s: %v", p.conf.ConfigMapName, p.conf.ConfigMapNamespace, err)
 
@@ -151,12 +161,12 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 
 // Filter marks nodes which haven't been labeled as supporting floating IP or have no available ips as FailedNodes
 // If the given pod doesn't want floating IP, none failedNodes returns
-func (p *FloatingIPPlugin) Filter(pod *v1.Pod, nodes []v1.Node) ([]v1.Node, schedulerapi.FailedNodesMap, error) {
+func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev1.Node, schedulerapi.FailedNodesMap, error) {
 	failedNodesMap := schedulerapi.FailedNodesMap{}
 	if !p.wantedObject(&pod.ObjectMeta) {
 		return nodes, failedNodesMap, nil
 	}
-	filteredNodes := []v1.Node{}
+	filteredNodes := []corev1.Node{}
 	var (
 		subnets []string
 		err     error
@@ -200,7 +210,7 @@ func (p *FloatingIPPlugin) Filter(pod *v1.Pod, nodes []v1.Node) ([]v1.Node, sche
 	return filteredNodes, failedNodesMap, nil
 }
 
-func (p *FloatingIPPlugin) Prioritize(pod *v1.Pod, nodes []v1.Node) (*schedulerapi.HostPriorityList, error) {
+func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*schedulerapi.HostPriorityList, error) {
 	list := &schedulerapi.HostPriorityList{}
 	if !p.wantedObject(&pod.ObjectMeta) {
 		return list, nil
@@ -260,7 +270,7 @@ func (p *FloatingIPPlugin) releasePodIP(key string) error {
 	return nil
 }
 
-func (p *FloatingIPPlugin) AddPod(pod *v1.Pod) error {
+func (p *FloatingIPPlugin) AddPod(pod *corev1.Pod) error {
 	return nil
 }
 
@@ -273,14 +283,14 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	if bind == nil {
 		return nil
 	}
-	ret := &runtime.Unstructured{}
+	ret := &unstructured.Unstructured{}
 	ret.SetAnnotations(bind)
 	patchData, err := json.Marshal(ret)
 	if err != nil {
 		glog.Error(err)
 	}
 	if err := wait.PollImmediate(time.Millisecond*300, 20*time.Second, func() (bool, error) {
-		_, err := p.Client.Pods(args.PodNamespace).Patch(args.PodName, api.MergePatchType, patchData)
+		_, err := p.Client.CoreV1().Pods(args.PodNamespace).Patch(args.PodName, types.MergePatchType, patchData)
 		if err != nil {
 			glog.Warningf("failed to update pod %s: %v", key, err)
 			return false, nil
@@ -294,11 +304,11 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	return nil
 }
 
-func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *v1.Pod) error {
+func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
 	if !p.wantedObject(&newPod.ObjectMeta) {
 		return nil
 	}
-	if evicted(newPod) {
+	if !evicted(oldPod) && evicted(newPod) {
 		// Deployments will leave evicted pods, while TApps don't
 		// If it's a evicted one, release its ip
 		p.unreleased <- newPod
@@ -306,7 +316,7 @@ func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *v1.Pod) error {
 	return nil
 }
 
-func (p *FloatingIPPlugin) RemovePod(pod *v1.Pod) error {
+func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
 	if !p.wantedObject(&pod.ObjectMeta) {
 		return nil
 	}
@@ -314,7 +324,7 @@ func (p *FloatingIPPlugin) RemovePod(pod *v1.Pod) error {
 	return nil
 }
 
-func (p *FloatingIPPlugin) unbind(pod *v1.Pod) error {
+func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	key := keyInDB(pod)
 	if !p.fipInvariantSeletor.Matches(labels.Set(pod.GetLabels())) {
 		return p.releasePodIP(key)
@@ -325,7 +335,7 @@ func (p *FloatingIPPlugin) unbind(pod *v1.Pod) error {
 		}
 		tapp := tapps[0]
 		for i, status := range tapp.Spec.Statuses {
-			if !tappInstanceKilled(status) || i != pod.Labels[gaiav1.TAppInstanceKey] {
+			if !tappInstanceKilled(status) || i != pod.Labels[tappv1.TAppInstanceKey] {
 				continue
 			}
 			// build the key namespace_tappname-id
@@ -366,23 +376,25 @@ func (p *FloatingIPPlugin) wantedObject(o *v1.ObjectMeta) bool {
 	return true
 }
 
-func getNodeIP(node *v1.Node) net.IP {
+func getNodeIP(node *corev1.Node) net.IP {
 	for i := range node.Status.Addresses {
-		if node.Status.Addresses[i].Type == v1.NodeInternalIP {
+		if node.Status.Addresses[i].Type == corev1.NodeInternalIP {
 			return net.ParseIP(node.Status.Addresses[i].Address)
 		}
 	}
 	return nil
 }
 
-func tappInstanceKilled(status gaiav1.InstanceStatus) bool {
+func tappInstanceKilled(status tappv1.InstanceStatus) bool {
 	// TODO v1 INSTANCE_KILLED = "killed" but in types INSTANCE_KILLED = "Killed"
-	return strings.ToLower(string(status)) == strings.ToLower(string(gaiav1.INSTANCE_KILLED))
+	return strings.ToLower(string(status)) == strings.ToLower(string(tappv1.INSTANCE_KILLED))
 }
 
-func (p *FloatingIPPlugin) loop() {
+func (p *FloatingIPPlugin) loop(stop chan struct{}) {
 	for {
 		select {
+		case <-stop:
+			return
 		case pod := <-p.unreleased:
 			go func() {
 				if err := p.unbind(pod); err != nil {
@@ -396,11 +408,11 @@ func (p *FloatingIPPlugin) loop() {
 	}
 }
 
-func evicted(pod *v1.Pod) bool {
-	return pod.Status.Phase == v1.PodFailed && pod.Status.Reason == "Evicted"
+func evicted(pod *corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted"
 }
 
-func (p *FloatingIPPlugin) getNodeSubnet(node *v1.Node) (*net.IPNet, error) {
+func (p *FloatingIPPlugin) getNodeSubnet(node *corev1.Node) (*net.IPNet, error) {
 	p.nodeSubnetLock.Lock()
 	defer p.nodeSubnetLock.Unlock()
 	if subnet, ok := p.nodeSubnet[node.Name]; !ok {
@@ -420,14 +432,14 @@ func (p *FloatingIPPlugin) getNodeSubnet(node *v1.Node) (*net.IPNet, error) {
 
 func (p *FloatingIPPlugin) queryNodeSubnet(nodeName string) (*net.IPNet, error) {
 	var (
-		node *v1.Node
+		node *corev1.Node
 	)
 	p.nodeSubnetLock.Lock()
 	defer p.nodeSubnetLock.Unlock()
 	if subnet, ok := p.nodeSubnet[nodeName]; !ok {
 		if err := wait.Poll(time.Millisecond*100, time.Minute, func() (done bool, err error) {
-			node, err = p.Client.Core().Nodes().Get(nodeName)
-			if !k8serrs.IsServerTimeout(err) {
+			node, err = p.Client.CoreV1().Nodes().Get(nodeName, v1.GetOptions{})
+			if !metaErrs.IsServerTimeout(err) {
 				return true, err
 			}
 			return false, nil
