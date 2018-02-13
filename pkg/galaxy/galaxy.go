@@ -11,8 +11,8 @@ import (
 
 	zhiyunapi "git.code.oa.com/gaiastack/galaxy/cni/zhiyun-ipam/api"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
-	v1Cache "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/cache"
 	k8sutil "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/utils"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
@@ -20,14 +20,14 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
-	"k8s.io/client-go/1.4/kubernetes"
-	"k8s.io/client-go/1.4/pkg/api"
-	"k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/pkg/fields"
-	"k8s.io/client-go/1.4/pkg/util/wait"
-	"k8s.io/client-go/1.4/tools/cache"
-	"k8s.io/client-go/1.4/tools/clientcmd"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
+	corev1lister "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 type Galaxy struct {
@@ -36,7 +36,7 @@ type Galaxy struct {
 	netConf      map[string]map[string]interface{}
 	pmhandler    *portmapping.PortMappingHandler
 	client       *kubernetes.Clientset
-	podStore     v1Cache.StoreToPodLister
+	podStore     corev1lister.PodLister
 	ipamType     string
 	zhiyunConf   *zhiyunapi.Conf
 }
@@ -163,10 +163,10 @@ func (g *Galaxy) initk8sClient() {
 		glog.Fatalf("Can not generate client from config: error(%v)", err)
 	}
 	glog.Infof("apiserver address %s, kubeconf %s", *flagApiServer, *flagKubeConf)
-	lw := cache.NewListWatchFromClient(g.client.Core().GetRESTClient(), "pods", v1.NamespaceAll, fields.OneTermEqualSelector(api.PodHostField, k8s.GetHostname("")))
-	indexer, r := cache.NewNamespaceKeyedIndexerAndReflector(lw, &v1.Pod{}, 0)
-	go r.Run()
-	g.podStore = v1Cache.StoreToPodLister{Indexer: indexer}
+	lw := cache.NewListWatchFromClient(g.client.CoreV1().RESTClient(), "pods", v1.NamespaceAll, fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname("")))
+	indexer, r := cache.NewNamespaceKeyedIndexerAndReflector(lw, &corev1.Pod{}, 0)
+	go r.Run(make(chan struct{}))
+	g.podStore = corev1lister.NewPodLister(indexer)
 }
 
 // labelSubnet labels kubelet on this node with subnet=IP-OnesInMask to provide rack information for kube-scheduler
@@ -179,7 +179,7 @@ func (g *Galaxy) labelSubnet() {
 		go wait.Forever(func() {
 			nodeName := k8s.GetHostname("") //TODO get hostnameOverride from kubelet config
 			for i := 0; i < 5; i++ {
-				node, err := g.client.Nodes().Get(nodeName)
+				node, err := g.client.CoreV1().Nodes().Get(nodeName, v1.GetOptions{})
 				if err != nil {
 					glog.Warningf("failed to get node %s from apiserver", nodeName)
 					return
@@ -199,7 +199,7 @@ func (g *Galaxy) labelSubnet() {
 					return
 				}
 				node.Labels["subnet"] = strings.Replace(ipNet.String(), "/", "-", 1) //cidr=10.235.7.146/24 -> subnet=10.235.7.0-24
-				_, err = g.client.Nodes().Update(node)
+				_, err = g.client.CoreV1().Nodes().Update(node)
 				if err == nil {
 					glog.Infof("created kubelet label subnet=%s", node.Labels["subnet"])
 					return

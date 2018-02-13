@@ -16,9 +16,13 @@ import:
   - client
   - types
 - package: github.com/docker/distribution 
-  version: cd27f179f2c10c5d300e6d09025b538c475b0d51 
+  version: cd27f179f2c10c5d300e6d09025b538c475b0d51
+- package: github.com/docker/go-connections
+  version: f549a9393d05688dff0992ef3efd8bbe6c628aeb
+- package: github.com/docker/go-units
+  version: 0bbddae09c5a5419a8c6dcdd7ff90da3d450393b
 - package: github.com/emicklei/go-restful
-  version: 89ef8af493ab468a45a42bb0d89a06fccdd2fb22 
+  version: ff4f55a206334ef123e4f79bbf348980da81ca46
 - package: github.com/golang/glog
   version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - package: github.com/vishvananda/netlink
@@ -28,25 +32,33 @@ import:
 - package: github.com/vishvananda/netns
   version: 8ba1072b58e0c2a240eb5f6120165c7776c3e7b8 
 - package: golang.org/x/net
-  version: e90d6d0afc4c315a0d87a568ae68577cc15149a0
+  version: 1c05540f6879653db88113bc4a2b70aec4bd491f
   subpackages:
   - context
 - package: k8s.io/client-go
-  repo: http://git.code.oa.com/gaiastack/client-go.git
-  version: 9406961b8137e25996998cffd97af2b14b4a2e25
-  subpackages:
-  - 1.4/kubernetes
-  - 1.4/pkg/api
-  - 1.4/pkg/api/v1
-  - 1.4/pkg/util/wait
-  - 1.4/tools/cache
-- package: k8s.io/kubernetes
-  version: dd746bbe6ad332502aec6ee4eadb85fe7f1f088b
-  repo: http://git.code.oa.com/gaia/kubernetes.git
-  subpackages:
-  - pkg/util/dbus
-  - pkg/util/exec
-  - pkg/util/iptables
+  repo: https://github.com/kubernetes/client-go.git
+  version: kubernetes-1.9.3
+- package: k8s.io/api
+  version: 006a217681ae70cbacdd66a5e2fca1a61a8ff28e
+- package: k8s.io/apimachinery
+  version: 68f9c3a1feb3140df59c67ced62d3a5df8e6c9c2
+- package: k8s.io/kube-openapi
+  version: 39a7bf85c140f972372c2a0d1ee40adbf0c8bfe1
+- package: k8s.io/utils
+  version: aedf551cdb8b0119df3a19c65fde413a13b34997
 - package: golang.org/x/sys/unix
   repo: https://golang.org/x/sys
   version: 076b546753157f758b316e59bcb51e6807c04057
+- package: git.code.oa.com/gaia/tapp-controller
+  repo: http://git.code.oa.com/gaia/tapp-controller.git
+  version: 0ab19a381cb61f3b08a623683fd5ffb74bca3959
+- package: github.com/go-sql-driver/mysql
+  version: ae5a66df4d33ba404d639bd0fc9189cd5ee79bcf
+- package: github.com/jinzhu/gorm
+  version: 9acaa33324bbcc78239a1c913d4f1292c12177b9
+- package: gopkg.in/inf.v0
+  version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
+- package: gopkg.in/yaml.v2
+  version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
+- package: github.com/spf13/pflag
+  version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
