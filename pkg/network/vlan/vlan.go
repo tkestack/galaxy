@@ -66,7 +66,13 @@ func (d *VlanDriver) Init() error {
 		return nil
 	}
 	if d.PureMode() {
-		return utils.SetProxyArp(d.Device, true)
+		if err := utils.UnSetArpIgnore("all"); err != nil {
+			return err
+		}
+		if err := utils.UnSetArpIgnore(d.Device); err != nil {
+			return err
+		}
+		return utils.SetProxyArp(d.Device)
 	}
 	v4Addr, err := netlink.AddrList(device, netlink.FAMILY_V4)
 	if err != nil {
@@ -185,7 +191,7 @@ func (d *VlanDriver) CreateBridgeAndVlanDevice(vlanId uint16) error {
 		return fmt.Errorf("Failed to set up bridge device %s: %v", bridgeIfName, err)
 	}
 	if d.PureMode() {
-		if err := utils.SetProxyArp(bridgeIfName, true); err != nil {
+		if err := utils.SetProxyArp(bridgeIfName); err != nil {
 			return err
 		}
 	}
