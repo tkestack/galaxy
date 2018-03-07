@@ -13,9 +13,7 @@ ln -sfn $cur_dir $cur_dir/go/src/$package
 export GOPATH=$cur_dir/go
 export GOOS=linux
 if [ ! -d $cur_dir/go/src/$cni_package ]; then
-    echo getting cni package ..
-    go get -d $cni_package/pkg/types
-    cd $GOPATH/src/$cni_package && git checkout 0e09ad29df1eda8c0e15f8b6c4c7784a42e125bf && cd -
+	tar zxvf $cur_dir/hack/cni.tar.gz -C $cur_dir/go/src/github.com/containernetworking/
 fi
 function cleanup() {
 	rm $cur_dir/go/src/$package
