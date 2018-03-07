@@ -1,8 +1,8 @@
-hash: 1d438a1fdd72a2a4de77a68596e9721bb39a526fb7a7896543cfdf28abfedc78
-updated: 2018-02-12T15:56:39.375163+08:00
+hash: 789992c081bdf2cb748c9f3a6c402a0d3e5fbe8da5124c816aa3db6237aa77ab
+updated: 2018-03-07T15:35:47.940018+08:00
 imports:
 - name: git.code.oa.com/gaia/tapp-controller
-  version: 0ab19a381cb61f3b08a623683fd5ffb74bca3959
+  version: 9a7ae8cd85dd18303582bd5ca61f0ac33b60a3cc
   repo: http://git.code.oa.com/gaia/tapp-controller.git
   subpackages:
   - pkg/apis/tappcontroller
@@ -199,7 +199,6 @@ imports:
   - publicsuffix
 - name: golang.org/x/sys
   version: 076b546753157f758b316e59bcb51e6807c04057
-  repo: https://golang.org/x/sys
   subpackages:
   - unix
   - windows
@@ -418,7 +417,6 @@ imports:
   version: aedf551cdb8b0119df3a19c65fde413a13b34997
   subpackages:
   - exec
-  - exec/testing
 testImports:
 - name: github.com/onsi/ginkgo
   version: 7f8ab55aaf3b86885aa55b762e803744d1674700
