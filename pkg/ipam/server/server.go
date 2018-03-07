@@ -132,6 +132,7 @@ func (s *Server) startServer() {
 		Produces(restful.MIME_JSON)
 	ws.Route(ws.POST("/filter").To(s.filter).Reads(schedulerapi.ExtenderArgs{}).Writes(schedulerapi.ExtenderFilterResult{}))
 	ws.Route(ws.POST("/priority").To(s.priority).Reads(schedulerapi.ExtenderArgs{}).Writes(schedulerapi.HostPriorityList{}))
+	ws.Route(ws.POST("/bind").To(s.bind).Reads(schedulerapi.ExtenderBindingArgs{}).Writes(schedulerapi.ExtenderBindingResult{}))
 	health := new(restful.WebService)
 	health.Route(health.GET("/healthy").To(s.healthy))
 	restful.Add(ws)

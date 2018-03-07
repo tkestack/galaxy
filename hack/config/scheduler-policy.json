@@ -25,6 +25,7 @@
     "url": "http://172.16.0.3/v1",
     "filterVerb": "filter",
     "prioritizeVerb": "prioritize",
+    "BindVerb": "bind",
     "weight": 1,
     "enableHttps": false
   }
