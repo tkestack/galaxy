@@ -65,12 +65,6 @@ func (s *Server) init() error {
 	s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)
 	podInformer := s.podInformerFactory.Core().V1().Pods()
 	tappInformer := s.tappInformerFactory.Tappcontroller().V1alpha1().TApps()
-	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    s.OnAdd,
-		UpdateFunc: s.OnUpdate,
-		DeleteFunc: s.OnDelete,
-	})
-	tappInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{})
 	pluginArgs := &schedulerplugin.PluginFactoryArgs{
 		PodLister:     podInformer.Lister(),
 		TAppLister:    tappInformer.Lister(),
@@ -79,8 +73,16 @@ func (s *Server) init() error {
 		TAppHasSynced: tappInformer.Informer().HasSynced,
 	}
 	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
+	if err != nil {
+		return err
+	}
 	s.PodEventHandler = eventhandler.NewPodEventHandler(s.plugin)
-	return err
+	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    s.OnAdd,
+		UpdateFunc: s.OnUpdate,
+		DeleteFunc: s.OnDelete,
+	})
+	return nil
 }
 
 func (s *Server) Start() error {
