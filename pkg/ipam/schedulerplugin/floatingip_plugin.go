@@ -86,7 +86,7 @@ func (p *FloatingIPPlugin) Init() error {
 		}
 	} else {
 		glog.Infof("empty floatingips from config, fetching from configmap")
-		if err := wait.PollInfinite(time.Millisecond*100, func() (done bool, err error) {
+		if err := wait.PollInfinite(time.Second, func() (done bool, err error) {
 			updated, err := p.updateConfigMap()
 			if err != nil {
 				glog.Warning(err)
