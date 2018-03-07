@@ -46,7 +46,8 @@ func (fip *FloatingIP) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if conf.RoutableSubnet != nil {
-		fip.RoutableSubnet = conf.RoutableSubnet.ToIPNet()
+		ipNet := conf.RoutableSubnet.ToIPNet()
+		fip.RoutableSubnet = &net.IPNet{IP: ipNet.IP.Mask(ipNet.Mask), Mask: ipNet.Mask}
 	} else {
 		return fmt.Errorf("routable subnet is empty")
 	}
