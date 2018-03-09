@@ -86,7 +86,7 @@ func (p *FloatingIPPlugin) Init() error {
 		}
 	} else {
 		glog.Infof("empty floatingips from config, fetching from configmap")
-		if err := wait.PollInfinite(time.Millisecond*100, func() (done bool, err error) {
+		if err := wait.PollInfinite(time.Second, func() (done bool, err error) {
 			updated, err := p.updateConfigMap()
 			if err != nil {
 				glog.Warning(err)
@@ -289,13 +289,24 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	if err != nil {
 		glog.Error(err)
 	}
-	if err := wait.PollImmediate(time.Millisecond*300, 20*time.Second, func() (bool, error) {
+	if err := wait.PollImmediate(time.Millisecond*500, 20*time.Second, func() (bool, error) {
 		_, err := p.Client.CoreV1().Pods(args.PodNamespace).Patch(args.PodName, types.MergePatchType, patchData)
 		if err != nil {
 			glog.Warningf("failed to update pod %s: %v", key, err)
 			return false, nil
 		}
 		glog.V(3).Infof("updated %v for pod %s", bind["floatingip"], key)
+		// It's the extender's response to bind pods to nodes since it is a binder
+		if err := p.Client.CoreV1().Pods(args.PodNamespace).Bind(&corev1.Binding{
+			ObjectMeta: v1.ObjectMeta{Namespace: args.PodNamespace, Name: args.PodName, UID: args.PodUID},
+			Target: corev1.ObjectReference{
+				Kind: "Node",
+				Name: args.Node,
+			},
+		}); err != nil {
+			return false, err
+		}
+		glog.V(3).Infof("bind pod %s to %s", key, args.Node)
 		return true, nil
 	}); err != nil {
 		// If fails to update, depending on resync to update
@@ -451,6 +462,7 @@ func (p *FloatingIPPlugin) queryNodeSubnet(nodeName string) (*net.IPNet, error) 
 			return nil, errors.New("FloatingIPPlugin:UnknowNode")
 		}
 		if ipNet := p.ipam.RoutableSubnet(nodeIP); ipNet != nil {
+			glog.V(4).Infof("node %s %s %s", nodeName, nodeIP.String(), ipNet.String())
 			return ipNet, nil
 		} else {
 			return nil, errors.New("FloatingIPPlugin:NoFIPConfigNode")

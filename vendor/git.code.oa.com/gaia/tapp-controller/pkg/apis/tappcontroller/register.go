@@ -17,5 +17,5 @@ limitations under the License.
 package tappcontroller
 
 const (
-	GroupName = "gaiastack.tencent.com"
+	GroupName = "gaia"
 )

@@ -30,11 +30,7 @@ import:
   subpackages:
   - nl
 - package: github.com/vishvananda/netns
-  version: 8ba1072b58e0c2a240eb5f6120165c7776c3e7b8 
-- package: golang.org/x/net
-  version: 1c05540f6879653db88113bc4a2b70aec4bd491f
-  subpackages:
-  - context
+  version: 8ba1072b58e0c2a240eb5f6120165c7776c3e7b8
 - package: k8s.io/client-go
   repo: https://github.com/kubernetes/client-go.git
   version: kubernetes-1.9.3
@@ -46,12 +42,17 @@ import:
   version: 39a7bf85c140f972372c2a0d1ee40adbf0c8bfe1
 - package: k8s.io/utils
   version: aedf551cdb8b0119df3a19c65fde413a13b34997
-- package: golang.org/x/sys/unix
-  repo: https://golang.org/x/sys
+- package: golang.org/x/net
+  version: 1c05540f6879653db88113bc4a2b70aec4bd491f
+- package: golang.org/x/crypto
+  version: 81e90905daefcd6fd217b62423c0908922eadb30
+- package: golang.org/x/sys
   version: 076b546753157f758b316e59bcb51e6807c04057
+- package: golang.org/x/text
+  version: b19bf474d317b857955b12035d2c5acb57ce8b01
 - package: git.code.oa.com/gaia/tapp-controller
   repo: http://git.code.oa.com/gaia/tapp-controller.git
-  version: 0ab19a381cb61f3b08a623683fd5ffb74bca3959
+  version: 9a7ae8cd85dd18303582bd5ca61f0ac33b60a3cc
 - package: github.com/go-sql-driver/mysql
   version: ae5a66df4d33ba404d639bd0fc9189cd5ee79bcf
 - package: github.com/jinzhu/gorm

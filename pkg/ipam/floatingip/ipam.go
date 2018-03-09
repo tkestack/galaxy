@@ -224,6 +224,11 @@ func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet) (allocate
 	}
 	ipNet := i.toFIPSubnet(routableSubnet)
 	if ipNet == nil {
+		var allRoutableSubnet []string
+		for j := range i.FloatingIPs {
+			allRoutableSubnet = append(allRoutableSubnet, i.FloatingIPs[j].RoutableSubnet.String())
+		}
+		glog.V(3).Infof("can't find fit routableSubnet %s, all routableSubnets %v", routableSubnet.String(), allRoutableSubnet)
 		err = ErrNoFIPForSubnet
 		return
 	}

@@ -17,11 +17,11 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	tappcontroller "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller"
 )
 
 // SchemeGroupVersion is group version used to register these objects

@@ -65,12 +65,6 @@ func (s *Server) init() error {
 	s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)
 	podInformer := s.podInformerFactory.Core().V1().Pods()
 	tappInformer := s.tappInformerFactory.Tappcontroller().V1alpha1().TApps()
-	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    s.OnAdd,
-		UpdateFunc: s.OnUpdate,
-		DeleteFunc: s.OnDelete,
-	})
-	tappInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{})
 	pluginArgs := &schedulerplugin.PluginFactoryArgs{
 		PodLister:     podInformer.Lister(),
 		TAppLister:    tappInformer.Lister(),
@@ -79,8 +73,16 @@ func (s *Server) init() error {
 		TAppHasSynced: tappInformer.Informer().HasSynced,
 	}
 	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
+	if err != nil {
+		return err
+	}
 	s.PodEventHandler = eventhandler.NewPodEventHandler(s.plugin)
-	return err
+	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    s.OnAdd,
+		UpdateFunc: s.OnUpdate,
+		DeleteFunc: s.OnDelete,
+	})
+	return nil
 }
 
 func (s *Server) Start() error {
@@ -132,6 +134,7 @@ func (s *Server) startServer() {
 		Produces(restful.MIME_JSON)
 	ws.Route(ws.POST("/filter").To(s.filter).Reads(schedulerapi.ExtenderArgs{}).Writes(schedulerapi.ExtenderFilterResult{}))
 	ws.Route(ws.POST("/priority").To(s.priority).Reads(schedulerapi.ExtenderArgs{}).Writes(schedulerapi.HostPriorityList{}))
+	ws.Route(ws.POST("/bind").To(s.bind).Reads(schedulerapi.ExtenderBindingArgs{}).Writes(schedulerapi.ExtenderBindingResult{}))
 	health := new(restful.WebService)
 	health.Route(health.GET("/healthy").To(s.healthy))
 	restful.Add(ws)
