@@ -7,7 +7,12 @@ const (
 )
 
 var (
-	LabelKeyNetworkType = "network"
+	LabelKeyNetworkType                 = "network"
+	LabelValueNetworkTypeFloatingIP     = "FLOATINGIP"
+	NodeLabelValueNetworkTypeFloatingIP = "floatingip"
+
+	LabelKeyFloatingIP  = "galaxy.io/floatingip"
+	LabelValueImmutable = "immutable"
 	AnnotationKeyIPInfo = "galaxy.io/ip"
 
 	NetworkTypeOverlay  = NetworkType{String: sets.NewString("", "DEFAULT", "NAT"), CNIType: "galaxy-flannel"}

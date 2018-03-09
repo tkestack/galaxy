@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
@@ -24,10 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-var (
-	ANNOTATION_FLOATINGIP = "floatingip"
-)
-
 type Conf struct {
 	FloatingIPs        []*floatingip.FloatingIP `json:"floatingips,omitempty"`
 	DBConfig           *database.DBConfig       `json:"database"`
@@ -39,9 +36,9 @@ type Conf struct {
 // FloatingIPPlugin Allocates Floating IP for deployments
 type FloatingIPPlugin struct {
 	objectSelector, nodeSelector labels.Selector
-	// whether or not the deployment wants its allocated floatingips invariant accross pod reassigning
-	fipInvariantSeletor labels.Selector
-	ipam                floatingip.IPAM
+	// whether or not the deployment wants its allocated floatingips immutable accross pod reassigning
+	immutableSeletor labels.Selector
+	ipam             floatingip.IPAM
 	// node name to subnet cache
 	nodeSubnet     map[string]*net.IPNet
 	nodeSubnetLock sync.Mutex
@@ -117,17 +114,17 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 
 func (p *FloatingIPPlugin) initSelector() error {
 	objectSelectorMap := make(map[string]string)
-	objectSelectorMap["network"] = "FLOATINGIP"
+	objectSelectorMap[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
 	nodeSelectorMap := make(map[string]string)
-	nodeSelectorMap["network"] = "floatingip"
+	nodeSelectorMap[private.LabelKeyNetworkType] = private.NodeLabelValueNetworkTypeFloatingIP
 
-	fipInvariantLabelMap := make(map[string]string)
-	fipInvariantLabelMap["floatingip"] = "invariant"
+	immutableLabelMap := make(map[string]string)
+	immutableLabelMap[private.LabelKeyFloatingIP] = private.LabelValueImmutable
 
 	labels.SelectorFromSet(labels.Set(objectSelectorMap))
 	p.objectSelector = labels.SelectorFromSet(labels.Set(objectSelectorMap))
 	p.nodeSelector = labels.SelectorFromSet(labels.Set(nodeSelectorMap))
-	p.fipInvariantSeletor = labels.SelectorFromSet(labels.Set(fipInvariantLabelMap))
+	p.immutableSeletor = labels.SelectorFromSet(labels.Set(immutableLabelMap))
 	return nil
 }
 
@@ -251,7 +248,7 @@ func (p *FloatingIPPlugin) allocateIP(key, nodeName string) (map[string]string, 
 	}
 	glog.Infof("%s floating ip %s for %s", how, ipInfo.IP.String(), key)
 	bind := make(map[string]string)
-	bind[ANNOTATION_FLOATINGIP] = string(data)
+	bind[private.AnnotationKeyIPInfo] = string(data)
 	return bind, nil
 }
 
@@ -295,7 +292,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 			glog.Warningf("failed to update pod %s: %v", key, err)
 			return false, nil
 		}
-		glog.V(3).Infof("updated %v for pod %s", bind["floatingip"], key)
+		glog.V(3).Infof("updated annotation %s=%s for pod %s", private.AnnotationKeyIPInfo, bind[private.AnnotationKeyIPInfo], key)
 		// It's the extender's response to bind pods to nodes since it is a binder
 		if err := p.Client.CoreV1().Pods(args.PodNamespace).Bind(&corev1.Binding{
 			ObjectMeta: v1.ObjectMeta{Namespace: args.PodNamespace, Name: args.PodName, UID: args.PodUID},
@@ -337,7 +334,7 @@ func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
 
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	key := keyInDB(pod)
-	if !p.fipInvariantSeletor.Matches(labels.Set(pod.GetLabels())) {
+	if !p.immutableSeletor.Matches(labels.Set(pod.GetLabels())) {
 		return p.releasePodIP(key)
 	} else {
 		tapps, err := p.TAppLister.GetPodTApps(pod)
@@ -354,7 +351,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		}
 	}
 	if pod.Annotations != nil {
-		glog.V(3).Infof("reserved %s for pod %s", pod.Annotations[ANNOTATION_FLOATINGIP], key)
+		glog.V(3).Infof("reserved %s for pod %s", pod.Annotations[private.AnnotationKeyIPInfo], key)
 	}
 	return nil
 }

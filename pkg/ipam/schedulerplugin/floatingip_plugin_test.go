@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
@@ -39,12 +40,12 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodeLabel := make(map[string]string)
-	nodeLabel["network"] = "floatingip"
+	nodeLabel[private.LabelKeyNetworkType] = private.NodeLabelValueNetworkTypeFloatingIP
 	objectLabel := make(map[string]string)
-	objectLabel["network"] = "FLOATINGIP"
-	fipInvariantLabel := make(map[string]string)
-	fipInvariantLabel["floatingip"] = "invariant"
-	fipInvariantLabel["network"] = "FLOATINGIP"
+	objectLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
+	immutableLabel := make(map[string]string)
+	immutableLabel[private.LabelKeyFloatingIP] = private.LabelValueImmutable
+	immutableLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
 	nodes := []corev1.Node{
 		// no floating ip label node
 		{
@@ -105,7 +106,7 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err, ipInfo)
 	}
 	// check filter result is expected
-	pod := createPod("pod1-0", "ns1", fipInvariantLabel)
+	pod := createPod("pod1-0", "ns1", immutableLabel)
 	if filtered, failed, err = fipPlugin.Filter(pod, nodes); err != nil {
 		t.Fatal(err)
 	}
@@ -121,11 +122,11 @@ func TestFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ipInfo) == 0 || !strings.Contains(ipInfo["floatingip"], "10.173.13.2") {
+	if len(ipInfo) == 0 || !strings.Contains(ipInfo[private.AnnotationKeyIPInfo], "10.173.13.2") {
 		t.Fatal(ipInfo)
 	}
 	// filter again on a new pod2, all good nodes should be filteredNodes
-	if filtered, failed, err = fipPlugin.Filter(createPod("pod2-1", "ns1", fipInvariantLabel), nodes); err != nil {
+	if filtered, failed, err = fipPlugin.Filter(createPod("pod2-1", "ns1", immutableLabel), nodes); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkFiltered(filtered, node_10_49_27_3, node_10_173_13_4); err != nil {
@@ -146,7 +147,7 @@ func TestFilter(t *testing.T) {
 		}
 	}
 	// allocates all ips to pods of a new  tapp
-	newPod := createPod("temp", "ns1", fipInvariantLabel)
+	newPod := createPod("temp", "ns1", immutableLabel)
 	newPod.Spec.NodeName = node_10_173_13_4
 	ipInfoSet := sets.NewString()
 	for i := 0; ; i++ {
@@ -157,10 +158,10 @@ func TestFilter(t *testing.T) {
 			}
 			break
 		} else {
-			if ipInfoSet.Has(ipInfo["floatingip"]) {
+			if ipInfoSet.Has(ipInfo[private.AnnotationKeyIPInfo]) {
 				t.Fatal("allocates an previous allocated ip")
 			}
-			ipInfoSet.Insert(ipInfo["floatingip"])
+			ipInfoSet.Insert(ipInfo[private.AnnotationKeyIPInfo])
 		}
 		if i == 10 {
 			t.Fatal("should not have so many ips")
@@ -171,7 +172,7 @@ func TestFilter(t *testing.T) {
 	if ipInfo, err = fipPlugin.allocateIP(keyInDB(pod), pod.Spec.NodeName); err != nil {
 		t.Fatal(err)
 	}
-	if len(ipInfo) == 0 || !strings.Contains(ipInfo["floatingip"], "10.173.13.2") {
+	if len(ipInfo) == 0 || !strings.Contains(ipInfo[private.AnnotationKeyIPInfo], "10.173.13.2") {
 		t.Fatal(ipInfo)
 	}
 }
