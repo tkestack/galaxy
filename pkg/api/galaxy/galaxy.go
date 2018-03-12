@@ -3,12 +3,11 @@ package galaxy
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/golang/glog"
 )
 
 // Request sent to the Galaxy by the Galaxy SDN CNI plugin
@@ -29,7 +28,7 @@ type PodRequest struct {
 	// kubernetes pod name
 	PodName string
 	// kubernetes pod ports
-	Ports string
+	Ports []k8s.Port
 	// Channel for returning the operation result to the CNIServer
 	Result chan *PodResult
 	// Args
@@ -44,10 +43,9 @@ type PodResult struct {
 	Err error
 }
 
-func CniRequestToPodRequest(r *http.Request) (*PodRequest, error) {
+func CniRequestToPodRequest(data []byte) (*PodRequest, error) {
 	var cr CNIRequest
-	b, _ := ioutil.ReadAll(r.Body)
-	if err := json.Unmarshal(b, &cr); err != nil {
+	if err := json.Unmarshal(data, &cr); err != nil {
 		return nil, fmt.Errorf("JSON unmarshal error: %v", err)
 	}
 
@@ -99,11 +97,19 @@ func CniRequestToPodRequest(r *http.Request) (*PodRequest, error) {
 	if !ok {
 		return nil, fmt.Errorf("missing %s", k8s.K8S_POD_NAME)
 	}
-	req.Ports = cniArgs[k8s.K8S_PORTS]
+
+	if len(cr.Config) > 0 {
+		var portMapConf k8s.PortMapConf
+		if err := json.Unmarshal(cr.Config, &portMapConf); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal netconf %s: %v", req.StdinData, err)
+		}
+		req.Ports = portMapConf.RuntimeConfig.PortMaps
+	}
+	glog.V(4).Infof("req.Args %s req.StdinData %s", req.Args, cr.Config)
 
 	return req, nil
 }
 
 func (req *PodRequest) String() string {
-	return fmt.Sprintf("%s %s_%s, %s, %s, %s", req.Command, req.PodName, req.PodNamespace, req.ContainerID, req.Netns, req.Ports)
+	return fmt.Sprintf("%s %s_%s, %s, %s, %v", req.Command, req.PodName, req.PodNamespace, req.ContainerID, req.Netns, req.Ports)
 }
