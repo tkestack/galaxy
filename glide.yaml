@@ -1,15 +1,9 @@
 package: git.code.oa.com/gaiastack/galaxy
 import:
 - package: github.com/containernetworking/cni
-  version: 0e09ad29df1eda8c0e15f8b6c4c7784a42e125bf
-  subpackages:
-  - pkg/invoke
-  - pkg/ip
-  - pkg/ipam
-  - pkg/ns
-  - pkg/skel
-  - pkg/types
-  - pkg/version
+  version: v0.6.0
+- package: github.com/containernetworking/plugins
+  version: v0.6.0
 - package: github.com/docker/engine-api
   version: dea108d3aa0c67d7162a3fd8aa65f38a430019fd
   subpackages:

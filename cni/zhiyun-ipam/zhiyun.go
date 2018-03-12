@@ -11,6 +11,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/cni/zhiyun-ipam/api"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
+	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/version"
 )
 
@@ -27,8 +28,8 @@ func cmdAdd(args *skel.CmdArgs) error {
 		api.Recycle(conf, resp.IP) // try to do recycle
 		return fmt.Errorf("failed to store ip on disk: %v", err)
 	}
-	return (&types.Result{
-		IP4: &types.IPConfig{
+	return (&t020.Result{
+		IP4: &t020.IPConfig{
 			IP:      net.IPNet{IP: resp.IP, Mask: resp.Mask},
 			Gateway: resp.Gateway,
 			Routes: []types.Route{{

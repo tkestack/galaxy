@@ -86,7 +86,7 @@ func (p *FloatingIPPlugin) resyncPod() error {
 		if !p.wantedObject(&tapp.ObjectMeta) {
 			continue
 		}
-		if !p.fipInvariantSeletor.Matches(labels.Set(tapp.GetLabels())) {
+		if !p.immutableSeletor.Matches(labels.Set(tapp.GetLabels())) {
 			// 3. deleted pods whose parent tapp exist but is not fipInvariant
 			if err := p.releasePodIP(podFullName); err != nil {
 				glog.Warning(err)

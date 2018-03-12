@@ -15,6 +15,7 @@ import (
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
+	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/golang/glog"
 )
 
@@ -102,7 +103,7 @@ func BuildCNIArgs(args map[string]string) string {
 	return strings.Join(entries, ";")
 }
 
-func DelegateCmd(netconf map[string]interface{}, add bool) (*types.Result, error) {
+func DelegateCmd(netconf map[string]interface{}, add bool) (types.Result, error) {
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
 		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
@@ -118,7 +119,7 @@ func DelegateCmd(netconf map[string]interface{}, add bool) (*types.Result, error
 	return nil, invoke.DelegateDel(netconf["type"].(string), netconfBytes)
 }
 
-func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs) (*types.Result, error) {
+func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs) (types.Result, error) {
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
 		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
@@ -170,7 +171,7 @@ func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs) error {
 	}
 }
 
-func CmdAdd(containerID string, cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, networkInfo NetworkInfo) (*types.Result, error) {
+func CmdAdd(containerID string, cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, networkInfo NetworkInfo) (types.Result, error) {
 	if len(networkInfo) == 0 {
 		return nil, fmt.Errorf("No network info returned")
 	}
@@ -179,7 +180,7 @@ func CmdAdd(containerID string, cmdArgs *skel.CmdArgs, netConf map[string]map[st
 	}
 	var (
 		err    error
-		result *types.Result
+		result types.Result
 	)
 	for t, v := range networkInfo {
 		conf, ok := netConf[t]
@@ -263,9 +264,9 @@ type IPInfo struct {
 	RoutableSubnet types.IPNet `json:"routable_subnet"`
 }
 
-func IPInfoToResult(ipInfo *IPInfo) *types.Result {
-	return &types.Result{
-		IP4: &types.IPConfig{
+func IPInfoToResult(ipInfo *IPInfo) *t020.Result {
+	return &t020.Result{
+		IP4: &t020.IPConfig{
 			IP:      net.IPNet(ipInfo.IP),
 			Gateway: ipInfo.Gateway,
 			Routes: []types.Route{{

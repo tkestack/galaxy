@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/containernetworking/cni/pkg/version"
-
 	"git.code.oa.com/gaiastack/galaxy/cni/ipam"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
+	"github.com/containernetworking/cni/pkg/skel"
+	t020 "github.com/containernetworking/cni/pkg/types/020"
+	"github.com/containernetworking/cni/pkg/version"
 )
 
 var (
@@ -50,11 +50,15 @@ func cmdAdd(args *skel.CmdArgs) error {
 			return err
 		}
 	}
+	result020, err := t020.GetResult(result)
+	if err != nil {
+		return err
+	}
 	//send Gratuitous ARP to let switch knows IP floats onto this node
 	//ignore errors as we can't print logs and we do this as best as we can
-	utils.SendGratuitousARP(result, args)
-	result.DNS = conf.DNS
-	return result.Print()
+	utils.SendGratuitousARP(result020, args)
+	result020.DNS = conf.DNS
+	return result020.Print()
 }
 
 func cmdDel(args *skel.CmdArgs) error {

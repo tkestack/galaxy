@@ -8,6 +8,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
+	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/golang/glog"
 )
 
@@ -51,8 +52,8 @@ func main() {
 			glog.Fatalf("Error creating vlan device %v", err)
 		}
 	}
-	if err := utils.VethConnectsHostWithContainer(&types.Result{
-		IP4: &types.IPConfig{
+	if err := utils.VethConnectsHostWithContainer(&t020.Result{
+		IP4: &t020.IPConfig{
 			IP:      *ipNet,
 			Gateway: gateway,
 			Routes: []types.Route{{

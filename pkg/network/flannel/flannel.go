@@ -126,7 +126,7 @@ func consumeScratchNetConf(containerID string) ([]byte, error) {
 	return ioutil.ReadFile(path)
 }
 
-func delegateAdd(args *skel.CmdArgs, netconf map[string]interface{}) (*types.Result, error) {
+func delegateAdd(args *skel.CmdArgs, netconf map[string]interface{}) (types.Result, error) {
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
 		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
@@ -165,7 +165,7 @@ func isString(i interface{}) bool {
 	return ok
 }
 
-func CmdAdd(args *skel.CmdArgs) (*types.Result, error) {
+func CmdAdd(args *skel.CmdArgs) (types.Result, error) {
 	n, err := loadFlannelNetConf(args.StdinData)
 	if err != nil {
 		return nil, err

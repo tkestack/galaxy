@@ -7,11 +7,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/containernetworking/cni/pkg/types"
 	"github.com/vishvananda/netlink"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
+	"github.com/containernetworking/cni/pkg/types"
 )
 
 const (

@@ -7,16 +7,17 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/containernetworking/cni/pkg/ip"
-	"github.com/containernetworking/cni/pkg/ipam"
-	"github.com/containernetworking/cni/pkg/ns"
-	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/cni/pkg/version"
 	"github.com/vishvananda/netlink"
 
 	galaxytypes "git.code.oa.com/gaiastack/galaxy/pkg/network/types"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
+	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/containernetworking/cni/pkg/types"
+	t020 "github.com/containernetworking/cni/pkg/types/020"
+	"github.com/containernetworking/cni/pkg/version"
+	"github.com/containernetworking/plugins/pkg/ip"
+	"github.com/containernetworking/plugins/pkg/ipam"
+	"github.com/containernetworking/plugins/pkg/ns"
 )
 
 func init() {
@@ -53,7 +54,7 @@ func addHostRoute(containerIP *net.IPNet, vethHostName string) error {
 	return nil
 }
 
-func connectsHostWithContainer(result *types.Result, args *skel.CmdArgs, conf *VethConf) error {
+func connectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, conf *VethConf) error {
 	mask32 := net.IPv4Mask(255, 255, 255, 255)
 	linkLocalAddress := net.IPv4(169, 254, 1, 1)
 	defaultDst := net.IPNet{IP: net.IPv4(0, 0, 0, 0), Mask: net.IPv4Mask(0, 0, 0, 0)}
@@ -62,7 +63,7 @@ func connectsHostWithContainer(result *types.Result, args *skel.CmdArgs, conf *V
 	//ip netns exec $ctn ip route add default via 169.254.1.1 dev veth_sbx scope global
 
 	//only for outprint of the plugin.
-	result.IP4 = &types.IPConfig{
+	result.IP4 = &t020.IPConfig{
 		IP: net.IPNet{
 			IP:   result.IP4.IP.IP,
 			Mask: mask32,
@@ -160,9 +161,17 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return err
 	}
 	// run the IPAM plugin and get back the config to apply
-	result, err := ipam.ExecAdd(conf.IPAM.Type, args.StdinData)
+	generalResult, err := ipam.ExecAdd(conf.IPAM.Type, args.StdinData)
 	if err != nil {
 		return err
+	}
+	result020, err := generalResult.GetAsVersion(t020.ImplementedSpecVersion)
+	if err != nil {
+		return err
+	}
+	result, ok := result020.(*t020.Result)
+	if !ok {
+		return fmt.Errorf("failed to convert result")
 	}
 	if result.IP4 == nil {
 		return fmt.Errorf("IPAM plugin returned missing IPv4 config")
