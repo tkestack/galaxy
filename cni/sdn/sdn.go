@@ -13,7 +13,7 @@ import (
 	galaxyapi "git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/containernetworking/cni/pkg/types"
+	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/version"
 )
 
@@ -78,13 +78,13 @@ func (p *cniPlugin) doCNI(url string, req *galaxyapi.CNIRequest) ([]byte, error)
 
 // Send the ADD command environment and config to the CNI server, returning
 // the IPAM result to the caller
-func (p *cniPlugin) CmdAdd(args *skel.CmdArgs) (*types.Result, error) {
+func (p *cniPlugin) CmdAdd(args *skel.CmdArgs) (*t020.Result, error) {
 	body, err := p.doCNI("http://dummy/cni", newCNIRequest(args))
 	if err != nil {
 		return nil, err
 	}
 
-	result := &types.Result{}
+	result := &t020.Result{}
 	if err := json.Unmarshal(body, result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response '%s': %v", string(body), err)
 	}

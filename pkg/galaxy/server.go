@@ -17,6 +17,7 @@ import (
 	k8sutil "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/utils"
 
 	"github.com/containernetworking/cni/pkg/types"
+	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
@@ -97,7 +98,11 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 		} else {
 			if result != nil {
 				data, err = json.Marshal(result)
-				err = g.setupPortMapping(req, req.Ports, req.ContainerID, result)
+				if result020, ok := result.(*t020.Result); !ok {
+					err = fmt.Errorf("faild to convert result to 020 result")
+				} else {
+					err = g.setupPortMapping(req, req.Ports, req.ContainerID, result020)
+				}
 			}
 		}
 	} else if req.Command == cniutil.COMMAND_DEL {
@@ -112,7 +117,7 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 	return
 }
 
-func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (*types.Result, error) {
+func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (types.Result, error) {
 	if err := disableIPv6(req.Netns); err != nil {
 		glog.Warningf("Error disable ipv6 %v", err)
 	}
@@ -163,7 +168,7 @@ func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest) error {
 	return cniutil.CmdDel(req.ContainerID, req.CmdArgs, g.netConf)
 }
 
-func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerID string, result *types.Result) error {
+func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerID string, result *t020.Result) error {
 	if g.client == nil {
 		return nil
 	}

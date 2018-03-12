@@ -11,11 +11,13 @@ import (
 
 	galaxyIpam "git.code.oa.com/gaiastack/galaxy/cni/ipam"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
-	"github.com/containernetworking/cni/pkg/ipam"
-	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
+	t020 "github.com/containernetworking/cni/pkg/types/020"
+	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
+	"github.com/containernetworking/plugins/pkg/ipam"
+	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/golang/glog"
 	"github.com/vishvananda/netlink"
 )
@@ -60,6 +62,10 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
+	result020, err := t020.GetResult(result)
+	if err != nil {
+		return err
+	}
 	netns, err := ns.GetNS(args.Netns)
 	if err != nil {
 		return fmt.Errorf("failed to open netns %q: %v", netns, err)
@@ -71,9 +77,9 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 	//send Gratuitous ARP to let switch knows IP floats onto this node
 	//ignore errors as we can't print logs and we do this as best as we can
-	utils.SendGratuitousARP(result, args)
-	result.DNS = conf.DNS
-	return result.Print()
+	utils.SendGratuitousARP(result020, args)
+	result020.DNS = conf.DNS
+	return result020.Print()
 }
 
 func cmdDel(args *skel.CmdArgs) error {
@@ -99,7 +105,11 @@ func main() {
 
 // code from https://raw.githubusercontent.com/Intel-Corp/sriov-cni/master/sriov/sriov.go
 
-func setupVF(conf *NetConf, result *types.Result, podifName string, vlan int, netns ns.NetNS) error {
+func setupVF(conf *NetConf, result types.Result, podifName string, vlan int, netns ns.NetNS) error {
+	resultCurrent, err := current.GetResult(result)
+	if err != nil {
+		return err
+	}
 	cpus := runtime.NumCPU()
 	ifName := conf.Device
 	var vfIdx int
@@ -190,7 +200,7 @@ func setupVF(conf *NetConf, result *types.Result, podifName string, vlan int, ne
 		if err != nil {
 			return fmt.Errorf("failed to rename %d vf of the device %q to %q: %v", vfIdx, vfName, ifName, err)
 		}
-		return ipam.ConfigureIface(podifName, result)
+		return ipam.ConfigureIface(podifName, resultCurrent)
 	}); err != nil {
 		return err
 	}

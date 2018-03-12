@@ -6,14 +6,16 @@ set -e
 cur_dir=`pwd`
 bin_prefix="galaxy"
 package=git.code.oa.com/gaiastack/galaxy
-cni_package=github.com/containernetworking/cni
+cni_package=github.com/containernetworking/plugins
 
 mkdir -p go/src/`dirname $package`
+mkdir -p go/src/`dirname $cni_package`
 ln -sfn $cur_dir $cur_dir/go/src/$package
 export GOPATH=$cur_dir/go
 export GOOS=linux
 if [ ! -d $cur_dir/go/src/$cni_package ]; then
-	tar zxvf $cur_dir/hack/cni.tar.gz -C $cur_dir/go/src/github.com/containernetworking/
+	tar zxvf $cur_dir/hack/plugins-0.6.0.tar.gz -C $cur_dir/go/src/github.com/containernetworking/
+	mv $cur_dir/go/src/github.com/containernetworking/plugins-0.6.0 $cur_dir/go/src/github.com/containernetworking/plugins
 fi
 function cleanup() {
 	rm $cur_dir/go/src/$package

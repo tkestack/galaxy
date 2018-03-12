@@ -12,8 +12,9 @@ function tar_code() {
       fi
     done
     mkdir -p ${BIND_DIR}/go/src/github.com/containernetworking
-    rm -rf ${BIND_DIR}/go/src/github.com/containernetworking/cni
-    tar zxvf hack/cni.tar.gz -C ${BIND_DIR}/go/src/github.com/containernetworking/
+    rm -rf ${BIND_DIR}/go/src/github.com/containernetworking/plugins
+    tar zxvf hack/plugins-0.6.0.tar.gz -C ${BIND_DIR}/go/src/github.com/containernetworking/
+    mv ${BIND_DIR}/go/src/github.com/containernetworking/plugins-0.6.0 ${BIND_DIR}/go/src/github.com/containernetworking/plugins
     rm -rf ${CURDIR}/bin/${NAME}-${VERSION}.tar.gz
     tar cf ${CURDIR}/bin/${NAME}-${VERSION}.tar -C ${CURDIR}/bin .
     gzip -f ${CURDIR}/bin/${NAME}-${VERSION}.tar
