@@ -3,7 +3,7 @@ Description=galaxy-ipam is a kubernetes scheduler extender, it's the master serv
 After=network.target
 
 [Service]
-EnvironmentFile=-/etc/sysconfig/galaxy-ipam-config
+EnvironmentFile=-/etc/sysconfig/galaxy-ipam.config
 ExecStart=/usr/bin/galaxy-ipam $ARGS
 Restart=always
 RestartSec=5
