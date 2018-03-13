@@ -24,7 +24,6 @@ const (
 	K8S_POD_NAMESPACE          = "K8S_POD_NAMESPACE"
 	K8S_POD_NAME               = "K8S_POD_NAME"
 	K8S_POD_INFRA_CONTAINER_ID = "K8S_POD_INFRA_CONTAINER_ID"
-	K8S_PORTS                  = "K8S_PORTS"
 
 	stateDir                   = "/var/lib/cni/galaxy/port"
 	PortMappingAnnotation      = "network.kubernetes.io/portmapping"
@@ -70,6 +69,8 @@ type Port struct {
 	// Required: Supports "TCP" and "UDP".
 	Protocol string `json:"protocol"`
 
+	HostIP string `json:"hostIP,omitempty"`
+
 	PodName string `json:"podName"`
 
 	PodIP string `json:"podIP"`
@@ -83,7 +84,7 @@ func SavePort(containerID string, data []byte) error {
 	return ioutil.WriteFile(path, data, 0600)
 }
 
-func ConsumePort(containerID string) ([]*Port, error) {
+func ConsumePort(containerID string) ([]Port, error) {
 	path := filepath.Join(stateDir, containerID)
 	defer os.Remove(path)
 
@@ -94,7 +95,7 @@ func ConsumePort(containerID string) ([]*Port, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
-	var ports []*Port
+	var ports []Port
 	if err := json.Unmarshal(data, &ports); err != nil {
 		return nil, err
 	}
@@ -118,4 +119,10 @@ func GetHostname(hostnameOverride string) string {
 		hostname = nodename
 	}
 	return strings.ToLower(strings.TrimSpace(hostname))
+}
+
+type PortMapConf struct {
+	RuntimeConfig struct {
+		PortMaps []Port `json:"portMappings,omitempty"`
+	} `json:"runtimeConfig,omitempty"`
 }

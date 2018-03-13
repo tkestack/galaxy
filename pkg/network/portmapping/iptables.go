@@ -38,7 +38,7 @@ func New() *PortMappingHandler {
 	}
 }
 
-func (h *PortMappingHandler) SetupPortMapping(natInterfaceName string, ports []*k8s.Port) error {
+func (h *PortMappingHandler) SetupPortMapping(natInterfaceName string, ports []k8s.Port) error {
 	var kubeHostportsChainRules [][]string
 	natChains := bytes.NewBuffer(nil)
 	natRules := bytes.NewBuffer(nil)
@@ -59,8 +59,11 @@ func (h *PortMappingHandler) SetupPortMapping(natInterfaceName string, ports []*
 			"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
 			"-m", protocol, "-p", protocol,
 			"--dport", fmt.Sprintf("%d", containerPort.HostPort),
-			"-j", string(hostportChain),
 		}
+		if containerPort.HostIP != "" {
+			args = append(args, "-d", containerPort.HostIP)
+		}
+		args = append(args, "-j", string(hostportChain))
 		kubeHostportsChainRules = append(kubeHostportsChainRules, args)
 
 		// Assuming kubelet is syncing iptables KUBE-MARK-MASQ chain
@@ -99,7 +102,7 @@ func (h *PortMappingHandler) SetupPortMapping(natInterfaceName string, ports []*
 	return nil
 }
 
-func (h *PortMappingHandler) CleanPortMapping(natInterfaceName string, ports []*k8s.Port) {
+func (h *PortMappingHandler) CleanPortMapping(natInterfaceName string, ports []k8s.Port) {
 	var kubeHostportsChainRules [][]string
 	natChains := bytes.NewBuffer(nil)
 	natRules := bytes.NewBuffer(nil)
@@ -142,7 +145,7 @@ func (h *PortMappingHandler) CleanPortMapping(natInterfaceName string, ports []*
 }
 
 // setupPortMappingForAllPods setup iptables for all pods at start time
-func setupPortMappingForAllPods(natInterfaceName string, ports []*k8s.Port) error {
+func setupPortMappingForAllPods(natInterfaceName string, ports []k8s.Port) error {
 	iptInterface := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
 	if err := ensureBasicRule(natInterfaceName, iptInterface); err != nil {
 		return err
@@ -249,7 +252,7 @@ func writeLine(buf *bytes.Buffer, words ...string) {
 // then encoding to base32 and truncating with the prefix "KUBE-SVC-".  We do
 // this because IPTables Chain Names must be <= 28 chars long, and the longer
 // they are the harder they are to read.
-func hostportChainName(port *k8s.Port, podFullName string) utiliptables.Chain {
+func hostportChainName(port k8s.Port, podFullName string) utiliptables.Chain {
 	hash := sha256.Sum256([]byte(strconv.Itoa(int(port.HostPort)) + string(port.Protocol) + strconv.Itoa(int(port.ContainerPort)) + podFullName))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return utiliptables.Chain(kubeHostportChainPrefix + encoded[:16])

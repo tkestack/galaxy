@@ -10,7 +10,7 @@ import (
 )
 
 //OpenHostports opens all hostport for pod. The opened hostports are assigned to k8sPorts
-func (h *PortMappingHandler) OpenHostports(podName string, portMapping bool, k8sPorts []*k8s.Port) error {
+func (h *PortMappingHandler) OpenHostports(podName string, portMapping bool, k8sPorts []k8s.Port) error {
 	var retErr error
 	ports := make(map[hostport]closeable)
 	for i := range k8sPorts {

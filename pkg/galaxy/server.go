@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -67,7 +68,14 @@ func (g *Galaxy) installHandlers() {
 }
 
 func (g *Galaxy) cni(r *restful.Request, w *restful.Response) {
-	req, err := galaxyapi.CniRequestToPodRequest(r.Request)
+	data, err := ioutil.ReadAll(r.Request.Body)
+	if err != nil {
+		glog.Warningf("bad request %v", err)
+		http.Error(w, fmt.Sprintf("err read body %v", err), http.StatusBadRequest)
+		return
+	}
+	defer r.Request.Body.Close()
+	req, err := galaxyapi.CniRequestToPodRequest(data)
 	if err != nil {
 		glog.Warningf("bad request %v", err)
 		http.Error(w, fmt.Sprintf("%v", err), http.StatusBadRequest)
@@ -101,7 +109,7 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 				if result020, ok := result.(*t020.Result); !ok {
 					err = fmt.Errorf("faild to convert result to 020 result")
 				} else {
-					err = g.setupPortMapping(req, req.Ports, req.ContainerID, result020)
+					err = g.setupPortMapping(req, req.ContainerID, result020)
 				}
 			}
 		}
@@ -168,15 +176,11 @@ func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest) error {
 	return cniutil.CmdDel(req.ContainerID, req.CmdArgs, g.netConf)
 }
 
-func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerID string, result *t020.Result) error {
+func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string, result *t020.Result) error {
 	if g.client == nil {
 		return nil
 	}
-	ports, err := k8s.ParsePorts(portStr)
-	if err != nil {
-		return err
-	}
-	if len(ports) == 0 {
+	if len(req.Ports) == 0 {
 		return nil
 	}
 	// we have to fulfill ip field of the current pod
@@ -187,26 +191,27 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, portStr, containerI
 	if ip4 == nil {
 		return fmt.Errorf("CNI plugin reported an invalid IPv4 address: %+v.", result.IP4)
 	}
-	for i := range ports {
-		ports[i].PodIP = ip4.String()
+	for i := range req.Ports {
+		req.Ports[i].PodIP = ip4.String()
+		req.Ports[i].PodName = req.PodName
 	}
 	pod, err := g.client.CoreV1().Pods(req.PodNamespace).Get(req.PodName, v1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get pod from apiserver: %v", err)
 	}
 	_, portMapping := pod.Annotations[k8s.PortMappingAnnotation]
-	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), portMapping, ports); err != nil {
+	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), portMapping, req.Ports); err != nil {
 		return err
 	}
-	data, err := json.Marshal(ports)
+	data, err := json.Marshal(req.Ports)
 	if err != nil {
 		return fmt.Errorf("failed to marshal ports: %v", err)
 	}
 	if err := k8s.SavePort(containerID, data); err != nil {
 		return fmt.Errorf("failed to save ports %v", err)
 	}
-	if err := g.pmhandler.SetupPortMapping("cni0", ports); err != nil {
-		return fmt.Errorf("failed to setup port mapping %v: %v", ports, err)
+	if err := g.pmhandler.SetupPortMapping("cni0", req.Ports); err != nil {
+		return fmt.Errorf("failed to setup port mapping %v: %v", req.Ports, err)
 	}
 	if err := wait.Poll(10*time.Millisecond, 1*time.Minute, func() (bool, error) {
 		pod, err := g.client.CoreV1().Pods(req.PodNamespace).Get(req.PodName, v1.GetOptions{})
