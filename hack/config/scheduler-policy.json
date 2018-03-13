@@ -21,12 +21,16 @@
     {"name": "NodeAffinityPriority", "weight": 1},
     {"name": "TaintTolerationPriority", "weight": 1},
     {"name": "InterPodAffinityPriority", "weight": 1}],
-  "extender": {
-    "url": "http://172.16.0.3/v1",
+  "extenders": [{
+    "urlPrefix": "http://172.16.0.3/v1",
     "filterVerb": "filter",
     "prioritizeVerb": "prioritize",
     "BindVerb": "bind",
     "weight": 1,
-    "enableHttps": false
-  }
+    "enableHttps": false,
+    "managedResources": [{
+      "name":"galaxy.io/floatingip",
+      "ignoredByScheduler": true
+    }]
+  }]
 }
