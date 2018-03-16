@@ -36,7 +36,6 @@ var (
 	flagApiServer            = flag.String("api-servers", "", "The address of apiserver")
 	flagKubeConf             = flag.String("kubeconf", "", "kube configure file")
 	flagLabelSubnet          = flag.Bool("label-subnet", true, "whether galaxy should label the kubelet node with subnet={ip}-{onesInMask}, this label is used by rackfilter scheduler plugin")
-	flagIPFromAnnotation     = flag.Bool("ip-from-annotation", false, "whether galaxy gets ip info from pods' annotation")
 	Note                     = `If ipam type is from third party, e.g. zhiyun, galaxy invokes third party ipam binaries to allocate ip.`
 )
 
@@ -143,31 +142,24 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (types.Result, error) {
 			}
 			return false, err
 		}
-		if pod.Labels == nil || pod.Annotations == nil {
-			return false, nil
-		}
-		// If its underlay network and not a third party ipam
-		// wait for scheduler extender updating annotation
-		if private.NetworkTypeUnderlay.Has(pod.Labels[private.LabelKeyNetworkType]) && ((*flagMaster == "" && g.ipamType == "") || *flagIPFromAnnotation) {
-			if pod.Annotations[private.AnnotationKeyIPInfo] == "" {
-				glog.Warningf("wait for scheduler extender updating annotation of pod %s_%s", req.PodName, req.PodNamespace)
-				return false, nil
-			}
-		}
 		return true, nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to get pod %s_%s: %v", req.PodName, req.PodNamespace, err)
 	}
-	networkType := pod.Labels[private.LabelKeyNetworkType]
-	if private.NetworkTypeOverlay.Has(networkType) {
+	if pod.Labels == nil {
 		networkInfo = cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
-	} else if private.NetworkTypeUnderlay.Has(networkType) {
-		if pod.Annotations[private.AnnotationKeyIPInfo] != "" {
-			req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.IPInfoInArgs, pod.Annotations[private.AnnotationKeyIPInfo])
-		}
-		networkInfo = cniutil.NetworkInfo{private.NetworkTypeUnderlay.CNIType: {}}
 	} else {
-		return nil, fmt.Errorf("unsupported network type: %s", networkType)
+		networkType := pod.Labels[private.LabelKeyNetworkType]
+		if private.NetworkTypeOverlay.Has(networkType) {
+			networkInfo = cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
+		} else if private.NetworkTypeUnderlay.Has(networkType) {
+			if pod.Annotations != nil && pod.Annotations[private.AnnotationKeyIPInfo] != "" {
+				req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.IPInfoInArgs, pod.Annotations[private.AnnotationKeyIPInfo])
+			}
+			networkInfo = cniutil.NetworkInfo{private.NetworkTypeUnderlay.CNIType: {}}
+		} else {
+			return nil, fmt.Errorf("unsupported network type: %s", networkType)
+		}
 	}
 	return cniutil.CmdAdd(req.ContainerID, req.CmdArgs, g.netConf, networkInfo)
 }
