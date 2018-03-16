@@ -15,7 +15,6 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server/options"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/informers"
@@ -122,7 +121,7 @@ func (s *Server) initk8sClient() {
 
 func (s *Server) podListOptions() internalinterfaces.TweakListOptionsFunc {
 	return func(listOptions *v1.ListOptions) {
-		listOptions.FieldSelector = fields.ParseSelectorOrDie("spec.nodeName!=" + "" + ",status.phase!=" + string(corev1.PodSucceeded) + ",status.phase!=" + string(corev1.PodFailed)).String()
+		listOptions.FieldSelector = fields.Everything().String()
 	}
 }
 
