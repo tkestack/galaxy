@@ -21,10 +21,12 @@ type IPAM interface {
 	ConfigurePool([]*FloatingIP) error
 	Config() []*FloatingIP
 	Allocate([]string, ...database.ActionFunc) ([]net.IP, error)
+	AllocateSpecificIP(string, net.IP) error
 	AllocateInSubnet(string, *net.IPNet) (net.IP, error)
 	Release([]string) error
 	ReleaseByPrefix(string) error
 	QueryFirst(string) (*IPInfo, error)
+	QueryByIP(net.IP) (string, error)
 	QueryByPrefix(string) (map[string]string, error) //ip to key
 	RoutableSubnet(net.IP) *net.IPNet
 	QueryRoutableSubnetByKey(key string) ([]string, error)
@@ -384,4 +386,13 @@ func (i *ipam) RoutableSubnet(nodeIP net.IP) *net.IPNet {
 
 func (i *ipam) QueryRoutableSubnetByKey(key string) ([]string, error) {
 	return i.queryByKeyGroupBySubnet(key)
+}
+
+func (i *ipam) QueryByIP(ip net.IP) (string, error) {
+	fip, err := i.findKeyOfIP(nets.IPToInt(ip))
+	return fip.Key, err
+}
+
+func (i *ipam) AllocateSpecificIP(key string, ip net.IP) error {
+	return i.updateKey(nets.IPToInt(ip), key)
 }

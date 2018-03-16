@@ -172,15 +172,22 @@ func (i *ipam) deleteUnScoped(ips []uint32) (int, error) {
 	})
 }
 
-func (i *ipam) findKeyOfIP(ip uint32) ([]database.FloatingIP, error) {
-	var fips []database.FloatingIP
-	return fips, i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Where(fmt.Sprintf("ip=%d", ip)).Find(fips).Error
+func (i *ipam) findKeyOfIP(ip uint32) (database.FloatingIP, error) {
+	var fip database.FloatingIP
+	return fip, i.store.Transaction(func(tx *gorm.DB) error {
+		return tx.Where(fmt.Sprintf("ip=%d", ip)).First(&fip).Error
 	})
 }
 
 func (i *ipam) updateKey(ip uint32, key string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Table("floating_ips").Where("ip = ? and `key` = \"\"", ip).UpdateColumn(`key`, key).Error
+		ret := tx.Table("floating_ips").Where("ip = ? and `key` = \"\"", ip).UpdateColumn(`key`, key)
+		if ret.Error != nil {
+			return ret.Error
+		}
+		if ret.RowsAffected != 1 {
+			return ErrNotUpdated
+		}
+		return nil
 	})
 }

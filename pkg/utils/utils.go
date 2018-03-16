@@ -10,12 +10,10 @@ import (
 	"os/exec"
 	"strings"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
-	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/plugins/pkg/ip"
-	"github.com/containernetworking/plugins/pkg/ipam"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/containernetworking/plugins/pkg/utils/sysctl"
 	"github.com/vishvananda/netlink"
@@ -196,7 +194,7 @@ func CreateVeth(containerID string, mtu int) (netlink.Link, netlink.Link, error)
 
 // VethConnectsHostWithContainer creates veth device pairs and connects container with host
 // If bridgeName specified, it attaches host side veth device to the bridge
-func VethConnectsHostWithContainer(result types.Result, args *skel.CmdArgs, bridgeName string) error {
+func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, bridgeName string) error {
 	host, sbox, err := CreateVeth(args.ContainerID, 1500)
 	if err != nil {
 		return err
@@ -228,14 +226,10 @@ func VethConnectsHostWithContainer(result types.Result, args *skel.CmdArgs, brid
 		return fmt.Errorf("could not set link up for host interface %q: %v", host.Attrs().Name, err)
 	}
 	if bridgeName == "" {
-		result020, err := t020.GetResult(result)
-		if err != nil {
-			return err
-		}
-		desIP := result020.IP4.IP.IP
+		desIP := result.IP4.IP.IP
 		ipn := net.IPNet{IP: desIP, Mask: net.CIDRMask(32, 32)}
 		if err = ip.AddRoute(&ipn, nil, host); err != nil {
-			fmt.Printf("error add route: %v %v %v %v", err, result020.IP4.IP, host.Attrs().Index, host.Attrs().Name)
+			fmt.Printf("error add route: %v %v %v %v", err, result.IP4.IP, host.Attrs().Index, host.Attrs().Name)
 			return err
 		}
 	}
@@ -263,7 +257,7 @@ func SendGratuitousARP(result *t020.Result, args *skel.CmdArgs) error {
 }
 
 // MacVlanConnectsHostWithContainer creates macvlan device onto parent and connects container with host
-func MacVlanConnectsHostWithContainer(result types.Result, args *skel.CmdArgs, parent int) error {
+func MacVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, parent int) error {
 	var err error
 	macVlan := &netlink.Macvlan{
 		Mode: netlink.MACVLAN_MODE_BRIDGE,
@@ -286,20 +280,12 @@ func MacVlanConnectsHostWithContainer(result types.Result, args *skel.CmdArgs, p
 	return nil
 }
 
-func configSboxDevice(result types.Result, args *skel.CmdArgs, sbox netlink.Link) error {
-	result020, err := t020.GetResult(result)
-	if err != nil {
-		return err
-	}
-	resultCurrent, err := current.GetResult(result)
-	if err != nil {
-		return err
-	}
+func configSboxDevice(result *t020.Result, args *skel.CmdArgs, sbox netlink.Link) error {
 	// Down the interface before configuring mac address.
 	if err := netlink.LinkSetDown(sbox); err != nil {
 		return fmt.Errorf("could not set link down for container interface %q: %v", sbox.Attrs().Name, err)
 	}
-	if err := netlink.LinkSetHardwareAddr(sbox, GenerateMACFromIP(result020.IP4.IP.IP)); err != nil {
+	if err := netlink.LinkSetHardwareAddr(sbox, GenerateMACFromIP(result.IP4.IP.IP)); err != nil {
 		return fmt.Errorf("could not set mac address for container interface %q: %v", sbox.Attrs().Name, err)
 	}
 	netns, err := ns.GetNS(args.Netns)
@@ -316,7 +302,7 @@ func configSboxDevice(result types.Result, args *skel.CmdArgs, sbox netlink.Link
 			return fmt.Errorf("failed to rename sbox device %q to %q: %v", sbox.Attrs().Name, args.IfName, err)
 		}
 		// Add IP and routes to sbox, including default route
-		return ipam.ConfigureIface(args.IfName, resultCurrent)
+		return cniutil.ConfigureIface(args.IfName, result)
 	})
 }
 

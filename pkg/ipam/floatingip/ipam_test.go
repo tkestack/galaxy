@@ -344,3 +344,25 @@ func TestQueryRoutableSubnetByKey(t *testing.T) {
 		t.Fatal(subnets)
 	}
 }
+
+func TestAllocateSpecificIP(t *testing.T) {
+	database.ForceSequential <- true
+	defer func() {
+		<-database.ForceSequential
+	}()
+	ipam := Start(t)
+	defer ipam.Shutdown()
+
+	ip := net.ParseIP("10.49.27.216")
+	if err := ipam.AllocateSpecificIP("pod1", ip); err != nil {
+		t.Fatal(err)
+	}
+	key, err := ipam.QueryByIP(ip)
+	if err != nil || key != "pod1" {
+		t.Fatalf("key %s, err %v", key, err)
+	}
+	// check if an allocated ip can be allocated again, should return an ErrNotUpdated error
+	if err := ipam.AllocateSpecificIP("pod2", ip); err == nil || err != floatingip.ErrNotUpdated {
+		t.Fatal(err)
+	}
+}

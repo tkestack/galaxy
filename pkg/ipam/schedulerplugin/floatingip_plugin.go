@@ -108,6 +108,7 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 		if err := p.resyncPod(); err != nil {
 			glog.Warning(err)
 		}
+		p.syncPodIPsIntoDB()
 	}, time.Duration(p.conf.ResyncInterval)*time.Minute, stop)
 	go p.loop(stop)
 }
@@ -273,6 +274,15 @@ func (p *FloatingIPPlugin) AddPod(pod *corev1.Pod) error {
 
 func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	key := fmtKey(args.PodName, args.PodNamespace)
+	pod, err := p.PluginFactoryArgs.PodLister.Pods(args.PodNamespace).Get(args.PodName)
+	if err != nil {
+		return fmt.Errorf("failed to find pod %s: %v", key, err)
+	}
+	if !p.wantedObject(&pod.ObjectMeta) {
+		// we will config extender resources which ensures pod which doesn't want floatingip won't be sent to plugin
+		// see https://github.com/kubernetes/kubernetes/pull/60332
+		return fmt.Errorf("pod which doesn't want floatingip have been sent to plugin")
+	}
 	bind, err := p.allocateIP(key, args.Node)
 	if err != nil {
 		return err
@@ -320,6 +330,9 @@ func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
 		// Deployments will leave evicted pods, while TApps don't
 		// If it's a evicted one, release its ip
 		p.unreleased <- newPod
+	}
+	if err := p.syncPodIP(newPod); err != nil {
+		glog.Warningf("failed to sync pod ip: %v", err)
 	}
 	return nil
 }

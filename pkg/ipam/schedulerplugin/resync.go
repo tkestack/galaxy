@@ -2,6 +2,7 @@ package schedulerplugin
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
@@ -155,4 +156,48 @@ func ownerIsTApp(pod *corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+// syncPodIPs sync all pods' ips with db, if a pod has PodIP and its ip is unallocated, allocate the ip to it
+func (p *FloatingIPPlugin) syncPodIPsIntoDB() {
+	if !p.storeReady() {
+		return
+	}
+	pods, err := p.PodLister.List(p.objectSelector)
+	if err != nil {
+		glog.Warningf("failed to list pods: %v", err)
+		return
+	}
+	for i := range pods {
+		if err := p.syncPodIP(pods[i]); err != nil {
+			glog.Warning(err)
+		}
+	}
+}
+
+// syncPodIP sync pod ip with db, if the pod has PodIP and the ip is unallocated, allocate the ip to the pod
+func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
+	if pod.Status.Phase != corev1.PodRunning {
+		return nil
+	}
+	ip := net.ParseIP(pod.Status.PodIP)
+	if ip == nil {
+		return nil
+	}
+	key := keyInDB(pod)
+	storedKey, err := p.ipam.QueryByIP(ip)
+	if err != nil {
+		return err
+	}
+	if storedKey != "" {
+		if storedKey != key {
+			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
+		}
+	} else {
+		if err := p.ipam.AllocateSpecificIP(key, ip); err != nil {
+			return err
+		}
+		glog.Infof("updated floatingip %s to key %s", ip.String(), key)
+	}
+	return nil
 }

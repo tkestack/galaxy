@@ -10,13 +10,12 @@ import (
 	"strings"
 
 	galaxyIpam "git.code.oa.com/gaiastack/galaxy/cni/ipam"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
-	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
-	"github.com/containernetworking/plugins/pkg/ipam"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/golang/glog"
 	"github.com/vishvananda/netlink"
@@ -72,7 +71,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 	defer netns.Close()
 
-	if err := setupVF(conf, result, args.IfName, int(vlanId), netns); err != nil {
+	if err := setupVF(conf, result020, args.IfName, int(vlanId), netns); err != nil {
 		return err
 	}
 	//send Gratuitous ARP to let switch knows IP floats onto this node
@@ -105,11 +104,7 @@ func main() {
 
 // code from https://raw.githubusercontent.com/Intel-Corp/sriov-cni/master/sriov/sriov.go
 
-func setupVF(conf *NetConf, result types.Result, podifName string, vlan int, netns ns.NetNS) error {
-	resultCurrent, err := current.GetResult(result)
-	if err != nil {
-		return err
-	}
+func setupVF(conf *NetConf, result *t020.Result, podifName string, vlan int, netns ns.NetNS) error {
 	cpus := runtime.NumCPU()
 	ifName := conf.Device
 	var vfIdx int
@@ -200,7 +195,7 @@ func setupVF(conf *NetConf, result types.Result, podifName string, vlan int, net
 		if err != nil {
 			return fmt.Errorf("failed to rename %d vf of the device %q to %q: %v", vfIdx, vfName, ifName, err)
 		}
-		return ipam.ConfigureIface(podifName, resultCurrent)
+		return cniutil.ConfigureIface(podifName, result)
 	}); err != nil {
 		return err
 	}
