@@ -16,7 +16,9 @@ import (
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
+	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/golang/glog"
+	"github.com/vishvananda/netlink"
 )
 
 const (
@@ -277,4 +279,38 @@ func IPInfoToResult(ipInfo *IPInfo) *t020.Result {
 			}},
 		},
 	}
+}
+
+// ConfigureIface takes the result of IPAM plugin and
+// applies to the ifName interface
+func ConfigureIface(ifName string, res *t020.Result) error {
+	link, err := netlink.LinkByName(ifName)
+	if err != nil {
+		return fmt.Errorf("failed to lookup %q: %v", ifName, err)
+	}
+
+	if err := netlink.LinkSetUp(link); err != nil {
+		return fmt.Errorf("failed to set %q UP: %v", ifName, err)
+	}
+
+	// TODO(eyakubovich): IPv6
+	addr := &netlink.Addr{IPNet: &res.IP4.IP, Label: ""}
+	if err = netlink.AddrAdd(link, addr); err != nil {
+		return fmt.Errorf("failed to add IP addr to %q: %v", ifName, err)
+	}
+
+	for _, r := range res.IP4.Routes {
+		gw := r.GW
+		if gw == nil {
+			gw = res.IP4.Gateway
+		}
+		if err = ip.AddRoute(&r.Dst, gw, link); err != nil {
+			// we skip over duplicate routes as we assume the first one wins
+			if !os.IsExist(err) {
+				return fmt.Errorf("failed to add route '%v via %v dev %v': %v", r.Dst, gw, ifName, err)
+			}
+		}
+	}
+
+	return nil
 }

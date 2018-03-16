@@ -35,24 +35,24 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
+	result020, err := t020.GetResult(result)
+	if err != nil {
+		return err
+	}
 	if d.MacVlanMode() {
 		if err := d.CreateVlanDevice(vlanId); err != nil {
 			return err
 		}
-		if err := utils.MacVlanConnectsHostWithContainer(result, args, d.DeviceIndex); err != nil {
+		if err := utils.MacVlanConnectsHostWithContainer(result020, args, d.DeviceIndex); err != nil {
 			return err
 		}
 	} else {
 		if err := d.CreateBridgeAndVlanDevice(vlanId); err != nil {
 			return err
 		}
-		if err := utils.VethConnectsHostWithContainer(result, args, d.BridgeNameForVlan(vlanId)); err != nil {
+		if err := utils.VethConnectsHostWithContainer(result020, args, d.BridgeNameForVlan(vlanId)); err != nil {
 			return err
 		}
-	}
-	result020, err := t020.GetResult(result)
-	if err != nil {
-		return err
 	}
 	//send Gratuitous ARP to let switch knows IP floats onto this node
 	//ignore errors as we can't print logs and we do this as best as we can
