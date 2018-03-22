@@ -11,6 +11,7 @@ import (
 	tappInformers "git.code.oa.com/gaia/tapp-controller/pkg/client/informers/externalversions"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/election"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server/options"
 	"github.com/emicklei/go-restful"
@@ -26,6 +27,7 @@ import (
 
 type JsonConf struct {
 	SchedulePluginConf schedulerplugin.Conf `json:"schedule_plugin"`
+	ElectionConf       election.Config      `json:"election"`
 }
 
 type Server struct {
@@ -88,6 +90,24 @@ func (s *Server) Start() error {
 	if err := s.init(); err != nil {
 		return fmt.Errorf("init server: %v", err)
 	}
+	if s.EnableHA {
+		s.JsonConf.ElectionConf.Bind = s.Bind
+		s.JsonConf.ElectionConf.Port = int32(s.Port)
+		lcc, err := election.NewConfig(s.JsonConf.ElectionConf, s.client)
+		if err != nil {
+			return err
+		}
+		election.RunOrDie(lcc, func(<-chan struct{}) {
+			if err := s.Run(); err != nil {
+				glog.Fatal(err)
+			}
+		})
+		return nil
+	}
+	return s.Run()
+}
+
+func (s *Server) Run() error {
 	if err := s.plugin.Init(); err != nil {
 		return err
 	}
