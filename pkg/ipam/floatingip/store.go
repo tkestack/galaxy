@@ -35,7 +35,7 @@ func (i *ipam) findAvailableInRange(limit int, fip *[]database.FloatingIP, first
 
 func (i *ipam) findByKey(key string, fip *database.FloatingIP) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		db := tx.Table("floating_ips").Where("`key` = ?", key).Find(fip)
+		db := tx.Table(database.FloatingipTableName).Where("`key` = ?", key).Find(fip)
 		if db.RecordNotFound() {
 			return nil
 		}
@@ -45,7 +45,7 @@ func (i *ipam) findByKey(key string, fip *database.FloatingIP) error {
 
 func (i *ipam) findByPrefix(prefix string, fips *[]database.FloatingIP) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		db := tx.Table("floating_ips").Where("substr(`key`, 1, length(?)) = ?", prefix, prefix).Find(fips)
+		db := tx.Table(database.FloatingipTableName).Where("substr(`key`, 1, length(?)) = ?", prefix, prefix).Find(fips)
 		if db.RecordNotFound() {
 			return nil
 		}
@@ -78,8 +78,8 @@ func allocateOp(fip *database.FloatingIP) database.ActionFunc {
 
 func allocateOneInRange(key string, first, last uint32) database.ActionFunc {
 	return func(tx *gorm.DB) error {
-		//update floating_ips set `key`=? where `key` = "" AND ip >= ? AND ip <= ? limit 1
-		ret := tx.Table("floating_ips").Where("`key` = \"\" AND ip >= ? AND ip <= ?", first, last).Limit(1).UpdateColumn(`key`, key)
+		//update galaxy_floatingip set `key`=? where `key` = "" AND ip >= ? AND ip <= ? limit 1
+		ret := tx.Table(database.FloatingipTableName).Where("`key` = \"\" AND ip >= ? AND ip <= ?", first, last).Limit(1).UpdateColumn(`key`, key)
 		if ret.Error != nil {
 			return ret.Error
 		}
@@ -98,13 +98,13 @@ func (i *ipam) create(fip *database.FloatingIP) error {
 
 func (i *ipam) releaseIPs(keys []string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Table("floating_ips").Where("`key` IN (?)", keys).UpdateColumn(`key`, "").Error
+		return tx.Table(database.FloatingipTableName).Where("`key` IN (?)", keys).UpdateColumn(`key`, "").Error
 	})
 }
 
 func (i *ipam) releaseByPrefix(prefix string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Table("floating_ips").Where("substr(`key`, 1, length(?)) = ?", prefix, prefix).UpdateColumn(`key`, "").Error
+		return tx.Table(database.FloatingipTableName).Where("substr(`key`, 1, length(?)) = ?", prefix, prefix).UpdateColumn(`key`, "").Error
 	})
 }
 
@@ -140,7 +140,7 @@ type Result struct {
 func (i *ipam) queryByKeyGroupBySubnet(key string) ([]string, error) {
 	var results []Result
 	if err := i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Table("floating_ips").Select("subnet").Where("`key` = ?", key).Group("subnet").Order("subnet").Scan(&results)
+		ret := tx.Table(database.FloatingipTableName).Select("subnet").Where("`key` = ?", key).Group("subnet").Order("subnet").Scan(&results)
 		if ret.RecordNotFound() {
 			return nil
 		}
@@ -163,7 +163,7 @@ func (i *ipam) deleteUnScoped(ips []uint32) (int, error) {
 	}
 	var deleted int
 	return deleted, i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Exec("delete from floating_ips where ip IN (?)", ips)
+		ret := tx.Exec("delete from galaxy_floatingip where ip IN (?)", ips)
 		if ret.Error != nil {
 			return ret.Error
 		}
@@ -181,7 +181,7 @@ func (i *ipam) findKeyOfIP(ip uint32) (database.FloatingIP, error) {
 
 func (i *ipam) updateKey(ip uint32, key string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Table("floating_ips").Where("ip = ? and `key` = \"\"", ip).UpdateColumn(`key`, key)
+		ret := tx.Table(database.FloatingipTableName).Where("ip = ? and `key` = \"\"", ip).UpdateColumn(`key`, key)
 		if ret.Error != nil {
 			return ret.Error
 		}
