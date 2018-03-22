@@ -2,6 +2,7 @@ package database
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/jinzhu/gorm"
 )
@@ -48,7 +49,7 @@ func NewTestDB() (*DBRecorder, error) {
 		return nil, err
 	}
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		return tx.Exec("TRUNCATE floating_ips;").Error
+		return tx.Exec(fmt.Sprintf("TRUNCATE %s;", FloatingipTableName)).Error
 	}); err != nil {
 		return nil, err
 	}
