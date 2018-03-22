@@ -1,0 +1,18 @@
+{
+  "schedule_plugin": {
+    "database": {
+      "protocol": "tcp",
+      "addr": "localhost:3306",
+      "username": "root",
+      "password": "root",
+      "driver": "mysql",
+      "name": "test",
+      "maxConn": 10000
+    }
+  },
+  "election": {
+    "name": "galaxy-ipam",
+    "namespace": "kube-system",
+    "ttl": 10
+  }
+}

@@ -30,6 +30,7 @@ install -p -m 644 hack/config/galaxy-ipam.service $RPM_BUILD_ROOT/%{_unitdir}/ga
 
 install -d $RPM_BUILD_ROOT/etc/sysconfig/
 install -p -m 644 hack/config/galaxy-ipam.config $RPM_BUILD_ROOT/etc/sysconfig/galaxy-ipam.config
+install -p -m 644 hack/config/galaxy-ipam.json $RPM_BUILD_ROOT/etc/sysconfig/galaxy-ipam.json
 
 %files
 /%{_bindir}/galaxy-ipam
@@ -37,3 +38,4 @@ install -p -m 644 hack/config/galaxy-ipam.config $RPM_BUILD_ROOT/etc/sysconfig/g
 
 %config(noreplace) /%{_unitdir}/galaxy-ipam.service
 %config(missingok) /etc/sysconfig/galaxy-ipam.config
+%config(noreplace) /etc/sysconfig/galaxy-ipam.json
