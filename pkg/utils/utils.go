@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os/exec"
 	"strings"
@@ -15,16 +16,12 @@ import (
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/containernetworking/plugins/pkg/ns"
-	"github.com/containernetworking/plugins/pkg/utils/sysctl"
 	"github.com/vishvananda/netlink"
 )
 
 var (
 	ErrNoDefaultRoute = errors.New("no default route was found")
 )
-
-const proxyArpTemplate = "net.ipv4.conf.%s.proxy_arp"
-const arpIgnoreTemplate = "net.ipv4.conf.%s.arp_ignore"
 
 // GetDefaultRouteGw returns the GW for the default route's interface.
 func GetDefaultRouteGw() (net.IP, error) {
@@ -307,17 +304,11 @@ func configSboxDevice(result *t020.Result, args *skel.CmdArgs, sbox netlink.Link
 }
 
 func SetProxyArp(dev string) error {
-	sysctlValueName := fmt.Sprintf(proxyArpTemplate, dev)
-	if _, err := sysctl.Sysctl(sysctlValueName, "1"); err != nil {
-		return err
-	}
-	return nil
+	file := fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/proxy_arp", dev)
+	return ioutil.WriteFile(file, []byte("1\n"), 0644)
 }
 
 func UnSetArpIgnore(dev string) error {
-	sysctlValueName := fmt.Sprintf(arpIgnoreTemplate, dev)
-	if _, err := sysctl.Sysctl(sysctlValueName, "0"); err != nil {
-		return err
-	}
-	return nil
+	file := fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/arp_ignore", dev)
+	return ioutil.WriteFile(file, []byte("0\n"), 0644)
 }
