@@ -194,6 +194,17 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 	var randomPortMapping bool
 	if pod.Labels != nil && pod.Labels[private.LabelKeyNetworkType] == private.LabelValueNetworkTypeNAT {
 		randomPortMapping = true
+	} else {
+		var newPorts []k8s.Port
+		for i := range req.Ports {
+			if req.Ports[i].HostPort != 0 {
+				newPorts = append(newPorts, req.Ports[i])
+			}
+		}
+		if len(newPorts) == 0 {
+			return nil
+		}
+		req.Ports = newPorts
 	}
 	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), randomPortMapping, req.Ports); err != nil {
 		return err
