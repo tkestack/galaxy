@@ -35,7 +35,7 @@ var (
 	flagEbtableRules         = flag.Bool("ebtable-rules", false, "whether galaxy should ensure ebtable-rules")
 	flagApiServer            = flag.String("api-servers", "", "The address of apiserver")
 	flagKubeConf             = flag.String("kubeconf", "", "kube configure file")
-	flagLabelSubnet          = flag.Bool("label-subnet", true, "whether galaxy should label the kubelet node with subnet={ip}-{onesInMask}, this label is used by rackfilter scheduler plugin")
+	flagLabelSubnet          = flag.Bool("label-subnet", true, "whether galaxy should label the kubelet node with subnet={maskedIP}-{onesInMask}, this label is used by rackfilter scheduler plugin")
 	Note                     = `If ipam type is from third party, e.g. zhiyun, galaxy invokes third party ipam binaries to allocate ip.`
 )
 
@@ -191,8 +191,11 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 	if err != nil {
 		return fmt.Errorf("failed to get pod from apiserver: %v", err)
 	}
-	_, portMapping := pod.Annotations[k8s.PortMappingAnnotation]
-	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), portMapping, req.Ports); err != nil {
+	var randomPortMapping bool
+	if pod.Labels != nil && pod.Labels[private.LabelKeyNetworkType] == private.LabelValueNetworkTypeNAT {
+		randomPortMapping = true
+	}
+	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), randomPortMapping, req.Ports); err != nil {
 		return err
 	}
 	data, err := json.Marshal(req.Ports)

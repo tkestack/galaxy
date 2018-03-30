@@ -9,14 +9,15 @@ const (
 var (
 	LabelKeyNetworkType                 = "network"
 	LabelValueNetworkTypeFloatingIP     = "FLOATINGIP"
+	LabelValueNetworkTypeNAT            = "NAT"
 	NodeLabelValueNetworkTypeFloatingIP = "floatingip"
 
 	LabelKeyFloatingIP  = "galaxy.io/floatingip"
 	LabelValueImmutable = "immutable"
 	AnnotationKeyIPInfo = "galaxy.io/ip"
 
-	NetworkTypeOverlay  = NetworkType{String: sets.NewString("", "DEFAULT", "NAT"), CNIType: "galaxy-flannel"}
-	NetworkTypeUnderlay = NetworkType{String: sets.NewString("FLOATINGIP"), CNIType: "galaxy-k8s-vlan"}
+	NetworkTypeOverlay  = NetworkType{String: sets.NewString("", "DEFAULT", LabelValueNetworkTypeNAT), CNIType: "galaxy-flannel"}
+	NetworkTypeUnderlay = NetworkType{String: sets.NewString(LabelValueNetworkTypeFloatingIP), CNIType: "galaxy-k8s-vlan"}
 
 	IPAMTypeZhiyun = "galaxy-zhiyun-ipam"
 )
