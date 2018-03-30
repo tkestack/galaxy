@@ -63,7 +63,7 @@ func (g *Galaxy) newQuitChannel() chan error {
 func (g *Galaxy) Start() error {
 	g.initk8sClient()
 	g.labelSubnet()
-	gc.NewFlannelGC(g.dockerCli, g.newQuitChannel(), g.newQuitChannel())
+	gc.NewFlannelGC(g.dockerCli, g.newQuitChannel(), g.newQuitChannel()).Run()
 	if g.zhiyunConf != nil {
 		gc.NewZhiyunGC(g.dockerCli, g.newQuitChannel(), g.zhiyunConf).Run()
 	}
