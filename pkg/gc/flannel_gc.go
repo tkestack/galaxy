@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -16,21 +17,22 @@ import (
 
 var (
 	flagFlannelGCInterval = flag.Duration("flannel_gc_interval", time.Minute, "Interval of executing flannel network gc")
-	flagAllocatedIPDir    = flag.String("flannel_allocated_ip_dir", "/var/lib/cni/networks/flannel", "IP storage directory of flannel cni plugin")
-	flagBridgeConfDir     = flag.String("flannel_bridge_conf_dir", "/var/lib/cni/flannel", "Bridge configure storage directory of flannel cni plugin")
+	flagAllocatedIPDir    = flag.String("flannel_allocated_ip_dir", "/var/lib/cni/networks", "IP storage directory of flannel cni plugin")
+	flagGCDirs            = flag.String("gc_dirs", "/var/lib/cni/flannel,/var/lib/cni/galaxy,/var/lib/cni/galaxy/port", "Comma separated configure storage directory of cni plugin, the file names in this directory are container ids")
 )
 
 type flannelGC struct {
 	allocatedIPDir string
-	bridgeConfDir  string
+	gcDirs         []string
 	dockerCli      *docker.DockerInterface
 	quit1, quit2   chan error
 }
 
 func NewFlannelGC(dockerCli *docker.DockerInterface, quit1, quit2 chan error) GC {
+	dirs := strings.Split(*flagGCDirs, ",")
 	return &flannelGC{
 		allocatedIPDir: *flagAllocatedIPDir,
-		bridgeConfDir:  *flagBridgeConfDir,
+		gcDirs:         dirs,
 		dockerCli:      dockerCli,
 		quit1:          quit1,
 		quit2:          quit2,
@@ -44,9 +46,9 @@ func (gc *flannelGC) Run() {
 		}
 	}, *flagFlannelGCInterval, gc.quit1)
 	//this is an ensurance routine
-	go wait.UntilQuitSignal("flannel gc cleanup bridge conf", func() {
-		if err := gc.cleanupBridgeConf(); err != nil {
-			glog.Errorf("Error executing flannel gc cleanup bridge conf %v", err)
+	go wait.UntilQuitSignal("cleanup gc_dirs", func() {
+		if err := gc.cleanupGCDirs(); err != nil {
+			glog.Errorf("Error executing cleanup gc_dirs %v", err)
 		}
 	}, *flagFlannelGCInterval*3, gc.quit2)
 }
@@ -84,14 +86,6 @@ func (gc *flannelGC) cleanupIP() error {
 					if err == nil {
 						glog.Infof("Deleted leaky ip file %s container %s", ipFile, containerId)
 					}
-					bridgeConfFile := filepath.Join(gc.bridgeConfDir, containerId)
-					if err := os.Remove(bridgeConfFile); err != nil && !os.IsNotExist(err) {
-						glog.Warningf("Error deleting bridge config file %s: %v", bridgeConfFile, err)
-					} else {
-						if err == nil {
-							glog.Infof("Deleted bridge config file %s", bridgeConfFile)
-						}
-					}
 				}
 			} else {
 				glog.Warningf("Error inspect container %s: %v", containerId, err)
@@ -101,27 +95,29 @@ func (gc *flannelGC) cleanupIP() error {
 	return nil
 }
 
-func (gc *flannelGC) cleanupBridgeConf() error {
-	fis, err := ioutil.ReadDir(gc.bridgeConfDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
+func (gc *flannelGC) cleanupGCDirs() error {
+	for _, dir := range gc.gcDirs {
+		fis, err := ioutil.ReadDir(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
 		}
-		return err
-	}
-	for _, fi := range fis {
-		bridgeConfFile := filepath.Join(gc.bridgeConfDir, fi.Name())
-		if _, err := gc.dockerCli.InspectContainer(fi.Name()); err != nil {
-			if _, ok := err.(docker.ContainerNotFoundError); ok {
-				if err := os.Remove(bridgeConfFile); err != nil && !os.IsNotExist(err) {
-					glog.Warningf("Error deleting bridge config file %s: %v", bridgeConfFile, err)
-				} else {
-					if err == nil {
-						glog.Infof("Deleted bridge config file %s", bridgeConfFile)
+		for _, fi := range fis {
+			file := filepath.Join(dir, fi.Name())
+			if _, err := gc.dockerCli.InspectContainer(fi.Name()); err != nil {
+				if _, ok := err.(docker.ContainerNotFoundError); ok {
+					if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
+						glog.Warningf("Error deleting file %s: %v", file, err)
+					} else {
+						if err == nil {
+							glog.Infof("Deleted file %s", file)
+						}
 					}
+				} else {
+					glog.Warningf("Error inspect container %s: %v", fi.Name(), err)
 				}
-			} else {
-				glog.Warningf("Error inspect container %s: %v", fi.Name(), err)
 			}
 		}
 	}
