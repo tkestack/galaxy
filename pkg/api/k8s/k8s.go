@@ -26,7 +26,6 @@ const (
 	K8S_POD_INFRA_CONTAINER_ID = "K8S_POD_INFRA_CONTAINER_ID"
 
 	stateDir                   = "/var/lib/cni/galaxy/port"
-	PortMappingAnnotation      = "network.kubernetes.io/portmapping"
 	PortMappingPortsAnnotation = "network.kubernetes.io/portmappingports"
 )
 

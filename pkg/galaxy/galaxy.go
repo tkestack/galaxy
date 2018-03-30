@@ -37,7 +37,6 @@ type Galaxy struct {
 	pmhandler    *portmapping.PortMappingHandler
 	client       *kubernetes.Clientset
 	podStore     corev1lister.PodLister
-	ipamType     string
 	zhiyunConf   *zhiyunapi.Conf
 }
 
@@ -123,7 +122,6 @@ func (g *Galaxy) parseConfig() error {
 				ipamMap["node_ip"] = flags.GetNodeIP()
 				if typ, hasType := ipamMap["type"]; hasType {
 					if typeStr, isStr := typ.(string); isStr {
-						g.ipamType = typeStr
 						if typeStr == private.IPAMTypeZhiyun {
 							var zhiyunConf zhiyunapi.Conf
 							data, _ := json.Marshal(ipamMap)
@@ -144,11 +142,7 @@ func (g *Galaxy) parseConfig() error {
 func (g *Galaxy) initk8sClient() {
 	if *flagApiServer == "" && *flagKubeConf == "" {
 		// galaxy currently not support running in pod, so either flagApiServer or flagKubeConf should be specified
-		glog.Infof("apiserver address unknown")
-		if g.ipamType != "" {
-			glog.Fatalf("ipam type is %s, but apiserver address unknown", g.ipamType)
-		}
-		return
+		glog.Fatal("apiserver address unknown")
 	}
 	clientConfig, err := clientcmd.BuildConfigFromFlags(*flagApiServer, *flagKubeConf)
 	if err != nil {
