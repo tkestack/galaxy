@@ -29,7 +29,8 @@ import:
   repo: https://github.com/kubernetes/client-go.git
   version: kubernetes-1.9.3
 - package: k8s.io/api
-  version: 006a217681ae70cbacdd66a5e2fca1a61a8ff28e
+  repo: http://git.code.oa.com/gaiastack/api.git
+  version: b66853cd14eca559977c60c0a6b91d47b32edfc1
 - package: k8s.io/apimachinery
   version: 68f9c3a1feb3140df59c67ced62d3a5df8e6c9c2
 - package: k8s.io/kube-openapi

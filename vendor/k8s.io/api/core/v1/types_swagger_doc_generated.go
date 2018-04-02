@@ -862,6 +862,25 @@ func (LoadBalancerStatus) SwaggerDoc() map[string]string {
 	return map_LoadBalancerStatus
 }
 
+var map_LocalDisk = map[string]string{
+	"localDir":    "Local directory",
+	"capacity":    "Total capacity in bytes",
+	"allocatable": "Allocatable capacity (in bytes) represents the disk capacity that are available for scheduling",
+}
+
+func (LocalDisk) SwaggerDoc() map[string]string {
+	return map_LocalDisk
+}
+
+var map_LocalDiskSource = map[string]string{
+	"":         "Represents local disk claim for a pod",
+	"diskSize": "Requested local disk size",
+}
+
+func (LocalDiskSource) SwaggerDoc() map[string]string {
+	return map_LocalDiskSource
+}
+
 var map_LocalObjectReference = map[string]string{
 	"":     "LocalObjectReference contains enough information to let you locate the referenced object inside the same namespace.",
 	"name": "Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
@@ -1075,6 +1094,7 @@ var map_NodeStatus = map[string]string{
 	"images":          "List of container images on this node",
 	"volumesInUse":    "List of attachable volumes in use (mounted) by the node.",
 	"volumesAttached": "List of volumes that are attached to the node.",
+	"localDisks":      "List of local disks that are allocated on the node.",
 }
 
 func (NodeStatus) SwaggerDoc() map[string]string {
@@ -2093,6 +2113,18 @@ func (Sysctl) SwaggerDoc() map[string]string {
 	return map_Sysctl
 }
 
+var map_TCECloudBlockStorageVolumeSource = map[string]string{
+	"":         "Represents CBS in TCE.",
+	"volumeID": "Unique id of the cbs resource. Used to identify the disk in tce.",
+	"idcName":  "IDC name that the CBS resource belongs to.",
+	"fsType":   "Filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"xfs\" if unspecified.",
+	"readOnly": "Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
+}
+
+func (TCECloudBlockStorageVolumeSource) SwaggerDoc() map[string]string {
+	return map_TCECloudBlockStorageVolumeSource
+}
+
 var map_TCPSocketAction = map[string]string{
 	"":     "TCPSocketAction describes an action based on opening a socket",
 	"port": "Number or name of the port to access on the container. Number must be in the range 1 to 65535. Name must be an IANA_SVC_NAME.",
@@ -2200,6 +2232,8 @@ var map_VolumeSource = map[string]string{
 	"portworxVolume":       "PortworxVolume represents a portworx volume attached and mounted on kubelets host machine",
 	"scaleIO":              "ScaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes.",
 	"storageos":            "StorageOS represents a StorageOS volume attached and mounted on Kubernetes nodes.",
+	"localDisk":            "LocalDisk represents a local disk request for a pod.",
+	"tceCloudBlockStorage": "TCECloudBlockStorage represents a TCE CBS mount on the host and bind mount to the pod.",
 }
 
 func (VolumeSource) SwaggerDoc() map[string]string {
