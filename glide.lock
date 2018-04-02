@@ -1,5 +1,5 @@
-hash: b6fad50cf4e66b13f69bc44bac84687377d49b5f20f72e3ec56e1903825ae87f
-updated: 2018-03-12T10:49:40.118891+08:00
+hash: 0c068cac3465868065811a34c8aa4f632d27374a83aaed9507f41b344c1b8bed
+updated: 2018-03-30T19:05:49.017333+08:00
 imports:
 - name: git.code.oa.com/gaia/tapp-controller
   version: 9a7ae8cd85dd18303582bd5ca61f0ac33b60a3cc
@@ -207,7 +207,8 @@ imports:
 - name: gopkg.in/yaml.v2
   version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
 - name: k8s.io/api
-  version: 006a217681ae70cbacdd66a5e2fca1a61a8ff28e
+  version: b66853cd14eca559977c60c0a6b91d47b32edfc1
+  repo: http://git.code.oa.com/gaiastack/api.git
   subpackages:
   - admissionregistration/v1alpha1
   - admissionregistration/v1beta1
