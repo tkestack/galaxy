@@ -50,6 +50,10 @@ type Interface interface {
 	ListSets() ([]string, error)
 	// GetVersion returns the "X.Y" version string for ipset.
 	GetVersion() (string, error)
+
+	AddEntryWithOptions(entry *Entry, set *IPSet, ignoreExistErr bool) error
+
+	DelEntryWithOptions(set, entry string, options ...string) error
 }
 
 // IPSetCmd represents the ipset util.  We use ipset command for ipset execute.
@@ -93,7 +97,7 @@ type IPSet struct {
 // Validate checks if a given ipset is valid or not.
 func (set *IPSet) Validate() bool {
 	// Check if protocol is valid for `HashIPPort`, `HashIPPortIP` and `HashIPPortNet` type set.
-	if set.SetType == HashIPPort || set.SetType == HashIPPortIP || set.SetType == HashIPPortNet {
+	if set.SetType == HashIPPort || set.SetType == HashIPPortIP || set.SetType == HashIPPortNet || set.SetType == HashNet || set.SetType == HashNetPort {
 		if valid := validateHashFamily(set.HashFamily); !valid {
 			return false
 		}
@@ -139,6 +143,8 @@ type Entry struct {
 	IP2 string
 	// SetType is the type of ipset where the entry exists.
 	SetType Type
+	//  [ timeout value ] [ packets value ] [ bytes value ] [ comment string ] [ skbmark value ] [ skbprio value ] [ skbqueue value ]
+	Options []string
 }
 
 // Validate checks if a given ipset entry is valid or not.  The set parameter is the ipset that entry belongs to.
@@ -148,6 +154,11 @@ func (e *Entry) Validate(set *IPSet) bool {
 		return false
 	}
 	switch e.SetType {
+	case HashIP:
+		if net.ParseIP(e.IP) == nil {
+			glog.Errorf("Error parsing entry %v ip address %v for ipset %v", e, e.IP, set)
+			return false
+		}
 	case HashIPPort:
 		// set default protocol to tcp if empty
 		if len(e.Protocol) == 0 {
@@ -217,6 +228,27 @@ func (e *Entry) Validate(set *IPSet) bool {
 			glog.Errorf("Entry %v port number %d is not in the port range %s of its ipset %v", e, e.Port, set.PortRange, set)
 			return false
 		}
+	case HashNet:
+		// Net can not be empty for `hash:net,port` type ip set
+		if _, ipNet, _ := net.ParseCIDR(e.Net); ipNet == nil {
+			glog.Errorf("Error parsing entry %v ip net %v for ipset %v", e, e.Net, set)
+			return false
+		}
+	case HashNetPort:
+		// set default protocol to tcp if empty
+		if len(e.Protocol) == 0 {
+			e.Protocol = ProtocolTCP
+		}
+
+		if valid := validateProtocol(e.Protocol); !valid {
+			return false
+		}
+
+		// Net can not be empty for `hash:net,port` type ip set
+		if _, ipNet, _ := net.ParseCIDR(e.Net); ipNet == nil {
+			glog.Errorf("Error parsing entry %v ip net %v for ipset %v", e, e.Net, set)
+			return false
+		}
 	}
 
 	return true
@@ -225,6 +257,9 @@ func (e *Entry) Validate(set *IPSet) bool {
 // String returns the string format for ipset entry.
 func (e *Entry) String() string {
 	switch e.SetType {
+	case HashIP:
+		// Entry{192.168.1.1} -> 192.168.1.1
+		return fmt.Sprintf("%s", e.IP)
 	case HashIPPort:
 		// Entry{192.168.1.1, udp, 53} -> 192.168.1.1,udp:53
 		// Entry{192.168.1.2, tcp, 8080} -> 192.168.1.2,tcp:8080
@@ -237,6 +272,12 @@ func (e *Entry) String() string {
 		// Entry{192.168.1.2, udp, 80, 10.0.1.0/24} -> 192.168.1.2,udp:80,10.0.1.0/24
 		// Entry{192.168.2,25, tcp, 8080, 10.1.0.0/16} -> 192.168.2,25,tcp:8080,10.1.0.0/16
 		return fmt.Sprintf("%s,%s:%s,%s", e.IP, e.Protocol, strconv.Itoa(e.Port), e.Net)
+	case HashNet:
+		// Entry{udp, 10.0.1.0/24} -> 10.0.1.0/24
+		return fmt.Sprintf("%s", e.Net)
+	case HashNetPort:
+		// Entry{udp, 80, 10.0.1.0/24} -> 10.0.1.0/24,udp:80
+		return fmt.Sprintf("%s,%s:%s", e.Net, e.Protocol, strconv.Itoa(e.Port))
 	case BitmapPort:
 		// Entry{53} -> 53
 		// Entry{8080} -> 8080
@@ -302,6 +343,7 @@ func (runner *runner) createSet(set *IPSet, ignoreExistErr bool) error {
 	if ignoreExistErr {
 		args = append(args, "-exist")
 	}
+	glog.V(5).Infof("running ipset %v", args)
 	if _, err := runner.exec.Command(IPSetCmd, args...).CombinedOutput(); err != nil {
 		return fmt.Errorf("error creating ipset %s, error: %v", set.Name, err)
 	}
@@ -322,8 +364,31 @@ func (runner *runner) AddEntry(entry string, set *IPSet, ignoreExistErr bool) er
 	return nil
 }
 
+func (runner *runner) AddEntryWithOptions(entry *Entry, set *IPSet, ignoreExistErr bool) error {
+	args := []string{"add"}
+	if ignoreExistErr {
+		args = append(args, "-exist")
+	}
+	args = append(args, set.Name, entry.String())
+	args = append(args, entry.Options...)
+	glog.V(5).Infof("running ipset %v", args)
+	if _, err := runner.exec.Command(IPSetCmd, args...).CombinedOutput(); err != nil {
+		return fmt.Errorf("error adding entry %s, error: %v", entry, err)
+	}
+	return nil
+}
+
 // DelEntry is used to delete the specified entry from the set.
 func (runner *runner) DelEntry(entry string, set string) error {
+	if _, err := runner.exec.Command(IPSetCmd, "del", set, entry).CombinedOutput(); err != nil {
+		return fmt.Errorf("error deleting entry %s: from set: %s, error: %v", entry, set, err)
+	}
+	return nil
+}
+
+func (runner *runner) DelEntryWithOptions(set, entry string, options ...string) error {
+	// ipset del should not add options
+	glog.V(5).Infof("running ipset %v", append([]string{"del", set, entry}))
 	if _, err := runner.exec.Command(IPSetCmd, "del", set, entry).CombinedOutput(); err != nil {
 		return fmt.Errorf("error deleting entry %s: from set: %s, error: %v", entry, set, err)
 	}
@@ -356,6 +421,7 @@ func (runner *runner) FlushSet(set string) error {
 
 // DestroySet is used to destroy a named set.
 func (runner *runner) DestroySet(set string) error {
+	glog.V(5).Infof("running ipset destroy %s", set)
 	if out, err := runner.exec.Command(IPSetCmd, "destroy", set).CombinedOutput(); err != nil {
 		return fmt.Errorf("error destroying set %s, error: %v(%s)", set, err, out)
 	}

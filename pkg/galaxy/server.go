@@ -134,7 +134,7 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (types.Result, error) {
 		pod         *corev1.Pod
 	)
 	if err := wait.PollImmediate(time.Millisecond*500, 5*time.Second, func() (done bool, err error) {
-		pod, err = g.podStore.Pods(req.PodNamespace).Get(req.PodName)
+		pod, err = g.podInformer.Lister().Pods(req.PodNamespace).Get(req.PodName)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				glog.Warningf("can't find pod %s_%s, retring", req.PodName, req.PodNamespace)

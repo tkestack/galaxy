@@ -20,6 +20,7 @@ package ipset
 type Type string
 
 const (
+	HashIP Type = "hash:ip"
 	// HashIPPort represents the `hash:ip,port` type ipset.  The hash:ip,port is similar to hash:ip but
 	// you can store IP address and protocol-port pairs in it.  TCP, SCTP, UDP, UDPLITE, ICMP and ICMPv6 are supported
 	// with port numbers/ICMP(v6) types and other protocol numbers without port information.
@@ -35,6 +36,10 @@ const (
 	// BitmapPort represents the `bitmap:port` type ipset.  The bitmap:port set type uses a memory range, where each bit
 	// represents one TCP/UDP port.  A bitmap:port type of set can store up to 65535 ports.
 	BitmapPort Type = "bitmap:port"
+
+	HashNet Type = "hash:net"
+
+	HashNetPort Type = "hash:net,port"
 )
 
 // DefaultPortRange defines the default bitmap:port valid port range.
@@ -53,8 +58,11 @@ const (
 
 // ValidIPSetTypes defines the supported ip set type.
 var ValidIPSetTypes = []Type{
+	HashIP,
 	HashIPPort,
 	HashIPPortIP,
 	BitmapPort,
 	HashIPPortNet,
+	HashNet,
+	HashNetPort,
 }

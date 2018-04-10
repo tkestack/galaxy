@@ -52,6 +52,8 @@ type Interface interface {
 	EnsureRule(position RulePosition, table Table, chain Chain, args ...string) (bool, error)
 	// DeleteRule checks if the specified rule is present and, if so, deletes it.
 	DeleteRule(table Table, chain Chain, args ...string) error
+	// ListRule list rules in a chain
+	ListRule(table Table, chain Chain, args ...string) ([]string, error)
 	// IsIpv6 returns true if this is managing ipv6 tables
 	IsIpv6() bool
 	// SaveInto calls `iptables-save` for table and stores result in a given buffer.
@@ -306,6 +308,19 @@ func (runner *runner) DeleteRule(table Table, chain Chain, args ...string) error
 	return nil
 }
 
+// ListRule is part of Interface.
+func (runner *runner) ListRule(table Table, chain Chain, args ...string) ([]string, error) {
+	fullArgs := makeFullArgs(table, chain, args...)
+
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	out, err := runner.run(opListRule, fullArgs)
+	if err != nil {
+		return nil, fmt.Errorf("error listing rule: %v: %s", err, out)
+	}
+	return strings.Split(string(out), "\n"), nil
+}
+
 func (runner *runner) IsIpv6() bool {
 	return runner.protocol == ProtocolIpv6
 }
@@ -512,6 +527,7 @@ const (
 	opAppendRule  operation = "-A"
 	opCheckRule   operation = "-C"
 	opDeleteRule  operation = "-D"
+	opListRule    operation = "-S"
 )
 
 func makeFullArgs(table Table, chain Chain, args ...string) []string {
