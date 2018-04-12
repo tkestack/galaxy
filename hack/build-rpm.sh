@@ -56,7 +56,7 @@ CURDIR=${PWD}
 GITCOMMITNUM=$(git log --oneline|wc -l|sed -e 's/^[ \t]*//')
 GITVERSION=$(git log --first-parent -1 --oneline | awk '{print $1}')
 VERSION=$(git describe --contains --all HEAD | sed -e 's/branch-//')
-if [ -n "$BRANCH" ]; then VERSION=$(echo $BRANCH | sed -e 's/branch-//'); fi
+if [ -n "$BRANCH" ]; then VERSION=$(echo $BRANCH | sed -e 's/branch-//' | sed -e 's/.*\///'); fi
 
 for NAME in galaxy galaxy-ipam; do
     tar_code
