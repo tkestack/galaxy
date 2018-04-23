@@ -579,8 +579,8 @@ func nameHash(data string) string {
 	return encoded[:16]
 }
 
-// syncPodIPInIPSet ensures pod ip is expected in each policy's ipset
-func (p *PolicyManager) syncPodIPInIPSet(pod *corev1.Pod, add bool) {
+// SyncPodIPInIPSet ensures pod ip is expected in each policy's ipset
+func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 	var polices []policy
 	p.Lock()
 	polices = p.policies

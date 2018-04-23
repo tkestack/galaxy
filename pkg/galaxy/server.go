@@ -99,22 +99,30 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 		defer func() {
 			glog.Infof("%v, data %s, err %v, %s-", req, string(data), err, start.Format(time.StampMicro))
 		}()
-		result, err1 := g.cmdAdd(req)
+		pod, err := g.getPod(req.PodName, req.PodNamespace)
+		if err != nil {
+			return nil, err
+		}
+		result, err1 := g.cmdAdd(req, pod)
 		if err1 != nil {
 			err = err1
 		} else {
-			if result != nil {
+			result020, err2 := convertResult(result)
+			if err2 != nil {
+				err = err2
+			} else {
 				data, err = json.Marshal(result)
-				if result020, ok := result.(*t020.Result); !ok {
-					err = fmt.Errorf("faild to convert result to 020 result")
-				} else {
-					err = g.setupPortMapping(req, req.ContainerID, result020)
+				err = g.setupPortMapping(req, req.ContainerID, result020, pod)
+				pod.Status.PodIP = result020.IP4.IP.IP.String()
+				if err := g.pm.SyncPodChains(pod); err != nil {
+					glog.Warning(err)
 				}
+				g.pm.SyncPodIPInIPSet(pod, true)
 			}
 		}
 	} else if req.Command == cniutil.COMMAND_DEL {
 		defer glog.Infof("%v err %v, %s-", req, err, start.Format(time.StampMicro))
-		err = g.cmdDel(req)
+		err = cniutil.CmdDel(req.ContainerID, req.CmdArgs, g.netConf)
 		if err == nil {
 			err = g.cleanupPortMapping(req)
 		}
@@ -124,28 +132,12 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 	return
 }
 
-func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (types.Result, error) {
+func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Result, error) {
 	if err := disableIPv6(req.Netns); err != nil {
 		glog.Warningf("Error disable ipv6 %v", err)
 	}
 	// get network type from pods' labels
-	var (
-		networkInfo cniutil.NetworkInfo
-		pod         *corev1.Pod
-	)
-	if err := wait.PollImmediate(time.Millisecond*500, 5*time.Second, func() (done bool, err error) {
-		pod, err = g.podInformer.Lister().Pods(req.PodNamespace).Get(req.PodName)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				glog.Warningf("can't find pod %s_%s, retring", req.PodName, req.PodNamespace)
-				return false, nil
-			}
-			return false, err
-		}
-		return true, nil
-	}); err != nil {
-		return nil, fmt.Errorf("failed to get pod %s_%s: %v", req.PodName, req.PodNamespace, err)
-	}
+	var networkInfo cniutil.NetworkInfo
 	if pod.Labels == nil {
 		networkInfo = cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
 	} else {
@@ -164,32 +156,13 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest) (types.Result, error) {
 	return cniutil.CmdAdd(req.ContainerID, req.CmdArgs, g.netConf, networkInfo)
 }
 
-func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest) error {
-	return cniutil.CmdDel(req.ContainerID, req.CmdArgs, g.netConf)
-}
-
-func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string, result *t020.Result) error {
-	if g.client == nil {
-		return nil
-	}
+func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string, result *t020.Result, pod *corev1.Pod) error {
 	if len(req.Ports) == 0 {
 		return nil
 	}
-	// we have to fulfill ip field of the current pod
-	if result.IP4 == nil {
-		return fmt.Errorf("CNI plugin reported no IPv4 address")
-	}
-	ip4 := result.IP4.IP.IP.To4()
-	if ip4 == nil {
-		return fmt.Errorf("CNI plugin reported an invalid IPv4 address: %+v.", result.IP4)
-	}
 	for i := range req.Ports {
-		req.Ports[i].PodIP = ip4.String()
+		req.Ports[i].PodIP = result.IP4.IP.IP.To4().String()
 		req.Ports[i].PodName = req.PodName
-	}
-	pod, err := g.client.CoreV1().Pods(req.PodNamespace).Get(req.PodName, v1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to get pod from apiserver: %v", err)
 	}
 	var randomPortMapping bool
 	if pod.Labels != nil && pod.Labels[private.LabelKeyNetworkType] == private.LabelValueNetworkTypeNAT {
@@ -269,4 +242,40 @@ func disableIPv6(path string) error {
 		return fmt.Errorf("reexec to set IPv6 failed: %v", err)
 	}
 	return nil
+}
+
+func (g *Galaxy) getPod(name, namespace string) (*corev1.Pod, error) {
+	var pod *corev1.Pod
+	if err := wait.PollImmediate(time.Millisecond*500, 5*time.Second, func() (done bool, err error) {
+		pod, err = g.podInformer.Lister().Pods(namespace).Get(name)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				glog.Warningf("can't find pod %s_%s, retring", name, namespace)
+				return false, nil
+			}
+			return false, err
+		}
+		return true, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to get pod %s_%s: %v", name, namespace, err)
+	}
+	return pod, nil
+}
+
+func convertResult(result types.Result) (*t020.Result, error) {
+	if result == nil {
+		return nil, fmt.Errorf("result is nil")
+	}
+	result020, ok := result.(*t020.Result)
+	if !ok {
+		return nil, fmt.Errorf("faild to convert result to 020 result")
+	}
+	if result020.IP4 == nil {
+		return nil, fmt.Errorf("CNI plugin reported no IPv4 address")
+	}
+	ip4 := result020.IP4.IP.IP.To4()
+	if ip4 == nil {
+		return nil, fmt.Errorf("CNI plugin reported an invalid IPv4 address: %+v.", result020.IP4)
+	}
+	return result020, nil
 }

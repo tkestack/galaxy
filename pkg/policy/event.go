@@ -17,7 +17,7 @@ func (p *PolicyManager) UpdatePod(oldPod, newPod *corev1.Pod) error {
 		}
 	}
 	if newPod.Status.PodIP != "" {
-		p.syncPodIPInIPSet(newPod, true)
+		p.SyncPodIPInIPSet(newPod, true)
 	}
 	return nil
 }
@@ -29,7 +29,7 @@ func (p *PolicyManager) DeletePod(pod *corev1.Pod) error {
 		}
 	}
 	if pod.Status.PodIP != "" {
-		p.syncPodIPInIPSet(pod, false)
+		p.SyncPodIPInIPSet(pod, false)
 	}
 	return nil
 }
