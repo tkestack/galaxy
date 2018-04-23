@@ -73,3 +73,9 @@ CNI_ARGS="IP=192.168.33.3" CNI_COMMAND="ADD" CNI_CONTAINERID=ctn1 CNI_NETNS=/var
 # Release
 
 hack/build-rpm.sh
+
+# Document
+
+- [Design](doc/design.md)
+- [Floating IP申请](doc/ip.md)
+- [Floating IP配置](doc/configip.md)
