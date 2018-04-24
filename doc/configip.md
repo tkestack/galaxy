@@ -1,10 +1,12 @@
+[TOC]
+
 # 套件FloatingIP配置
 
 ## 1. 手写IP配置
 
 ### 套件配置apiswitch ip池
 
-![image](doc/apiswitch-ip.png)
+![image](image/apiswitch-ip.png)
 
 ```
 "ipam":{
@@ -25,7 +27,7 @@
 
 ### 套件配置kube-scheduler rackfilter配置项
 
-![image](doc/scheduler-policy-file.png)
+![image](image/scheduler-policy-file.png)
 
 scheduler.own.args增加参数：
 
@@ -33,7 +35,7 @@ scheduler.own.args增加参数：
 --policy-config-file=/etc/kubernetes/kube-scheduler-policy-config.json
 ```
 
-![image](doc/scheduler-policy.png)
+![image](image/scheduler-policy.png)
 
 scheduler-policy-env-template配置框中填入以下样例
 
@@ -92,13 +94,13 @@ scheduler-policy-env-template配置框中填入以下样例
 
 ### 套件配置apiswitch参数
 
-![image](doc/apiswitch-floatingip-from.png)
+![image](image/apiswitch-floatingip-from.png)
 
 套件上设置floatingip.from为1
 
 ### 套件配置kube-scheduler从configmap读取rackfilter配置
 
-![image](doc/scheduler-policy-file.png)
+![image](image/scheduler-policy-file.png)
 
 scheduler.own.args增加参数：
 
@@ -106,7 +108,7 @@ scheduler.own.args增加参数：
 --policy-config-file=/etc/kubernetes/kube-scheduler-policy-config.json
 ```
 
-![image](doc/scheduler-policy.png)
+![image](image/scheduler-policy.png)
 
 scheduler-policy-env-template配置框中填入以下配置
 
