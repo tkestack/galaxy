@@ -72,7 +72,10 @@ func (d *VlanDriver) Init() error {
 		if err := utils.UnSetArpIgnore(d.Device); err != nil {
 			return err
 		}
-		return utils.SetProxyArp(d.Device)
+		if err := utils.SetProxyArp(d.Device); err != nil {
+			return err
+		}
+		return utils.EnableNonlocalBind()
 	}
 	v4Addr, err := netlink.AddrList(device, netlink.FAMILY_V4)
 	if err != nil {
