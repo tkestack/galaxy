@@ -56,7 +56,11 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 	//send Gratuitous ARP to let switch knows IP floats onto this node
 	//ignore errors as we can't print logs and we do this as best as we can
-	utils.SendGratuitousARP(result020, args)
+	if d.PureMode() {
+		utils.SendGratuitousARP(d.Device, result020.IP4.IP.IP.String(), "")
+	} else {
+		utils.SendGratuitousARP(args.IfName, result020.IP4.IP.IP.String(), args.Netns)
+	}
 	result020.DNS = conf.DNS
 	return result020.Print()
 }
