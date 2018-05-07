@@ -147,7 +147,12 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 		} else if private.NetworkTypeUnderlay.Has(networkType) {
 			if pod.Annotations != nil && pod.Annotations[private.AnnotationKeyIPInfo] != "" {
 				req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.IPInfoInArgs, pod.Annotations[private.AnnotationKeyIPInfo])
+			} else {
+				if *flagMaster == "" {
+					return nil, fmt.Errorf("no ipinfo in pod annotation, also apiswitch url is unkown, check if galaxy-ipam scheduler plugin is working")
+				}
 			}
+			glog.V(4).Infof("pod %s_%s ip %s", pod.Name, pod.Namespace, pod.Annotations[private.AnnotationKeyIPInfo])
 			networkInfo = cniutil.NetworkInfo{private.NetworkTypeUnderlay.CNIType: {}}
 		} else {
 			return nil, fmt.Errorf("unsupported network type: %s", networkType)
