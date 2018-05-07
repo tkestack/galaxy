@@ -99,20 +99,28 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 		defer func() {
 			glog.Infof("%v, data %s, err %v, %s-", req, string(data), err, start.Format(time.StampMicro))
 		}()
-		pod, err := g.getPod(req.PodName, req.PodNamespace)
+		var pod *corev1.Pod
+		pod, err = g.getPod(req.PodName, req.PodNamespace)
 		if err != nil {
-			return nil, err
+			return
 		}
 		result, err1 := g.cmdAdd(req, pod)
 		if err1 != nil {
 			err = err1
+			return
 		} else {
 			result020, err2 := convertResult(result)
 			if err2 != nil {
 				err = err2
 			} else {
 				data, err = json.Marshal(result)
+				if err != nil {
+					return
+				}
 				err = g.setupPortMapping(req, req.ContainerID, result020, pod)
+				if err != nil {
+					return
+				}
 				pod.Status.PodIP = result020.IP4.IP.IP.String()
 				if err := g.pm.SyncPodChains(pod); err != nil {
 					glog.Warning(err)
@@ -158,6 +166,7 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 			return nil, fmt.Errorf("unsupported network type: %s", networkType)
 		}
 	}
+	glog.V(4).Infof("pod %s_%s networkInfo %v", pod.Name, pod.Namespace, networkInfo)
 	return cniutil.CmdAdd(req.ContainerID, req.CmdArgs, g.netConf, networkInfo)
 }
 
