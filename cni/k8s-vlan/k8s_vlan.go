@@ -40,10 +40,17 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return err
 	}
 	if d.MacVlanMode() {
-		if err := d.CreateVlanDevice(vlanId); err != nil {
+		if err := d.MaybeCreateVlanDevice(vlanId); err != nil {
 			return err
 		}
 		if err := utils.MacVlanConnectsHostWithContainer(result020, args, d.DeviceIndex); err != nil {
+			return err
+		}
+	} else if d.IPVlanMode() {
+		if err := d.MaybeCreateVlanDevice(vlanId); err != nil {
+			return err
+		}
+		if err := utils.IPVlanConnectsHostWithContainer(result020, args, d.DeviceIndex); err != nil {
 			return err
 		}
 	} else {

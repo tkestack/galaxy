@@ -62,7 +62,7 @@ func (d *VlanDriver) Init() error {
 		d.vlanParentIndex = device.Attrs().ParentIndex
 		//glog.Infof("root device %s is a vlan device, parent index %d", d.Device, d.vlanParentIndex)
 	}
-	if d.MacVlanMode() {
+	if d.MacVlanMode() || d.IPVlanMode() {
 		return nil
 	}
 	if d.PureMode() {
@@ -212,7 +212,7 @@ func (d *VlanDriver) BridgeNameForVlan(vlanId uint16) string {
 	return bridgeName
 }
 
-func (d *VlanDriver) CreateVlanDevice(vlanId uint16) error {
+func (d *VlanDriver) MaybeCreateVlanDevice(vlanId uint16) error {
 	if vlanId == 0 {
 		return nil
 	}
@@ -244,6 +244,10 @@ func (d *VlanDriver) createVlanDevice(vlanId uint16) (netlink.Link, error) {
 
 func (d *VlanDriver) MacVlanMode() bool {
 	return d.Switch == "macvlan"
+}
+
+func (d *VlanDriver) IPVlanMode() bool {
+	return d.Switch == "ipvlan"
 }
 
 func (d *VlanDriver) PureMode() bool {
