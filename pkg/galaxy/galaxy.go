@@ -13,19 +13,21 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
 	k8sutil "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/utils"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
+	"git.code.oa.com/gaiastack/galaxy/pkg/policy"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/informers"
+	corev1informer "k8s.io/client-go/informers/core/v1"
+	networkingv1informer "k8s.io/client-go/informers/networking/v1"
 	"k8s.io/client-go/kubernetes"
-	corev1lister "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -36,8 +38,12 @@ type Galaxy struct {
 	netConf      map[string]map[string]interface{}
 	pmhandler    *portmapping.PortMappingHandler
 	client       *kubernetes.Clientset
-	podStore     corev1lister.PodLister
 	zhiyunConf   *zhiyunapi.Conf
+	pm           *policy.PolicyManager
+	*eventhandler.PodEventHandler
+	plcyHandler  *eventhandler.NetworkPolicyEventHandler
+	podInformer  corev1informer.PodInformer
+	plcyInformer networkingv1informer.NetworkPolicyInformer
 }
 
 func NewGalaxy() (*Galaxy, error) {
@@ -62,6 +68,8 @@ func (g *Galaxy) newQuitChannel() chan error {
 
 func (g *Galaxy) Start() error {
 	g.initk8sClient()
+	g.pm = policy.New(g.client)
+	g.initInformers()
 	g.labelSubnet()
 	gc.NewFlannelGC(g.dockerCli, g.newQuitChannel(), g.newQuitChannel()).Run()
 	if g.zhiyunConf != nil {
@@ -73,6 +81,7 @@ func (g *Galaxy) Start() error {
 		firewall.SetupEbtables(g.newQuitChannel())
 	}
 	firewall.EnsureIptables(g.pmhandler, g.newQuitChannel())
+	go wait.Forever(g.pm.Run, time.Minute)
 	return g.startServer()
 }
 
@@ -157,52 +166,70 @@ func (g *Galaxy) initk8sClient() {
 		glog.Fatalf("Can not generate client from config: error(%v)", err)
 	}
 	glog.Infof("apiserver address %s, kubeconf %s", *flagApiServer, *flagKubeConf)
-	lw := cache.NewListWatchFromClient(g.client.CoreV1().RESTClient(), "pods", v1.NamespaceAll, fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname("")))
-	indexer, r := cache.NewNamespaceKeyedIndexerAndReflector(lw, &corev1.Pod{}, 0)
-	go r.Run(make(chan struct{}))
-	g.podStore = corev1lister.NewPodLister(indexer)
+}
+
+func (g *Galaxy) initInformers() {
+	//podInformerFactory := informers.NewFilteredSharedInformerFactory(g.client, time.Minute, v1.NamespaceAll, func(listOptions *v1.ListOptions) {
+	//	listOptions.FieldSelector = fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname("")).String()
+	//})
+	podInformerFactory := informers.NewSharedInformerFactory(g.client, 0)
+	networkingInformerFactory := informers.NewSharedInformerFactory(g.client, 0)
+	g.podInformer = podInformerFactory.Core().V1().Pods()
+	g.plcyInformer = networkingInformerFactory.Networking().V1().NetworkPolicies()
+	g.PodEventHandler = eventhandler.NewPodEventHandler(g.pm)
+	g.plcyHandler = eventhandler.NewNetworkPolicyEventHandler(g.pm)
+	g.podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    g.OnAdd,
+		UpdateFunc: g.OnUpdate,
+		DeleteFunc: g.OnDelete,
+	})
+	g.plcyInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    g.plcyHandler.OnAdd,
+		UpdateFunc: g.plcyHandler.OnUpdate,
+		DeleteFunc: g.plcyHandler.OnDelete,
+	})
+	go podInformerFactory.Start(make(chan struct{}))
+	go networkingInformerFactory.Start(make(chan struct{}))
 }
 
 // labelSubnet labels kubelet on this node with subnet=IP-OnesInMask to provide rack information for kube-scheduler
 // rackfilter plugin to work
 func (g *Galaxy) labelSubnet() {
-	if g.client != nil {
-		if !(*flagLabelSubnet) {
-			return
-		}
-		go wait.Forever(func() {
-			nodeName := k8s.GetHostname("") //TODO get hostnameOverride from kubelet config
-			for i := 0; i < 5; i++ {
-				node, err := g.client.CoreV1().Nodes().Get(nodeName, v1.GetOptions{})
-				if err != nil {
-					glog.Warningf("failed to get node %s from apiserver", nodeName)
-					return
-				}
-				if node.Labels == nil {
-					node.Labels = make(map[string]string)
-				}
-				if subnet, ok := node.Labels["subnet"]; ok {
-					if subnet != strings.Replace(flags.GetNodeIP(), "/", "-", 1) {
-						glog.Infof("kubernete label subnet=%s is not created by galaxy. galaxy won't change this label", subnet, strings.Replace(flags.GetNodeIP(), "/", "-", 1))
-					}
-					return
-				}
-				_, ipNet, err := net.ParseCIDR(flags.GetNodeIP())
-				if err != nil {
-					glog.Errorf("invalid node ip %s", flags.GetNodeIP())
-					return
-				}
-				node.Labels["subnet"] = strings.Replace(ipNet.String(), "/", "-", 1) //cidr=10.235.7.146/24 -> subnet=10.235.7.0-24
-				_, err = g.client.CoreV1().Nodes().Update(node)
-				if err == nil {
-					glog.Infof("created kubelet label subnet=%s", node.Labels["subnet"])
-					return
-				}
-				glog.Warningf("failed to update node label: %v", err)
-				if !k8sutil.ShouldRetry(err) {
-					return
-				}
-			}
-		}, 3*time.Minute)
+	if !(*flagLabelSubnet) {
+		return
 	}
+	go wait.Forever(func() {
+		nodeName := k8s.GetHostname("") //TODO get hostnameOverride from kubelet config
+		for i := 0; i < 5; i++ {
+			node, err := g.client.CoreV1().Nodes().Get(nodeName, v1.GetOptions{})
+			if err != nil {
+				glog.Warningf("failed to get node %s from apiserver", nodeName)
+				return
+			}
+			if node.Labels == nil {
+				node.Labels = make(map[string]string)
+			}
+			if subnet, ok := node.Labels["subnet"]; ok {
+				if subnet != strings.Replace(flags.GetNodeIP(), "/", "-", 1) {
+					glog.Infof("kubernete label subnet=%s is not created by galaxy. galaxy won't change this label", subnet, strings.Replace(flags.GetNodeIP(), "/", "-", 1))
+				}
+				return
+			}
+			_, ipNet, err := net.ParseCIDR(flags.GetNodeIP())
+			if err != nil {
+				glog.Errorf("invalid node ip %s", flags.GetNodeIP())
+				return
+			}
+			node.Labels["subnet"] = strings.Replace(ipNet.String(), "/", "-", 1) //cidr=10.235.7.146/24 -> subnet=10.235.7.0-24
+			_, err = g.client.CoreV1().Nodes().Update(node)
+			if err == nil {
+				glog.Infof("created kubelet label subnet=%s", node.Labels["subnet"])
+				return
+			}
+			glog.Warningf("failed to update node label: %v", err)
+			if !k8sutil.ShouldRetry(err) {
+				return
+			}
+		}
+	}, 3*time.Minute)
 }
