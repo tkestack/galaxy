@@ -99,20 +99,28 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 		defer func() {
 			glog.Infof("%v, data %s, err %v, %s-", req, string(data), err, start.Format(time.StampMicro))
 		}()
-		pod, err := g.getPod(req.PodName, req.PodNamespace)
+		var pod *corev1.Pod
+		pod, err = g.getPod(req.PodName, req.PodNamespace)
 		if err != nil {
-			return nil, err
+			return
 		}
 		result, err1 := g.cmdAdd(req, pod)
 		if err1 != nil {
 			err = err1
+			return
 		} else {
 			result020, err2 := convertResult(result)
 			if err2 != nil {
 				err = err2
 			} else {
 				data, err = json.Marshal(result)
+				if err != nil {
+					return
+				}
 				err = g.setupPortMapping(req, req.ContainerID, result020, pod)
+				if err != nil {
+					return
+				}
 				pod.Status.PodIP = result020.IP4.IP.IP.String()
 				if err := g.pm.SyncPodChains(pod); err != nil {
 					glog.Warning(err)
@@ -147,12 +155,18 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 		} else if private.NetworkTypeUnderlay.Has(networkType) {
 			if pod.Annotations != nil && pod.Annotations[private.AnnotationKeyIPInfo] != "" {
 				req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.IPInfoInArgs, pod.Annotations[private.AnnotationKeyIPInfo])
+			} else {
+				if *flagMaster == "" {
+					return nil, fmt.Errorf("no ipinfo in pod annotation, also apiswitch url is unkown, check if galaxy-ipam scheduler plugin is working")
+				}
 			}
+			glog.V(4).Infof("pod %s_%s ip %s", pod.Name, pod.Namespace, pod.Annotations[private.AnnotationKeyIPInfo])
 			networkInfo = cniutil.NetworkInfo{private.NetworkTypeUnderlay.CNIType: {}}
 		} else {
 			return nil, fmt.Errorf("unsupported network type: %s", networkType)
 		}
 	}
+	glog.V(4).Infof("pod %s_%s networkInfo %v", pod.Name, pod.Namespace, networkInfo)
 	return cniutil.CmdAdd(req.ContainerID, req.CmdArgs, g.netConf, networkInfo)
 }
 

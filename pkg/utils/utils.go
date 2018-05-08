@@ -163,6 +163,10 @@ func HostMacVlanName(containerId string) string {
 	return fmt.Sprintf("mv-%s", containerId[0:9])
 }
 
+func HostIPVlanName(containerId string) string {
+	return fmt.Sprintf("iv-%s", containerId[0:9])
+}
+
 func CreateVeth(containerID string, mtu int) (netlink.Link, netlink.Link, error) {
 	hostIfName := HostVethName(containerID)
 	containerIfName := ContainerVethName(containerID)
@@ -281,13 +285,39 @@ func MacVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, p
 	return nil
 }
 
+// IPVlanConnectsHostWithContainer creates ipvlan device onto parent device and connects container with host
+func IPVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, parent int) error {
+	var err error
+	ipVlan := &netlink.IPVlan{
+		Mode: netlink.IPVLAN_MODE_L3,
+		LinkAttrs: netlink.LinkAttrs{
+			Name:        HostMacVlanName(args.ContainerID),
+			MTU:         1500,
+			ParentIndex: parent,
+		}}
+	if err := netlink.LinkAdd(ipVlan); err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			netlink.LinkDel(ipVlan)
+		}
+	}()
+	if err = configSboxDevice(result, args, ipVlan); err != nil {
+		return err
+	}
+	return nil
+}
+
 func configSboxDevice(result *t020.Result, args *skel.CmdArgs, sbox netlink.Link) error {
 	// Down the interface before configuring mac address.
 	if err := netlink.LinkSetDown(sbox); err != nil {
 		return fmt.Errorf("could not set link down for container interface %q: %v", sbox.Attrs().Name, err)
 	}
-	if err := netlink.LinkSetHardwareAddr(sbox, GenerateMACFromIP(result.IP4.IP.IP)); err != nil {
-		return fmt.Errorf("could not set mac address for container interface %q: %v", sbox.Attrs().Name, err)
+	if sbox.Type() != "ipvlan" {
+		if err := netlink.LinkSetHardwareAddr(sbox, GenerateMACFromIP(result.IP4.IP.IP)); err != nil {
+			return fmt.Errorf("could not set mac address for container interface %q: %v", sbox.Attrs().Name, err)
+		}
 	}
 	netns, err := ns.GetNS(args.Netns)
 	if err != nil {
