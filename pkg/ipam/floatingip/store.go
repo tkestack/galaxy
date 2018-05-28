@@ -27,12 +27,6 @@ func (i *ipam) findAvailable(limit int, fip *[]database.FloatingIP) error {
 	})
 }
 
-func (i *ipam) findAvailableInRange(limit int, fip *[]database.FloatingIP, first, last uint32) error {
-	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Limit(limit).Where("`key` = \"\" AND ip >= ? AND ip <= ?", first, last).Find(fip).Error
-	})
-}
-
 func (i *ipam) findByKey(key string, fip *database.FloatingIP) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		db := tx.Table(database.FloatingipTableName).Where("`key` = ?", key).Find(fip)
@@ -53,16 +47,6 @@ func (i *ipam) findByPrefix(prefix string, fips *[]database.FloatingIP) error {
 	})
 }
 
-func (i *ipam) firstByKeyInRange(key string, first, last uint32, fip *database.FloatingIP) error {
-	return i.store.Transaction(func(tx *gorm.DB) error {
-		db := tx.Where("`key` = ? AND ip >= ? AND ip <= ?", key, first, last).First(fip)
-		if db.RecordNotFound() {
-			return nil
-		}
-		return db.Error
-	})
-}
-
 func allocateOp(fip *database.FloatingIP) database.ActionFunc {
 	return func(tx *gorm.DB) error {
 		ret := tx.Model(fip).Where("`key` = \"\"").UpdateColumn(`key`, fip.Key)
@@ -76,10 +60,10 @@ func allocateOp(fip *database.FloatingIP) database.ActionFunc {
 	}
 }
 
-func allocateOneInRange(key string, first, last uint32) database.ActionFunc {
+func allocateOneInSubnet(key, subnet string) database.ActionFunc {
 	return func(tx *gorm.DB) error {
-		//update galaxy_floatingip set `key`=? where `key` = "" AND ip >= ? AND ip <= ? limit 1
-		ret := tx.Table(database.FloatingipTableName).Where("`key` = \"\" AND ip >= ? AND ip <= ?", first, last).Limit(1).UpdateColumn(`key`, key)
+		//update galaxy_floatingip set `key`=? where `key` = "" AND subnet="192.168.0.0/24" limit 1
+		ret := tx.Table(database.FloatingipTableName).Where("`key` = \"\" AND subnet = ?", subnet).Limit(1).UpdateColumn(`key`, key)
 		if ret.Error != nil {
 			return ret.Error
 		}

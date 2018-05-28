@@ -97,7 +97,7 @@ func (fip *FloatingIP) String() string {
 }
 
 func (fip *FloatingIP) Key() string {
-	return fip.IPNet().String()
+	return fip.RoutableSubnet.String()
 }
 
 func (fip *FloatingIP) Contains(ip net.IP) bool {
