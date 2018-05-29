@@ -33,7 +33,6 @@ type IPAM interface {
 	Store() *database.DBRecorder //for test
 	Shutdown()
 
-	ReleaseMachines([]ReleaseMachineConf) ([]*FloatingIP, error)
 	ApplyFloatingIPs([]FloatingIP) []*FloatingIP
 }
 
@@ -42,11 +41,6 @@ type IPInfo struct {
 	Vlan           uint16      `json:"vlan"`
 	Gateway        net.IP      `json:"gateway"`
 	RoutableSubnet *nets.IPNet `json:"routable_subnet"` //the node subnet
-}
-
-type ReleaseMachineConf struct {
-	IP  net.IP `json:"ip"`
-	Num int    `json:"num"`
 }
 
 // ipam manages floating ip allocation and release and does it atomically
@@ -92,7 +86,7 @@ func (i *ipam) mergeWithDB(fipMap map[string]*FloatingIP) error {
 	glog.Infof("expect to delete %d ips from ips from %v, deleted %d", len(toBeDelete), toBeDelete, deleted)
 	// insert new floating ips
 	for _, fipConf := range fipMap {
-		subnet := fipConf.IPNet().String()
+		subnet := fipConf.RoutableSubnet.String()
 		for _, ipr := range fipConf.IPRanges {
 			first := nets.IPToInt(ipr.First)
 			last := nets.IPToInt(ipr.Last)
@@ -176,17 +170,10 @@ func (i *ipam) ReleaseByPrefix(keyPrefix string) error {
 	return i.releaseByPrefix(keyPrefix)
 }
 
-func (i *ipam) query(key string, routableSubnet *net.IPNet) (*IPInfo, error) {
+func (i *ipam) QueryFirst(key string) (*IPInfo, error) {
 	var fip database.FloatingIP
-	if routableSubnet == nil {
-		if err := i.findByKey(key, &fip); err != nil {
-			return nil, err
-		}
-	} else {
-		first, last := nets.FirstAndLastIP(routableSubnet)
-		if err := i.firstByKeyInRange(key, first, last, &fip); err != nil {
-			return nil, err
-		}
+	if err := i.findByKey(key, &fip); err != nil {
+		return nil, err
 	}
 	if fip.IP == 0 {
 		return nil, nil
@@ -207,10 +194,6 @@ func (i *ipam) query(key string, routableSubnet *net.IPNet) (*IPInfo, error) {
 		}
 	}
 	return nil, fmt.Errorf("could not find match floating ip config for ip %s", netIP.String())
-}
-
-func (i *ipam) QueryFirst(key string) (*IPInfo, error) {
-	return i.query(key, nil)
 }
 
 func (i *ipam) Shutdown() {
@@ -234,8 +217,7 @@ func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet) (allocate
 		err = ErrNoFIPForSubnet
 		return
 	}
-	first, last := nets.FirstAndLastIP(ipNet)
-	if err = i.store.Transaction(allocateOneInRange(key, first, last)); err != nil {
+	if err = i.store.Transaction(allocateOneInSubnet(key, routableSubnet.String())); err != nil {
 		if err == ErrNotUpdated {
 			err = ErrNoEnoughIP
 		}
@@ -251,61 +233,6 @@ func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet) (allocate
 
 func (i *ipam) Store() *database.DBRecorder {
 	return i.store
-}
-
-func (i *ipam) ReleaseMachines(conf []ReleaseMachineConf) ([]*FloatingIP, error) {
-	res := make(map[string]*FloatingIP, len(i.FloatingIPs))
-	candidateNums := map[string]int{}
-	for j := range i.FloatingIPs {
-		ofip := i.FloatingIPs[j]
-		fip := FloatingIP{
-			RoutableSubnet: ofip.RoutableSubnet,
-			SparseSubnet: nets.SparseSubnet{
-				Gateway: ofip.Gateway,
-				Mask:    ofip.Mask,
-				Vlan:    ofip.Vlan,
-			},
-		}
-		for k := range ofip.IPRanges {
-			fip.IPRanges = append(fip.IPRanges, ofip.IPRanges[k])
-		}
-
-		res[ofip.RoutableSubnet.String()] = &fip
-		for k := range conf {
-			if ofip.RoutableSubnet.Contains(conf[k].IP) {
-				candidateNums[ofip.RoutableSubnet.String()] += conf[k].Num
-			}
-		}
-	}
-	for subnet, num := range candidateNums {
-		var fips []database.FloatingIP
-		allFips := res[subnet]
-		fipSubnet := allFips.IPNet()
-		first, last := nets.FirstAndLastIP(fipSubnet)
-		if err := i.findAvailableInRange(num, &fips, first, last); err != nil {
-			return nil, err
-		}
-		if len(fips) != num {
-			errMsg := fmt.Sprintf("no enough fips to release from subnet %v, require: %v, un-used: %v", subnet, num, len(fips))
-			glog.Error(errMsg)
-			return nil, fmt.Errorf(errMsg)
-		}
-		for _, fip := range fips {
-			if !allFips.RemoveIP(nets.IntToIP(fip.IP)) {
-				errMsg := fmt.Sprintf("can't remove fip %v, may not exist!", nets.IntToIP(fip.IP).String())
-				glog.Error(errMsg)
-				return nil, fmt.Errorf(errMsg)
-			}
-		}
-		if len(allFips.IPRanges) == 0 {
-			delete(res, subnet)
-		}
-	}
-	var fips []*FloatingIP
-	for _, fip := range res {
-		fips = append(fips, fip)
-	}
-	return fips, nil
 }
 
 func (i *ipam) ApplyFloatingIPs(fips []FloatingIP) []*FloatingIP {

@@ -33,6 +33,10 @@ func Start(t *testing.T) floatingip.IPAM {
 	if err := i.ConfigurePool(conf.Floatingips); err != nil {
 		t.Fatal(err)
 	}
+	// There should be 14 ips
+	if m, err := i.QueryByPrefix(""); err != nil || len(m) != 14 {
+		t.Fatalf("map %v, err %v", m, err)
+	}
 	return i
 }
 
@@ -49,47 +53,6 @@ func TestAllocateRelease(t *testing.T) {
 	}
 	if fmt.Sprintf("%v", ips) != "[10.49.27.205 10.49.27.216 10.49.27.217]" {
 		t.Fatal(ips)
-	}
-	machines := []floatingip.ReleaseMachineConf{
-		{
-			IP:  net.ParseIP("10.49.27.1"),
-			Num: 1,
-		},
-		{
-			IP:  net.ParseIP("10.173.13.1"),
-			Num: 1,
-		},
-		{
-			IP:  net.ParseIP("10.173.13.2"),
-			Num: 1,
-		},
-	}
-	if fips, err := ipam.ReleaseMachines(machines); err != nil {
-		t.Fatal(err)
-	} else {
-		if len(fips) != 2 {
-			t.Fatal(fips)
-		}
-		str := fips[0].String() + fips[1].String()
-		if !strings.Contains(str, "10.49.27.216~10.49.27.217") || !strings.Contains(str, "10.173.13.11~10.173.13.13") || strings.Contains(str, "10.173.13.2") {
-			t.Fatal(fips)
-		}
-	}
-	// re-run this to test if api will affect running context
-	if fips, err := ipam.ReleaseMachines(machines); err != nil {
-		t.Fatal(err)
-	} else {
-		if len(fips) != 2 {
-			t.Fatal(fips)
-		}
-		str := fips[0].String() + fips[1].String()
-		if !strings.Contains(str, "10.49.27.216~10.49.27.217") || !strings.Contains(str, "10.173.13.11~10.173.13.13") || strings.Contains(str, "10.173.13.2") {
-			t.Fatal(fips)
-		}
-	}
-	machines[0].Num = 2
-	if conf, err := ipam.ReleaseMachines(machines); err == nil {
-		t.Fatal(conf)
 	}
 	ipInfo, err := ipam.QueryFirst("pod1-1")
 	if err != nil {
@@ -127,7 +90,7 @@ func TestAllocateRelease(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(fips) != 5 {
+	if len(fips) != 9 {
 		t.Fatal(len(fips))
 	}
 	if err := ipam.ReleaseByPrefix("pod1-"); err != nil {
@@ -180,7 +143,7 @@ func TestApplyFloatingIPs(t *testing.T) {
 		t.Fatal(err)
 	}
 	conf := ipam.ApplyFloatingIPs(fips)
-	if len(conf) != 3 {
+	if len(conf) != 5 {
 		t.Fatal(conf)
 	}
 	if obj, err := json.Marshal(conf); err != nil {
@@ -202,7 +165,7 @@ func TestRaceCondition(t *testing.T) {
 		<-database.ForceSequential
 	}()
 	var ipams []floatingip.IPAM
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 7; i++ {
 		ipam := Start(t)
 		defer ipam.Shutdown()
 		ipams = append(ipams, ipam)
@@ -226,7 +189,7 @@ func TestRaceCondition(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	if len(ips) != 10 {
+	if len(ips) != 14 {
 		t.Fatal()
 	}
 	m := make(map[string]interface{})
@@ -309,7 +272,7 @@ func TestRoutableSubnet(t *testing.T) {
 	}
 }
 
-func TestQueryRoutableSubnetByKey(t *testing.T) {
+func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
 	database.ForceSequential <- true
 	defer func() {
 		<-database.ForceSequential
@@ -322,7 +285,7 @@ func TestQueryRoutableSubnetByKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	// result in string order
-	if fmt.Sprintf("%v", subnets) != "[10.173.13.0/24 10.49.27.0/24]" {
+	if fmt.Sprintf("%v", subnets) != "[10.173.13.0/24 10.180.1.2/32 10.180.1.3/32 10.49.27.0/24]" {
 		t.Fatal(subnets)
 	}
 	// drain ips of 10.49.27.0/24
@@ -340,7 +303,22 @@ func TestQueryRoutableSubnetByKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprintf("%v", subnets) != "[10.173.13.0/24]" {
+	if fmt.Sprintf("%v", subnets) != "[10.173.13.0/24 10.180.1.2/32 10.180.1.3/32]" {
+		t.Fatal(subnets)
+	}
+	// drain ips of 10.180.1.3/32
+	ipnet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
+	if ip, err := ipam.AllocateInSubnet("p5", ipnet); err != nil || ip == nil {
+		t.Fatalf("ip %v err %v", ip, err)
+	}
+	if ip, err := ipam.AllocateInSubnet("p6", ipnet); err != nil || ip == nil {
+		t.Fatalf("ip %v err %v", ip, err)
+	}
+	subnets, err = ipam.QueryRoutableSubnetByKey("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprintf("%v", subnets) != "[10.173.13.0/24 10.180.1.2/32]" {
 		t.Fatal(subnets)
 	}
 }
