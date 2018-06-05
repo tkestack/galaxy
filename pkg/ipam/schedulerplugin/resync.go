@@ -1,14 +1,20 @@
 package schedulerplugin
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 func (p *FloatingIPPlugin) storeReady() bool {
@@ -198,6 +204,37 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 			return err
 		}
 		glog.Infof("updated floatingip %s to key %s", ip.String(), key)
+	}
+	// create ipInfo annotation for gaiastack 2.6 pod
+	if pod.Annotations == nil || pod.Annotations[private.AnnotationKeyIPInfo] == "" {
+		ipInfo, err := p.ipam.QueryFirst(key)
+		if err != nil {
+			return fmt.Errorf("failed to query ipInfo of %s", key)
+		}
+		data, err := json.Marshal(ipInfo)
+		if err != nil {
+			return fmt.Errorf("failed to marshal ipinfo %v: %v", ipInfo, err)
+		}
+		m := make(map[string]string)
+		m[private.AnnotationKeyIPInfo] = string(data)
+		ret := &unstructured.Unstructured{}
+		ret.SetAnnotations(m)
+		patchData, err := json.Marshal(ret)
+		if err != nil {
+			glog.Error(err)
+		}
+		if err := wait.PollImmediate(time.Millisecond*500, 20*time.Second, func() (bool, error) {
+			_, err := p.Client.CoreV1().Pods(pod.Namespace).Patch(pod.Name, types.MergePatchType, patchData)
+			if err != nil {
+				glog.Warningf("failed to update pod %s: %v", key, err)
+				return false, nil
+			}
+			glog.V(3).Infof("updated annotation %s=%s for old pod %s (created by gaiastack 2.6)", private.AnnotationKeyIPInfo, m[private.AnnotationKeyIPInfo], key)
+			return true, nil
+		}); err != nil {
+			// If fails to update, depending on resync to update
+			return fmt.Errorf("failed to update pod %s: %v", key, err)
+		}
 	}
 	return nil
 }
