@@ -109,6 +109,7 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 			glog.Warning(err)
 		}
 		p.syncPodIPsIntoDB()
+		p.syncTAppRequestResource()
 	}, time.Duration(p.conf.ResyncInterval)*time.Minute, stop)
 	go p.loop(stop)
 }
@@ -311,6 +312,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 				Name: args.Node,
 			},
 		}); err != nil {
+			glog.Warningf("failed to bind pod %s: %v", key, err)
 			return false, err
 		}
 		glog.V(3).Infof("bind pod %s to %s", key, args.Node)

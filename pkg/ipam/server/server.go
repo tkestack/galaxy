@@ -70,6 +70,7 @@ func (s *Server) init() error {
 		PodLister:     podInformer.Lister(),
 		TAppLister:    tappInformer.Lister(),
 		Client:        s.client,
+		TAppClient:    s.tappClient,
 		PodHasSynced:  podInformer.Informer().HasSynced,
 		TAppHasSynced: tappInformer.Informer().HasSynced,
 	}

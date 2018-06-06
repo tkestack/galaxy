@@ -11,6 +11,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -247,4 +248,60 @@ func (p *FloatingIPPlugin) syncPodAnnotation(pod *corev1.Pod) error {
 		}
 	}
 	return nil
+}
+
+func (p *FloatingIPPlugin) syncTAppRequestResource() {
+	if !p.storeReady() {
+		return
+	}
+	tapps, err := p.TAppLister.List(p.objectSelector)
+	if err != nil {
+		glog.Warningf("failed to list pods: %v", err)
+		return
+	}
+	one := resource.NewQuantity(1, resource.DecimalSI)
+	for _, tapp := range tapps {
+		fullname := TAppFullName(tapp)
+		var needUpdate bool
+		for _, container := range tapp.Spec.Template.Spec.Containers {
+			if _, ok := container.Resources.Requests[corev1.ResourceName(private.FloatingIPResource)]; !ok {
+				needUpdate = true
+				break
+			}
+		}
+		if !needUpdate {
+			for _, podTemplate := range tapp.Spec.TemplatePool {
+				for _, container := range podTemplate.Spec.Containers {
+					if _, ok := container.Resources.Requests[corev1.ResourceName(private.FloatingIPResource)]; !ok {
+						needUpdate = true
+						break
+					}
+				}
+				if needUpdate {
+					break
+				}
+			}
+		}
+		if !needUpdate {
+			continue
+		}
+		if err := wait.PollImmediate(time.Millisecond*500, 20*time.Second, func() (bool, error) {
+			for _, container := range tapp.Spec.Template.Spec.Containers {
+				container.Resources.Requests[corev1.ResourceName(private.FloatingIPResource)] = *one
+			}
+			for _, podTemplate := range tapp.Spec.TemplatePool {
+				for _, container := range podTemplate.Spec.Containers {
+					container.Resources.Requests[corev1.ResourceName(private.FloatingIPResource)] = *one
+				}
+			}
+			if _, err := p.TAppClient.TappcontrollerV1alpha1().TApps(tapp.Namespace).Update(tapp); err != nil {
+				glog.Warningf("failed to update tapp resource %s: %v", fullname, err)
+				return false, err
+			}
+			return true, nil
+		}); err != nil {
+			// If fails to update, depending on resync to update
+			glog.Warningf("failed to update tapp resource %s: %v", fullname, err)
+		}
+	}
 }
