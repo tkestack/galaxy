@@ -181,13 +181,18 @@ func (p *FloatingIPPlugin) syncPodIPsIntoDB() {
 	}
 }
 
-// syncPodIP sync pod ip with db, if the pod has PodIP and the ip is unallocated, allocate the ip to the pod
+// syncPodIP sync pod ip with db, if the pod has PodIP and the ip is unallocated in db, allocate the ip to the pod
 func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 	if pod.Status.Phase != corev1.PodRunning {
 		return nil
 	}
 	ip := net.ParseIP(pod.Status.PodIP)
 	if ip == nil {
+		// A binded Pod's IpInfo annotation is lost, we need to find its ip
+		// It happens if a node crashes causing pods on it to be relaunched during which we are upgrading gaiastack from 2.6 to 2.8
+		if pod.Spec.NodeName != "" {
+			return p.syncPodAnnotation(pod)
+		}
 		return nil
 	}
 	key := keyInDB(pod)
@@ -205,6 +210,11 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 		}
 		glog.Infof("updated floatingip %s to key %s", ip.String(), key)
 	}
+	return p.syncPodAnnotation(pod)
+}
+
+func (p *FloatingIPPlugin) syncPodAnnotation(pod *corev1.Pod) error {
+	key := keyInDB(pod)
 	// create ipInfo annotation for gaiastack 2.6 pod
 	if pod.Annotations == nil || pod.Annotations[private.AnnotationKeyIPInfo] == "" {
 		ipInfo, err := p.ipam.QueryFirst(key)
