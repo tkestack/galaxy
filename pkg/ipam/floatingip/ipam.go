@@ -300,13 +300,13 @@ func (i *ipam) QueryByPrefix(prefix string) (map[string]string, error) {
 func (i *ipam) RoutableSubnet(nodeIP net.IP) *net.IPNet {
 	intIP := nets.IPToInt(nodeIP)
 	minIndex := sort.Search(len(i.FloatingIPs), func(j int) bool {
-		return nets.IPToInt(i.FloatingIPs[j].IPNet().IP) > intIP
+		return nets.IPToInt(i.FloatingIPs[j].RoutableSubnet.IP) > intIP
 	})
 	if minIndex == 0 {
 		return nil
 	}
-	if i.FloatingIPs[minIndex-1].IPNet().Contains(nodeIP) {
-		return i.FloatingIPs[minIndex-1].IPNet()
+	if i.FloatingIPs[minIndex-1].RoutableSubnet.Contains(nodeIP) {
+		return i.FloatingIPs[minIndex-1].RoutableSubnet
 	}
 	return nil
 }
