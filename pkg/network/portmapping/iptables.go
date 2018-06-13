@@ -259,6 +259,9 @@ func hostportChainName(port k8s.Port, podFullName string) utiliptables.Chain {
 }
 
 func ensureBasicRule(natInterfaceName string, iptInterface utiliptables.Interface) error {
+	if err := iptInterface.EnsurePolicy(utiliptables.TableFilter, utiliptables.ChainForward, "ACCEPT"); err != nil {
+		glog.Warningf("set policy for %v/%v failed: %v", utiliptables.TableFilter, utiliptables.ChainForward, err.Error())
+	}
 	if _, err := iptInterface.EnsureChain(utiliptables.TableNAT, kubeHostportsChain); err != nil {
 		return fmt.Errorf("Failed to ensure that %s chain %s exists: %v", utiliptables.TableNAT, kubeHostportsChain, err)
 	}
