@@ -209,7 +209,7 @@ func (s FloatingIPSlice) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 func (s FloatingIPSlice) Less(i, j int) bool {
-	i1, _ := nets.FirstAndLastIP(s[i].SparseSubnet.IPNet())
-	j1, _ := nets.FirstAndLastIP(s[j].SparseSubnet.IPNet())
+	i1, _ := nets.FirstAndLastIP(s[i].RoutableSubnet)
+	j1, _ := nets.FirstAndLastIP(s[j].RoutableSubnet)
 	return i1 < j1
 }
