@@ -58,6 +58,8 @@ type Interface interface {
 	IsIpv6() bool
 	// SaveInto calls `iptables-save` for table and stores result in a given buffer.
 	SaveInto(table Table, buffer *bytes.Buffer) error
+	// EnsurePolicy set default rule for chain
+	EnsurePolicy(table Table, chain Chain, policy string) error
 	// Restore runs `iptables-restore` passing data through []byte.
 	// table is the Table to restore
 	// data should be formatted like the output of SaveInto()
@@ -343,6 +345,16 @@ func (runner *runner) SaveInto(table Table, buffer *bytes.Buffer) error {
 	cmd.SetStdout(buffer)
 	cmd.SetStderr(buffer)
 	return cmd.Run()
+}
+
+// EnsurePolicy is part of Interface.
+func (runner *runner) EnsurePolicy(table Table, chain Chain, policy string) error {
+	cmd := iptablesCommand(runner.protocol)
+	b, err := runner.exec.Command(cmd, "-t", string(table), "-P", string(chain), policy).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%v (%s)", err, b)
+	}
+	return nil
 }
 
 // Restore is part of Interface.
