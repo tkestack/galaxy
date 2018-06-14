@@ -18,9 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
@@ -284,29 +282,14 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 		// see https://github.com/kubernetes/kubernetes/pull/60332
 		return fmt.Errorf("pod which doesn't want floatingip have been sent to plugin")
 	}
-	bind, err := p.allocateIP(key, args.Node)
+	bindAnnotation, err := p.allocateIP(key, args.Node)
 	if err != nil {
 		return err
 	}
-	if bind == nil {
-		return nil
-	}
-	ret := &unstructured.Unstructured{}
-	ret.SetAnnotations(bind)
-	patchData, err := json.Marshal(ret)
-	if err != nil {
-		glog.Error(err)
-	}
 	if err := wait.PollImmediate(time.Millisecond*500, 20*time.Second, func() (bool, error) {
-		_, err := p.Client.CoreV1().Pods(args.PodNamespace).Patch(args.PodName, types.MergePatchType, patchData)
-		if err != nil {
-			glog.Warningf("failed to update pod %s: %v", key, err)
-			return false, nil
-		}
-		glog.V(3).Infof("updated annotation %s=%s for pod %s", private.AnnotationKeyIPInfo, bind[private.AnnotationKeyIPInfo], key)
 		// It's the extender's response to bind pods to nodes since it is a binder
 		if err := p.Client.CoreV1().Pods(args.PodNamespace).Bind(&corev1.Binding{
-			ObjectMeta: v1.ObjectMeta{Namespace: args.PodNamespace, Name: args.PodName, UID: args.PodUID},
+			ObjectMeta: v1.ObjectMeta{Namespace: args.PodNamespace, Name: args.PodName, UID: args.PodUID, Annotations: bindAnnotation},
 			Target: corev1.ObjectReference{
 				Kind: "Node",
 				Name: args.Node,
@@ -315,7 +298,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 			glog.Warningf("failed to bind pod %s: %v", key, err)
 			return false, err
 		}
-		glog.V(3).Infof("bind pod %s to %s", key, args.Node)
+		glog.V(3).Infof("bind pod %s to %s with ip %v", key, args.Node, bindAnnotation[private.AnnotationKeyIPInfo])
 		return true, nil
 	}); err != nil {
 		// If fails to update, depending on resync to update
