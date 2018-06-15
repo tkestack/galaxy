@@ -29,6 +29,7 @@ type Conf struct {
 	ResyncInterval     uint                     `json:"resyncInterval"`
 	ConfigMapName      string                   `json:"configMapName"`
 	ConfigMapNamespace string                   `json:"configMapNamespace"`
+	DisableLabelNode   bool                     `json:"disableLabelNode"`
 }
 
 // FloatingIPPlugin Allocates Floating IP for deployments
@@ -100,6 +101,7 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 			if _, err := p.updateConfigMap(); err != nil {
 				glog.Warning(err)
 			}
+			p.labelNodes()
 		}, time.Minute, stop)
 	}
 	go wait.Until(func() {
@@ -427,6 +429,8 @@ func (p *FloatingIPPlugin) getNodeSubnet(node *corev1.Node) (*net.IPNet, error) 
 			return nil, errors.New("FloatingIPPlugin:UnknowNode")
 		}
 		if ipNet := p.ipam.RoutableSubnet(nodeIP); ipNet != nil {
+			glog.V(4).Infof("node %s %s %s", node.Name, nodeIP.String(), ipNet.String())
+			p.nodeSubnet[node.Name] = ipNet
 			return ipNet, nil
 		} else {
 			return nil, errors.New("FloatingIPPlugin:NoFIPConfigNode")
@@ -458,6 +462,7 @@ func (p *FloatingIPPlugin) queryNodeSubnet(nodeName string) (*net.IPNet, error) 
 		}
 		if ipNet := p.ipam.RoutableSubnet(nodeIP); ipNet != nil {
 			glog.V(4).Infof("node %s %s %s", nodeName, nodeIP.String(), ipNet.String())
+			p.nodeSubnet[nodeName] = ipNet
 			return ipNet, nil
 		} else {
 			return nil, errors.New("FloatingIPPlugin:NoFIPConfigNode")

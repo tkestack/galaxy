@@ -12,6 +12,7 @@ import (
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -302,6 +303,41 @@ func (p *FloatingIPPlugin) syncTAppRequestResource() {
 		}); err != nil {
 			// If fails to update, depending on resync to update
 			glog.Warningf("failed to update tapp resource %s: %v", fullname, err)
+		}
+	}
+}
+
+// labelSubnet labels node which have floatingip configuration with labels network=floatingip
+// TODO After we finally remove all old pods created by previous gaiastack which has network=floatingip node selector
+// we can remove all network=floatingip label from galaxy code
+func (p *FloatingIPPlugin) labelNodes() {
+	if p.conf != nil && p.conf.DisableLabelNode {
+		return
+	}
+	nodes, err := p.Client.CoreV1().Nodes().List(v1.ListOptions{})
+	if err != nil {
+		glog.Warningf("failed to get nodes: %v", err)
+		return
+	}
+	for i := range nodes.Items {
+		node := nodes.Items[i]
+		if node.Labels == nil {
+			node.Labels = make(map[string]string)
+		}
+		if node.Labels[private.LabelKeyNetworkType] == private.NodeLabelValueNetworkTypeFloatingIP {
+			continue
+		}
+		_, err := p.getNodeSubnet(&node)
+		if err != nil {
+			// node has no fip configuration
+			return
+		}
+		node.Labels[private.LabelKeyNetworkType] = private.NodeLabelValueNetworkTypeFloatingIP
+		_, err = p.Client.CoreV1().Nodes().Update(&node)
+		if err != nil {
+			glog.Warningf("failed to update node label: %v", err)
+		} else {
+			glog.Infof("update node %s label %s=%s", node.Name, private.LabelKeyNetworkType, private.NodeLabelValueNetworkTypeFloatingIP)
 		}
 	}
 }

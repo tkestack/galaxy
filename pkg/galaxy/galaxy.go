@@ -3,18 +3,13 @@ package galaxy
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"strings"
 	"time"
-
-	"github.com/golang/glog"
 
 	zhiyunapi "git.code.oa.com/gaiastack/galaxy/cni/zhiyun-ipam/api"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
-	k8sutil "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/utils"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
@@ -22,7 +17,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 	"git.code.oa.com/gaiastack/galaxy/pkg/policy"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/golang/glog"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	corev1informer "k8s.io/client-go/informers/core/v1"
@@ -70,7 +65,6 @@ func (g *Galaxy) Start() error {
 	g.initk8sClient()
 	g.pm = policy.New(g.client)
 	g.initInformers()
-	g.labelSubnet()
 	gc.NewFlannelGC(g.dockerCli, g.newQuitChannel(), g.newQuitChannel()).Run()
 	if g.zhiyunConf != nil {
 		gc.NewZhiyunGC(g.dockerCli, g.newQuitChannel(), g.zhiyunConf).Run()
@@ -190,46 +184,4 @@ func (g *Galaxy) initInformers() {
 	})
 	go podInformerFactory.Start(make(chan struct{}))
 	go networkingInformerFactory.Start(make(chan struct{}))
-}
-
-// labelSubnet labels kubelet on this node with subnet=IP-OnesInMask to provide rack information for kube-scheduler
-// rackfilter plugin to work
-func (g *Galaxy) labelSubnet() {
-	if !(*flagLabelSubnet) {
-		return
-	}
-	go wait.Forever(func() {
-		nodeName := k8s.GetHostname("") //TODO get hostnameOverride from kubelet config
-		for i := 0; i < 5; i++ {
-			node, err := g.client.CoreV1().Nodes().Get(nodeName, v1.GetOptions{})
-			if err != nil {
-				glog.Warningf("failed to get node %s from apiserver", nodeName)
-				return
-			}
-			if node.Labels == nil {
-				node.Labels = make(map[string]string)
-			}
-			if subnet, ok := node.Labels["subnet"]; ok {
-				if subnet != strings.Replace(flags.GetNodeIP(), "/", "-", 1) {
-					glog.Infof("kubernete label subnet=%s is not created by galaxy. galaxy won't change this label", subnet, strings.Replace(flags.GetNodeIP(), "/", "-", 1))
-				}
-				return
-			}
-			_, ipNet, err := net.ParseCIDR(flags.GetNodeIP())
-			if err != nil {
-				glog.Errorf("invalid node ip %s", flags.GetNodeIP())
-				return
-			}
-			node.Labels["subnet"] = strings.Replace(ipNet.String(), "/", "-", 1) //cidr=10.235.7.146/24 -> subnet=10.235.7.0-24
-			_, err = g.client.CoreV1().Nodes().Update(node)
-			if err == nil {
-				glog.Infof("created kubelet label subnet=%s", node.Labels["subnet"])
-				return
-			}
-			glog.Warningf("failed to update node label: %v", err)
-			if !k8sutil.ShouldRetry(err) {
-				return
-			}
-		}
-	}, 3*time.Minute)
 }
