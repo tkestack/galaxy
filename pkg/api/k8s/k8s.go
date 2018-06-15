@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -106,10 +107,12 @@ func GetPodFullName(podName, namespace string) string {
 	return podName + "_" + namespace
 }
 
+var flagHostnameOverride = flag.String("hostname-override", "", "kubelet hostname override, if set, galaxy use this as node name to get node from apiserver")
+
 // copied from kubelet
 // GetHostname returns OS's hostname if 'hostnameOverride' is empty; otherwise, return 'hostnameOverride'.
-func GetHostname(hostnameOverride string) string {
-	hostname := hostnameOverride
+func GetHostname() string {
+	hostname := *flagHostnameOverride
 	if hostname == "" {
 		nodename, err := os.Hostname()
 		if err != nil {

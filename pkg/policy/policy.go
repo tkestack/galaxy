@@ -61,7 +61,7 @@ func New(client *kubernetes.Clientset) *PolicyManager {
 		client:        client,
 		ipsetHandle:   ipset.New(utilexec.New()),
 		iptableHandle: utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4),
-		hostName:      k8s.GetHostname(""),
+		hostName:      k8s.GetHostname(),
 	}
 }
 
@@ -72,7 +72,7 @@ func (p *PolicyManager) Run() {
 }
 
 func (p *PolicyManager) syncPods() {
-	list, err := p.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname("")).String()})
+	list, err := p.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
 	if err != nil {
 		glog.Warningf("failed to list pods: %v", err)
 		return
