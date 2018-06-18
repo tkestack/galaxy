@@ -20,5 +20,6 @@ create_go_path_tree
     echo "${bad_files}"
     exit 1
   fi
-  go test -v $(glide novendor | grep -v '/go/')
+  go test -v $(glide novendor | grep -v '/go/' | grep -v '/e2e/')
+  ginkgo -v e2e/k8s-vlan -- --logtostderr --v=4
 )

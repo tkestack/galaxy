@@ -34,6 +34,9 @@ func TestFilter(t *testing.T) {
 		TAppHasSynced: func() bool { return false },
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "Failed to open") {
+			t.Skipf("skip testing db due to %q", err.Error())
+		}
 		t.Fatal(err)
 	}
 	if err = fipPlugin.Init(); err != nil {

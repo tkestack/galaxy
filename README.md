@@ -61,7 +61,7 @@ cd vendor/github.com/containernetworking/cni
 # cni scripts depends on jq
 apt-get install jq
 cd scripts
-CNI_PATH=$CNI_PATH CNI_ARGS="IP=192.168.33.3" ./priv-net-run.sh ip ad
+CNI_PATH=$CNI_PATH CNI_ARGS="IPInfo={"ip":"192.168.0.68/26","vlan":0,"gateway":"192.168.0.65","routable_subnet":"192.168.0.64/26"}" ./priv-net-run.sh ip ad
 ```
 
 Execute plugin manually
@@ -69,7 +69,7 @@ Execute plugin manually
 export PATH=`pwd`/bin
 CNI_PATH=`pwd`/bin
 ip netns add ctn
-CNI_ARGS="IP=192.168.33.3" CNI_COMMAND="ADD" CNI_CONTAINERID=ctn1 CNI_NETNS=/var/run/netns/ctn CNI_IFNAME=eth0 CNI_PATH=$CNI_PATH galaxy-vlan < /etc/cni/net.d/10-mynet.conf
+CNI_ARGS="IPInfo={"ip":"192.168.0.68/26","vlan":0,"gateway":"192.168.0.65","routable_subnet":"192.168.0.64/26"}" CNI_COMMAND="ADD" CNI_CONTAINERID=ctn1 CNI_NETNS=/var/run/netns/ctn CNI_IFNAME=eth0 CNI_PATH=$CNI_PATH galaxy-vlan < /etc/cni/net.d/10-mynet.conf
  ```
 
 # Release

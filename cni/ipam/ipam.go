@@ -6,7 +6,6 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/cni/apiswitch-ipam"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
@@ -20,7 +19,7 @@ func Allocate(ipamType string, args *skel.CmdArgs) (uint16, types.Result, error)
 		vlanId uint16
 		err    error
 	)
-	kvMap, err := k8s.ParseK8SCNIArgs(args.Args)
+	kvMap, err := cniutil.ParseCNIArgs(args.Args)
 	if err != nil {
 		return vlanId, nil, err
 	}

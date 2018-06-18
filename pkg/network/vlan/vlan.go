@@ -15,11 +15,9 @@ import (
 )
 
 const (
-	vethPrefix    = "veth"
-	vethLen       = 7
-	vlanPrefix    = "vlan"
-	bridgePrefix  = "docker"
-	defaultBridge = "docker"
+	VlanPrefix    = "vlan"
+	BridgePrefix  = "docker"
+	DefaultBridge = "docker"
 )
 
 type VlanDriver struct {
@@ -38,12 +36,29 @@ type NetConf struct {
 	Device string `json:"device"`
 	// Supports macvlan, bridge or pure(which avoid create unnecessary bridge), default bridge
 	Switch string `json:"switch"`
+
+	DisableDefaultBridge bool `json:"disable_default_bridge"`
+
+	DefaultBridgeName string `json:"default_bridge_name"`
+
+	BridgeNamePrefix string `json:"bridge_name_prefix"`
+
+	VlanNamePrefix string `json:"vlan_name_prefix"`
 }
 
 func (d *VlanDriver) LoadConf(bytes []byte) (*NetConf, error) {
 	conf := &NetConf{}
 	if err := json.Unmarshal(bytes, conf); err != nil {
 		return nil, fmt.Errorf("failed to load netconf: %v", err)
+	}
+	if conf.DefaultBridgeName == "" {
+		conf.DefaultBridgeName = DefaultBridge
+	}
+	if conf.BridgeNamePrefix == "" {
+		conf.BridgeNamePrefix = BridgePrefix
+	}
+	if conf.VlanNamePrefix == "" {
+		conf.VlanNamePrefix = VlanPrefix
 	}
 	d.NetConf = conf
 	return conf, nil
@@ -62,7 +77,7 @@ func (d *VlanDriver) Init() error {
 		d.vlanParentIndex = device.Attrs().ParentIndex
 		//glog.Infof("root device %s is a vlan device, parent index %d", d.Device, d.vlanParentIndex)
 	}
-	if d.MacVlanMode() || d.IPVlanMode() {
+	if d.MacVlanMode() || d.IPVlanMode() || d.DisableDefaultBridge {
 		return nil
 	}
 	if d.PureMode() {
@@ -83,20 +98,20 @@ func (d *VlanDriver) Init() error {
 	}
 	filteredAddr := network.FilterLoopbackAddr(v4Addr)
 	if len(filteredAddr) == 0 {
-		bri, err := netlink.LinkByName(defaultBridge)
+		bri, err := netlink.LinkByName(d.DefaultBridgeName)
 		if err != nil {
-			return fmt.Errorf("Error getting bri device %s: %v", defaultBridge, err)
+			return fmt.Errorf("Error getting bri device %s: %v", d.DefaultBridgeName, err)
 		}
 		if bri.Attrs().Index != device.Attrs().MasterIndex {
 			return fmt.Errorf("No available address found on device %s", d.Device)
 		}
 	} else {
-		bri, err := getOrCreateBridge(defaultBridge, device.Attrs().HardwareAddr)
+		bri, err := getOrCreateBridge(d.DefaultBridgeName, device.Attrs().HardwareAddr)
 		if err != nil {
 			return err
 		}
 		if err := netlink.LinkSetUp(bri); err != nil {
-			return fmt.Errorf("Failed to set up bridge device %s: %v", defaultBridge, err)
+			return fmt.Errorf("Failed to set up bridge device %s: %v", d.DefaultBridgeName, err)
 		}
 		if r, err := utils.GetDefaultRoute(); err != nil {
 			return err
@@ -128,14 +143,14 @@ func (d *VlanDriver) Init() error {
 				filteredAddr[i].Label = ""
 				if err = netlink.AddrAdd(bri, &filteredAddr[i]); err != nil {
 					if !strings.Contains(err.Error(), "file exists") {
-						return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", defaultBridge, err, filteredAddr[i])
+						return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", d.DefaultBridgeName, err, filteredAddr[i])
 					} else {
 						err = nil
 					}
 				}
 			}
-			if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: defaultBridge}}); err != nil {
-				return fmt.Errorf("Failed to add device %s to bridge device %s: %v", d.Device, defaultBridge, err)
+			if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: d.DefaultBridgeName}}); err != nil {
+				return fmt.Errorf("Failed to add device %s to bridge device %s: %v", d.Device, d.DefaultBridgeName, err)
 			}
 			if r.LinkIndex == device.Attrs().Index {
 				if err = netlink.RouteAdd(&netlink.Route{Gw: r.Gw, LinkIndex: bri.Attrs().Index}); err != nil {
@@ -173,7 +188,7 @@ func (d *VlanDriver) CreateBridgeAndVlanDevice(vlanId uint16) error {
 	if vlanId == 0 {
 		return nil
 	}
-	bridgeIfName := fmt.Sprintf("%s%d", bridgePrefix, vlanId)
+	bridgeIfName := fmt.Sprintf("%s%d", d.BridgeNamePrefix, vlanId)
 
 	d.Lock()
 	defer d.Unlock()
@@ -205,9 +220,9 @@ func (d *VlanDriver) BridgeNameForVlan(vlanId uint16) string {
 	if vlanId == 0 && d.PureMode() {
 		return ""
 	}
-	bridgeName := defaultBridge
+	bridgeName := d.DefaultBridgeName
 	if vlanId != 0 {
-		bridgeName = fmt.Sprintf("%s%d", bridgePrefix, vlanId)
+		bridgeName = fmt.Sprintf("%s%d", d.BridgeNamePrefix, vlanId)
 	}
 	return bridgeName
 }
@@ -223,7 +238,7 @@ func (d *VlanDriver) MaybeCreateVlanDevice(vlanId uint16) error {
 }
 
 func (d *VlanDriver) createVlanDevice(vlanId uint16) (netlink.Link, error) {
-	vlanIfName := fmt.Sprintf("%s%d", vlanPrefix, vlanId)
+	vlanIfName := fmt.Sprintf("%s%d", d.VlanNamePrefix, vlanId)
 	// Get vlan device
 	vlan, err := getOrCreateDevice(vlanIfName, func(name string) error {
 		vlanIf := &netlink.Vlan{LinkAttrs: netlink.LinkAttrs{Name: vlanIfName, ParentIndex: d.vlanParentIndex}, VlanId: (int)(vlanId)}
