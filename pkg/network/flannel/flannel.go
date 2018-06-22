@@ -24,6 +24,7 @@ const (
 type NetConf struct {
 	types.NetConf
 	SubnetFile string                 `json:"subnetFile"`
+	AddSrc     bool                   `json:"addSrc,omitempty"`
 	Delegate   map[string]interface{} `json:"delegate"`
 }
 
@@ -55,6 +56,7 @@ func (se *subnetEnv) missing() string {
 func loadFlannelNetConf(bytes []byte) (*NetConf, error) {
 	n := &NetConf{
 		SubnetFile: defaultSubnetFile,
+		AddSrc:     true,
 	}
 	if err := json.Unmarshal(bytes, n); err != nil {
 		return nil, fmt.Errorf("failed to load netconf: %v", err)
@@ -211,6 +213,9 @@ func CmdAdd(args *skel.CmdArgs) (types.Result, error) {
 		if !hasKey(n.Delegate, "isGateway") {
 			n.Delegate["isGateway"] = true
 		}
+	}
+	if n.AddSrc {
+		n.Delegate["routeSrc"] = fenv.sn.IP.String()
 	}
 
 	n.Delegate["ipam"] = map[string]interface{}{

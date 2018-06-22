@@ -15,7 +15,6 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/version"
-	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/containernetworking/plugins/pkg/ipam"
 	"github.com/containernetworking/plugins/pkg/ns"
 )
@@ -29,7 +28,8 @@ func init() {
 
 type VethConf struct {
 	types.NetConf
-	Mtu int `json:"mtu"`
+	RouteSrc string `json:"routeSrc"`
+	Mtu      int    `json:"mtu"`
 }
 
 func loadConf(bytes []byte) (*VethConf, error) {
@@ -40,12 +40,19 @@ func loadConf(bytes []byte) (*VethConf, error) {
 	return n, nil
 }
 
-func addHostRoute(containerIP *net.IPNet, vethHostName string) error {
+func addHostRoute(containerIP *net.IPNet, vethHostName string, src string) error {
 	vethHost, err := netlink.LinkByName(vethHostName)
 	if err != nil {
 		return err
 	}
-	if err = ip.AddRoute(containerIP, nil, vethHost); err != nil {
+	s := net.ParseIP(src)
+	if err = netlink.RouteAdd(&netlink.Route{
+		LinkIndex: vethHost.Attrs().Index,
+		Scope:     netlink.SCOPE_LINK,
+		Dst:       containerIP,
+		Gw:        nil,
+		Src:       s,
+	}); err != nil {
 		// we skip over duplicate routes as we assume the first one wins
 		if !os.IsExist(err) {
 			return fmt.Errorf("failed to add route '%v dev %v': %v", containerIP, vethHostName, err)
@@ -179,7 +186,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err := connectsHostWithContainer(result, args, conf); err != nil {
 		return err
 	}
-	if err := addHostRoute(&result.IP4.IP, utils.HostVethName(args.ContainerID)); err != nil {
+	if err := addHostRoute(&result.IP4.IP, utils.HostVethName(args.ContainerID), conf.RouteSrc); err != nil {
 		return err
 	}
 	result.DNS = conf.DNS
