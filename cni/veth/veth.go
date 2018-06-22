@@ -55,7 +55,7 @@ func addHostRoute(containerIP *net.IPNet, vethHostName string, src string) error
 	}); err != nil {
 		// we skip over duplicate routes as we assume the first one wins
 		if !os.IsExist(err) {
-			return fmt.Errorf("failed to add route '%v dev %v': %v", containerIP, vethHostName, err)
+			return fmt.Errorf("failed to add route '%v dev %v src %v': %v", containerIP, vethHostName, s.String(), err)
 		}
 	}
 	return nil
