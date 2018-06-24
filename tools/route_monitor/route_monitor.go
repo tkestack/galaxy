@@ -43,11 +43,11 @@ func main() {
 				index := update.Route.LinkIndex
 				link, err := netlink.LinkByIndex(index)
 				if err != nil {
-					glog.Info("unknow link index, route del event: %+v", update.Route)
+					glog.Infof("unknow link index, route del event: %+v", update.Route)
 					continue
 				}
 				if !strings.HasPrefix(link.Attrs().Name, "veth-h") {
-					glog.Info("not delete veth route, name %s: %+v", link.Attrs().Name, update.Route)
+					glog.Infof("not delete veth route, name %s: %+v", link.Attrs().Name, update.Route)
 					continue
 				}
 				if *flagAddSrc && update.Route.Src == nil {
