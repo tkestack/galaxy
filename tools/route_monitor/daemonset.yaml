@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: route-monitor
+  namespace: kube-system
+  labels:
+    app: route-monitor
+spec:
+  selector:
+    matchLabels:
+      name: route-monitor
+  template:
+    metadata:
+      labels:
+        name: route-monitor
+    spec:
+      hostNetwork: true
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+      - name: route-monitor
+        image: docker.oa.com:8080/gaia/route_monitor:v1
+        securityContext:
+          privileged: true
+        resources:
+          limits:
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 50Mi
