@@ -29,3 +29,11 @@ spec:
           requests:
             cpu: 100m
             memory: 50Mi
+        volumeMounts:
+        - mountPath: /var/run/flannel
+          name: flannel
+      volumes:
+        - name: flannel
+          hostPath:
+            path: /var/run/flannel
+            type: Directory

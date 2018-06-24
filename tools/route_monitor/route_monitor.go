@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 )
 
 var (
@@ -39,6 +40,9 @@ func main() {
 				}
 			}
 			if update.Type == syscall.RTM_DELROUTE {
+				if update.Dst == nil || nl.GetIPFamily(update.Dst.IP) != nl.FAMILY_V4 {
+					continue
+				}
 				glog.Infof("receive route delete event: %v", update.Route)
 				index := update.Route.LinkIndex
 				link, err := netlink.LinkByIndex(index)

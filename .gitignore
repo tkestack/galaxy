@@ -2,3 +2,4 @@
 .idea
 *.iml
 /go
+/tools/route_monitor/route_monitor
