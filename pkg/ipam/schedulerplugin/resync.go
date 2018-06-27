@@ -34,13 +34,14 @@ func (p *FloatingIPPlugin) storeReady() bool {
 // resyncPod releases ips from
 // 1. deleted pods whose parent is not tapp
 // 2. deleted pods whose parent is an unexisting tapp
-// 3. deleted pods whose parent tapp exist but is not fipInvariant
+// 3. deleted pods whose parent tapp exist but is not ip immutable
 // 4. deleted pods whose parent tapp exist but instance status in tapp.spec.statuses = killed
 // 5. existing pods but its status is evicted (TApp doesn't have evicted pods)
 func (p *FloatingIPPlugin) resyncPod() error {
 	if !p.storeReady() {
 		return nil
 	}
+	glog.Infof("resync pods")
 	all, err := p.ipam.QueryByPrefix("")
 	if err != nil {
 		return err
@@ -65,7 +66,7 @@ func (p *FloatingIPPlugin) resyncPod() error {
 	for i := range pods {
 		if evicted(pods[i]) {
 			// 5. existing pods but its status is evicted (TApp doesn't have evicted pods, it simply deletes pods which are evicted by kubelet)
-			if err := p.releasePodIP(keyInDB(pods[i])); err != nil {
+			if err := p.releasePodIP(keyInDB(pods[i]), evicted_pod); err != nil {
 				glog.Warning(err)
 			}
 		}
@@ -87,7 +88,7 @@ func (p *FloatingIPPlugin) resyncPod() error {
 		} else {
 			// 1. deleted pods whose parent is not tapp
 			// 2. deleted pods whose parent is an unexisting tapp
-			if err := p.releasePodIP(podFullName); err != nil {
+			if err := p.releasePodIP(podFullName, deleted_and_parent_tapp_not_exist_pod); err != nil {
 				glog.Warning(err)
 			}
 			continue
@@ -96,8 +97,8 @@ func (p *FloatingIPPlugin) resyncPod() error {
 			continue
 		}
 		if !p.immutableSeletor.Matches(labels.Set(tapp.GetLabels())) {
-			// 3. deleted pods whose parent tapp exist but is not fipInvariant
-			if err := p.releasePodIP(podFullName); err != nil {
+			// 3. deleted pods whose parent tapp exist but is not ip immutable
+			if err := p.releasePodIP(podFullName, deleted_and_ip_mutable_pod); err != nil {
 				glog.Warning(err)
 			}
 			continue
@@ -106,7 +107,7 @@ func (p *FloatingIPPlugin) resyncPod() error {
 		podId := podFullName[len(tapp.Namespace)+1+len(tapp.Name)+1:]
 		if status := tapp.Spec.Statuses[podId]; tappInstanceKilled(status) {
 			// 4. deleted pods whose parent tapp exist but instance status in tapp.spec.statuses = killed
-			if err := p.releasePodIP(podFullName); err != nil {
+			if err := p.releasePodIP(podFullName, deleted_and_killed_tapp_pod); err != nil {
 				glog.Warning(err)
 			}
 		}
@@ -168,6 +169,7 @@ func ownerIsTApp(pod *corev1.Pod) bool {
 
 // syncPodIPs sync all pods' ips with db, if a pod has PodIP and its ip is unallocated, allocate the ip to it
 func (p *FloatingIPPlugin) syncPodIPsIntoDB() {
+	glog.Infof("sync pod ips into DB")
 	if !p.storeReady() {
 		return
 	}
@@ -255,6 +257,7 @@ func (p *FloatingIPPlugin) syncTAppRequestResource() {
 	if !p.storeReady() {
 		return
 	}
+	glog.Info("sync TApp request resource")
 	tapps, err := p.TAppLister.List(p.objectSelector)
 	if err != nil {
 		glog.Warningf("failed to list pods: %v", err)
