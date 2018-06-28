@@ -23,6 +23,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+const (
+	deleted_and_ip_mutable_pod            = "deleted_and_ip_mutable_pod"
+	deleted_and_parent_tapp_not_exist_pod = "deleted_and_parent_tapp_not_exist_pod"
+	deleted_and_killed_tapp_pod           = "deleted_and_killed_tapp_pod"
+	evicted_pod                           = "evicted_pod"
+)
+
 type Conf struct {
 	FloatingIPs        []*floatingip.FloatingIP `json:"floatingips,omitempty"`
 	DBConfig           *database.DBConfig       `json:"database"`
@@ -254,18 +261,19 @@ func (p *FloatingIPPlugin) allocateIP(key, nodeName string) (map[string]string, 
 	return bind, nil
 }
 
-func (p *FloatingIPPlugin) releasePodIP(key string) error {
+func (p *FloatingIPPlugin) releasePodIP(key string, reason string) error {
 	ipInfo, err := p.ipam.QueryFirst(key)
 	if err != nil {
 		return fmt.Errorf("failed to query floating ip of %s: %v", key, err)
 	}
 	if ipInfo == nil {
+		glog.Infof("release floating ip from %s because of %s, but already been released", key, reason)
 		return nil
 	}
 	if err := p.ipam.Release([]string{key}); err != nil {
-		return fmt.Errorf("failed to release floating ip of %s: %v", key, err)
+		return fmt.Errorf("failed to release floating ip of %s because of %s: %v", key, reason, err)
 	}
-	glog.Infof("released floating ip %s from %s", ipInfo.IP.String(), key)
+	glog.Infof("released floating ip %s from %s because of %s", ipInfo.IP.String(), key, reason)
 	return nil
 }
 
@@ -335,11 +343,11 @@ func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	key := keyInDB(pod)
 	if !p.immutableSeletor.Matches(labels.Set(pod.GetLabels())) {
-		return p.releasePodIP(key)
+		return p.releasePodIP(key, deleted_and_ip_mutable_pod)
 	} else {
 		tapps, err := p.TAppLister.GetPodTApps(pod)
 		if err != nil {
-			return p.releasePodIP(key)
+			return p.releasePodIP(key, deleted_and_parent_tapp_not_exist_pod)
 		}
 		tapp := tapps[0]
 		for i, status := range tapp.Spec.Statuses {
@@ -347,7 +355,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 				continue
 			}
 			// build the key namespace_tappname-id
-			return p.releasePodIP(key)
+			return p.releasePodIP(key, deleted_and_killed_tapp_pod)
 		}
 	}
 	if pod.Annotations != nil {
