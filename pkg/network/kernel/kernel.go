@@ -1,18 +1,17 @@
 package kernel
 
 import (
-	"fmt"
 	"io/ioutil"
 	"syscall"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/wait"
 	"github.com/golang/glog"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 var interval = 5 * time.Minute
 
-func BridgeNFCallIptables(quit chan error, set bool) {
+func BridgeNFCallIptables(quit <-chan struct{}, set bool) {
 	expect := "1"
 	if !set {
 		expect = "0"
@@ -20,7 +19,7 @@ func BridgeNFCallIptables(quit chan error, set bool) {
 	setArg(expect, "/proc/sys/net/bridge/bridge-nf-call-iptables", quit)
 }
 
-func IPForward(quit chan error, set bool) {
+func IPForward(quit <-chan struct{}, set bool) {
 	expect := "1"
 	if !set {
 		expect = "0"
@@ -28,8 +27,9 @@ func IPForward(quit chan error, set bool) {
 	setArg(expect, "/proc/sys/net/ipv4/ip_forward", quit)
 }
 
-func setArg(expect string, file string, quit chan error) {
-	go wait.UntilQuitSignal(fmt.Sprintf("ensure kernel args %s", file), func() {
+func setArg(expect string, file string, quit <-chan struct{}) {
+	go wait.Until(func() {
+		glog.Infof("starting to ensure kernel args %s", file)
 		data, err := ioutil.ReadFile(file)
 		if err != nil {
 			glog.Warningf("Error open %s: %v", file, err)

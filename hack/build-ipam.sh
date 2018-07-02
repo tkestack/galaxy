@@ -2,6 +2,7 @@
 
 set -e
 
+flags=${debug:+"-v"}
 # we are in the project root dir
 cur_dir=`pwd`
 package=git.code.oa.com/gaiastack/galaxy
@@ -17,4 +18,4 @@ trap cleanup EXIT
 
 # build galaxy-ipam
 echo "Building galaxy-ipam"
-go build -o bin/galaxy-ipam -v $package/cmd/galaxy-ipam
+go build -o bin/galaxy-ipam $flags $package/cmd/galaxy-ipam

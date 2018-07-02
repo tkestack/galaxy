@@ -35,13 +35,13 @@ import (
 )
 
 type Galaxy struct {
-	quitChannels []chan error
-	dockerCli    *docker.DockerInterface
-	netConf      map[string]map[string]interface{}
-	pmhandler    *portmapping.PortMappingHandler
-	client       *kubernetes.Clientset
-	zhiyunConf   *zhiyunapi.Conf
-	pm           *policy.PolicyManager
+	quitChan   chan struct{}
+	dockerCli  *docker.DockerInterface
+	netConf    map[string]map[string]interface{}
+	pmhandler  *portmapping.PortMappingHandler
+	client     *kubernetes.Clientset
+	zhiyunConf *zhiyunapi.Conf
+	pm         *policy.PolicyManager
 	*eventhandler.PodEventHandler
 	plcyHandler  *eventhandler.NetworkPolicyEventHandler
 	podInformer  corev1informer.PodInformer
@@ -53,7 +53,9 @@ func NewGalaxy() (*Galaxy, error) {
 	if err != nil {
 		return nil, err
 	}
-	g := &Galaxy{}
+	g := &Galaxy{
+		quitChan: make(chan struct{}),
+	}
 	g.dockerCli = dockerClient
 	if err := g.parseConfig(); err != nil {
 		return nil, err
@@ -62,44 +64,28 @@ func NewGalaxy() (*Galaxy, error) {
 	return g, nil
 }
 
-func (g *Galaxy) newQuitChannel() chan error {
-	quitChannel := make(chan error)
-	g.quitChannels = append(g.quitChannels, quitChannel)
-	return quitChannel
-}
-
 func (g *Galaxy) Start() error {
 	g.initk8sClient()
 	g.pm = policy.New(g.client)
 	g.initInformers()
-	gc.NewFlannelGC(g.dockerCli, g.newQuitChannel(), g.newQuitChannel()).Run()
+	gc.NewFlannelGC(g.dockerCli, g.quitChan).Run()
 	if g.zhiyunConf != nil {
-		gc.NewZhiyunGC(g.dockerCli, g.newQuitChannel(), g.zhiyunConf).Run()
+		gc.NewZhiyunGC(g.dockerCli, g.quitChan, g.zhiyunConf).Run()
 	}
-	kernel.BridgeNFCallIptables(g.newQuitChannel(), *flagBridgeNFCallIptables)
-	kernel.IPForward(g.newQuitChannel(), *flagIPForward)
+	kernel.BridgeNFCallIptables(g.quitChan, *flagBridgeNFCallIptables)
+	kernel.IPForward(g.quitChan, *flagIPForward)
 	if *flagEbtableRules {
-		firewall.SetupEbtables(g.newQuitChannel())
+		firewall.SetupEbtables(g.quitChan)
 	}
-	firewall.EnsureIptables(g.pmhandler, g.newQuitChannel())
-	go wait.Forever(g.pm.Run, time.Minute)
-	go wait.Forever(g.updateIPInfoCM, time.Minute)
+	firewall.EnsureIptables(g.pmhandler, g.quitChan)
+	go wait.Until(g.pm.Run, time.Minute, g.quitChan)
+	go wait.Until(g.updateIPInfoCM, time.Minute, g.quitChan)
 	return g.startServer()
 }
 
 func (g *Galaxy) Stop() error {
-	// Stop and wait on all quit channels.
-	for i, c := range g.quitChannels {
-		// Send the exit signal and wait on the thread to exit (by closing the channel).
-		c <- nil
-		err := <-c
-		if err != nil {
-			// Remove the channels that quit successfully.
-			g.quitChannels = g.quitChannels[i:]
-			return err
-		}
-	}
-	g.quitChannels = make([]chan error, 0)
+	close(g.quitChan)
+	g.quitChan = make(chan struct{})
 	return nil
 }
 
@@ -190,8 +176,8 @@ func (g *Galaxy) initInformers() {
 		UpdateFunc: g.plcyHandler.OnUpdate,
 		DeleteFunc: g.plcyHandler.OnDelete,
 	})
-	go podInformerFactory.Start(make(chan struct{}))
-	go networkingInformerFactory.Start(make(chan struct{}))
+	go podInformerFactory.Start(g.quitChan)
+	go networkingInformerFactory.Start(g.quitChan)
 }
 
 func (g *Galaxy) updateIPInfoCM() {

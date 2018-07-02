@@ -33,12 +33,10 @@ echo "   loopback"
 # we can't add prefix to loopback binary cause k8s hard code the type name of lo plugin
 go build -o bin/loopback -v $cni_package/plugins/main/loopback
 echo "   bridge"
-go build -o bin/${bin_prefix}-bridge -v $cni_package/plugins/main/bridge
-#echo "   flannel"
-#go build -o bin/${bin_prefix}-flannel -v $cni_package/plugins/meta/flannel
+go build -o bin/${bin_prefix}-bridge $flags $cni_package/plugins/main/bridge
 
 # build galaxy cni plugins
-PLUGINS="$GOPATH/src/$package/cni/k8s-vlan $GOPATH/src/$package/cni/sdn $GOPATH/src/$package/cni/veth $GOPATH/src/$package/cni/k8s-sriov $GOPATH/src/$package/cni/zhiyun-ipam"
+PLUGINS="$GOPATH/src/$package/cni/k8s-vlan $GOPATH/src/$package/cni/sdn $GOPATH/src/$package/cni/veth $GOPATH/src/$package/cni/k8s-sriov"
 for d in $PLUGINS; do
 	if [ -d $d ]; then
 		plugin=$(basename $d)

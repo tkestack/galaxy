@@ -247,7 +247,7 @@ func releaseVF(podifName string, netns ns.NetNS) error {
 
 	// move VF device to init netns
 	if err = netlink.LinkSetNsFd(vfDev, int(initns.Fd())); err != nil {
-		return fmt.Errorf("failed to move vf device %s to init netns: %v", ifName, err)
+		return fmt.Errorf("failed to move vf device %q to init netns: %v", ifName, err)
 	}
 
 	return nil

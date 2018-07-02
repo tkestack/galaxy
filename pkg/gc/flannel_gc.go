@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
-	"git.code.oa.com/gaiastack/galaxy/pkg/wait"
 )
 
 var (
@@ -25,32 +25,35 @@ type flannelGC struct {
 	allocatedIPDir string
 	gcDirs         []string
 	dockerCli      *docker.DockerInterface
-	quit1, quit2   chan error
+	quit           <-chan struct{}
 }
 
-func NewFlannelGC(dockerCli *docker.DockerInterface, quit1, quit2 chan error) GC {
+func NewFlannelGC(dockerCli *docker.DockerInterface, quit <-chan struct{}) GC {
 	dirs := strings.Split(*flagGCDirs, ",")
 	return &flannelGC{
 		allocatedIPDir: *flagAllocatedIPDir,
 		gcDirs:         dirs,
 		dockerCli:      dockerCli,
-		quit1:          quit1,
-		quit2:          quit2,
+		quit:           quit,
 	}
 }
 
 func (gc *flannelGC) Run() {
-	go wait.UntilQuitSignal("flannel gc cleanup ip", func() {
+	go wait.Until(func() {
+		glog.Infof("starting flannel gc cleanup ip")
+		defer glog.Infof("flannel gc cleanup ip complete")
 		if err := gc.cleanupIP(); err != nil {
-			glog.Errorf("Error executing flannel gc cleanup ip %v", err)
+			glog.Warningf("Error executing flannel gc cleanup ip %v", err)
 		}
-	}, *flagFlannelGCInterval, gc.quit1)
+	}, *flagFlannelGCInterval, gc.quit)
 	//this is an ensurance routine
-	go wait.UntilQuitSignal("cleanup gc_dirs", func() {
+	go wait.Until(func() {
+		glog.Infof("starting cleanup container id file dirs")
+		defer glog.Infof("cleanup container id file dirs complete")
 		if err := gc.cleanupGCDirs(); err != nil {
 			glog.Errorf("Error executing cleanup gc_dirs %v", err)
 		}
-	}, *flagFlannelGCInterval*3, gc.quit2)
+	}, *flagFlannelGCInterval, gc.quit)
 }
 
 func (gc *flannelGC) cleanupIP() error {
@@ -62,6 +65,9 @@ func (gc *flannelGC) cleanupIP() error {
 		return err
 	}
 	for _, fi := range fis {
+		if fi.IsDir() {
+			continue
+		}
 		ip := net.ParseIP(fi.Name())
 		if len(ip) == 0 {
 			continue
@@ -97,6 +103,7 @@ func (gc *flannelGC) cleanupIP() error {
 
 func (gc *flannelGC) cleanupGCDirs() error {
 	for _, dir := range gc.gcDirs {
+		glog.Infof("start cleanup %s", dir)
 		fis, err := ioutil.ReadDir(dir)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -105,6 +112,9 @@ func (gc *flannelGC) cleanupGCDirs() error {
 			return err
 		}
 		for _, fi := range fis {
+			if fi.IsDir() {
+				continue
+			}
 			file := filepath.Join(dir, fi.Name())
 			if _, err := gc.dockerCli.InspectContainer(fi.Name()); err != nil {
 				if _, ok := err.(docker.ContainerNotFoundError); ok {

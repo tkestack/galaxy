@@ -9,7 +9,6 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	galaxytypes "git.code.oa.com/gaiastack/galaxy/pkg/network/types"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -115,9 +114,9 @@ func connectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, conf *Ve
 			return fmt.Errorf("failed to rename sbox device %q to %q: %v", sbox.Attrs().Name, args.IfName, err)
 		}
 		// Add IP and routes to sbox, including default route
-		if err := configureIface(args.IfName, &result.IP4.IP, []galaxytypes.Route{
-			{Dst: net.IPNet{IP: linkLocalAddress, Mask: mask32}, Scope: netlink.SCOPE_LINK},
-			{Dst: defaultDst, GW: linkLocalAddress, Scope: netlink.SCOPE_UNIVERSE},
+		if err := configureIface(args.IfName, &result.IP4.IP, []netlink.Route{
+			{Dst: &net.IPNet{IP: linkLocalAddress, Mask: mask32}, Scope: netlink.SCOPE_LINK},
+			{Dst: &defaultDst, Gw: linkLocalAddress, Scope: netlink.SCOPE_UNIVERSE},
 		}); err != nil {
 			return err
 		}
@@ -134,7 +133,7 @@ func connectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, conf *Ve
 	})
 }
 
-func configureIface(ifName string, ip *net.IPNet, routes []galaxytypes.Route) error {
+func configureIface(ifName string, ip *net.IPNet, routes []netlink.Route) error {
 	link, err := netlink.LinkByName(ifName)
 	if err != nil {
 		return fmt.Errorf("failed to lookup %q: %v", ifName, err)
@@ -150,10 +149,11 @@ func configureIface(ifName string, ip *net.IPNet, routes []galaxytypes.Route) er
 	}
 
 	for _, r := range routes {
-		if err = galaxytypes.AddRoute(&r.Dst, r.GW, link, r.Scope); err != nil {
+		r.LinkIndex = link.Attrs().Index
+		if err = netlink.RouteAdd(&r); err != nil {
 			// we skip over duplicate routes as we assume the first one wins
 			if !os.IsExist(err) {
-				return fmt.Errorf("failed to add route '%v via %v dev %v scope %v': %v", r.Dst, r.GW, ifName, r.Scope, err)
+				return fmt.Errorf("failed to add route '%v via %v dev %v scope %v': %v", r.Dst, r.Gw, ifName, r.Scope, err)
 			}
 		}
 	}

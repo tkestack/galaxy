@@ -8,17 +8,17 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/cni/zhiyun-ipam/api"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
-	"git.code.oa.com/gaiastack/galaxy/pkg/wait"
 	"github.com/golang/glog"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 type ZhiyunGC struct {
 	conf      *api.Conf
 	dockerCli *docker.DockerInterface
-	quit      chan error
+	quit      <-chan struct{}
 }
 
-func NewZhiyunGC(dockerCli *docker.DockerInterface, quit chan error, conf *api.Conf) GC {
+func NewZhiyunGC(dockerCli *docker.DockerInterface, quit <-chan struct{}, conf *api.Conf) GC {
 	return &ZhiyunGC{
 		dockerCli: dockerCli,
 		quit:      quit,
@@ -27,7 +27,9 @@ func NewZhiyunGC(dockerCli *docker.DockerInterface, quit chan error, conf *api.C
 }
 
 func (gc *ZhiyunGC) Run() {
-	go wait.UntilQuitSignal("zhiyun gc cleanup ip", func() {
+	go wait.Until(func() {
+		glog.Infof("starting zhiyun gc cleanup ip")
+		defer glog.Infof("zhiyun gc cleanup ip complete")
 		if err := cleanupZhiYunIP(gc.conf, gc.dockerCli); err != nil {
 			glog.Errorf("Error executing zhiyun gc cleanup ip %v", err)
 		}
@@ -43,6 +45,9 @@ func cleanupZhiYunIP(conf *api.Conf, dockerCli *docker.DockerInterface) error {
 		return err
 	}
 	for _, fi := range fis {
+		if fi.IsDir() {
+			continue
+		}
 		ip := net.ParseIP(fi.Name())
 		if len(ip) == 0 {
 			continue

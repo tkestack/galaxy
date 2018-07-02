@@ -6,8 +6,8 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/netns"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ips"
 )
 
 func TestNodeIP(t *testing.T) {
@@ -25,7 +25,7 @@ func TestNodeIP(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, ipNet := range ipNets {
-				ipNet, err := network.ParseCIDR(ipNet)
+				ipNet, err := ips.ParseCIDR(ipNet)
 				if err != nil {
 					t.Fatal(err)
 				}
