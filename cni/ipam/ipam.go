@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.code.oa.com/gaiastack/galaxy/cni/apiswitch-ipam"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -12,7 +11,7 @@ import (
 	"github.com/containernetworking/plugins/pkg/ipam"
 )
 
-// Allocate tries to find IPInfo from args firstly. If it can't and ipamType is empty, try to allocate ip from apiswitch.
+// Allocate tries to find IPInfo from args firstly
 // Otherwise invoke third party ipam binaries
 func Allocate(ipamType string, args *skel.CmdArgs) (uint16, types.Result, error) {
 	var (
@@ -32,16 +31,7 @@ func Allocate(ipamType string, args *skel.CmdArgs) (uint16, types.Result, error)
 		return ipInfo.Vlan, cniutil.IPInfoToResult(&ipInfo), nil
 	}
 	if ipamType == "" {
-		// get ipinfo from apiswitch
-		ipamConf, err := apiswitch_ipam.LoadIPAMConf(args.StdinData)
-		if err != nil {
-			return vlanId, nil, err
-		}
-		ipInfo, err := apiswitch_ipam.Allocate(ipamConf, kvMap)
-		if err != nil {
-			return vlanId, nil, err
-		}
-		return ipInfo.Vlan, cniutil.IPInfoToResult(ipInfo), nil
+		return 0, nil, fmt.Errorf("neither ipInfo from cni args nor ipam type from netconf")
 	}
 	// run the IPAM plugin and get back the config to apply
 	generalResult, err := ipam.ExecAdd(ipamType, args.StdinData)

@@ -28,7 +28,6 @@ import (
 )
 
 var (
-	flagMaster               = flag.String("master", "", "URL of galaxy master controller, currently apiswitch")
 	flagNetworkConf          = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
 	flagBridgeNFCallIptables = flag.Bool("bridge-nf-call-iptables", true, "ensure bridge-nf-call-iptables is set/unset")
 	flagIPForward            = flag.Bool("ip-forward", true, "ensure ip-forward is set/unset")
@@ -156,8 +155,8 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 			if pod.Annotations != nil && pod.Annotations[private.AnnotationKeyIPInfo] != "" {
 				req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.IPInfoInArgs, pod.Annotations[private.AnnotationKeyIPInfo])
 			} else {
-				if *flagMaster == "" {
-					return nil, fmt.Errorf("no ipinfo in pod annotation, also apiswitch url is unkown, check if galaxy-ipam scheduler plugin is working")
+				if !g.underlayCNIIPAM {
+					return nil, fmt.Errorf("neither ipInfo in pod's annotation nor underlay ipam type from netconf")
 				}
 			}
 			glog.V(4).Infof("pod %s_%s ip %s", pod.Name, pod.Namespace, pod.Annotations[private.AnnotationKeyIPInfo])

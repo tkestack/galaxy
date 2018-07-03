@@ -43,9 +43,10 @@ type Galaxy struct {
 	zhiyunConf *zhiyunapi.Conf
 	pm         *policy.PolicyManager
 	*eventhandler.PodEventHandler
-	plcyHandler  *eventhandler.NetworkPolicyEventHandler
-	podInformer  corev1informer.PodInformer
-	plcyInformer networkingv1informer.NetworkPolicyInformer
+	plcyHandler     *eventhandler.NetworkPolicyEventHandler
+	podInformer     corev1informer.PodInformer
+	plcyInformer    networkingv1informer.NetworkPolicyInformer
+	underlayCNIIPAM bool // if set, galaxy delegates to a cni ipam to allocate ip for underlay network
 }
 
 func NewGalaxy() (*Galaxy, error) {
@@ -112,12 +113,11 @@ func (g *Galaxy) parseConfig() error {
 		}
 	}
 	if vlanConfMap, ok := g.netConf[private.NetworkTypeUnderlay.CNIType]; ok {
-		vlanConfMap["url"] = *flagMaster
-		vlanConfMap["node_ip"] = flags.GetNodeIP()
 		if ipamObj, exist := vlanConfMap["ipam"]; exist {
 			if ipamMap, isMap := ipamObj.(map[string]interface{}); isMap {
 				ipamMap["node_ip"] = flags.GetNodeIP()
 				if typ, hasType := ipamMap["type"]; hasType {
+					g.underlayCNIIPAM = true
 					if typeStr, isStr := typ.(string); isStr {
 						if typeStr == private.IPAMTypeZhiyun {
 							var zhiyunConf zhiyunapi.Conf
