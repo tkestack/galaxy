@@ -24,6 +24,7 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/flag"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ldflags/verflag"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/logs"
 	"github.com/spf13/pflag"
 )
@@ -37,6 +38,8 @@ func main() {
 	flag.InitFlags()
 	logs.InitLogs()
 	defer logs.FlushLogs()
+
+	verflag.PrintAndExitIfRequested()
 
 	if err := s.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)

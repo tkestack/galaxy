@@ -9,6 +9,11 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/galaxy"
 	"git.code.oa.com/gaiastack/galaxy/pkg/signal"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ldflags"
+)
+
+var (
+	flagVersion = flag.Bool("version", false, "print version")
 )
 
 func main() {
@@ -19,6 +24,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, galaxy.Note)
 	}
 	flag.Parse()
+	if *flagVersion {
+		fmt.Println(ldflags.Footprint())
+		return
+	}
 	galaxy, err := galaxy.NewGalaxy()
 	if err != nil {
 		glog.Fatalf("Error create galaxy: %v", err)

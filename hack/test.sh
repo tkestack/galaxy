@@ -3,9 +3,9 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-readonly ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd -P)
-readonly LOCAL_GOPATH="${ROOT}/go"
-readonly PKG_NAME="git.code.oa.com/gaiastack/galaxy"
+ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd -P)
+LOCAL_GOPATH="${ROOT}/go"
+PKG="git.code.oa.com/gaiastack/galaxy"
 
 source ${ROOT}/hack/init.sh
 create_go_path_tree
@@ -13,7 +13,7 @@ create_go_path_tree
 (
   export GOPATH=${LOCAL_GOPATH}
   export GOOS=linux
-  cd ${LOCAL_GOPATH}/src/${PKG_NAME}/
+  cd ${LOCAL_GOPATH}/src/${PKG}/
   go test -v $(glide novendor | grep -v '/go/' | grep -v '/e2e/')
   ginkgo -v e2e/k8s-vlan -- --logtostderr --v=4
 )
