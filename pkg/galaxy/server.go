@@ -260,7 +260,7 @@ func disableIPv6(path string) error {
 func (g *Galaxy) getPod(name, namespace string) (*corev1.Pod, error) {
 	var pod *corev1.Pod
 	if err := wait.PollImmediate(time.Millisecond*500, 5*time.Second, func() (done bool, err error) {
-		pod, err = g.podInformer.Lister().Pods(namespace).Get(name)
+		pod, err = g.client.CoreV1().Pods(namespace).Get(name, v1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
 				glog.Warningf("can't find pod %s_%s, retring", name, namespace)

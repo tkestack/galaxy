@@ -35,6 +35,7 @@ func (p *PolicyManager) DeletePod(pod *corev1.Pod) error {
 }
 
 func (p *PolicyManager) AddPolicy(policy *networkv1.NetworkPolicy) error {
+	p.startPodInformerFactory()
 	// if a policy is added, we should add policy chain before adding pod rules targeting this chain
 	p.syncNetworkPolices()
 	p.syncNetworkPolicyRules()

@@ -12,7 +12,6 @@ import (
 	zhiyunapi "git.code.oa.com/gaiastack/galaxy/cni/zhiyun-ipam/api"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
@@ -26,26 +25,18 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/informers"
-	corev1informer "k8s.io/client-go/informers/core/v1"
-	networkingv1informer "k8s.io/client-go/informers/networking/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 type Galaxy struct {
-	quitChan   chan struct{}
-	dockerCli  *docker.DockerInterface
-	netConf    map[string]map[string]interface{}
-	pmhandler  *portmapping.PortMappingHandler
-	client     *kubernetes.Clientset
-	zhiyunConf *zhiyunapi.Conf
-	pm         *policy.PolicyManager
-	*eventhandler.PodEventHandler
-	plcyHandler     *eventhandler.NetworkPolicyEventHandler
-	podInformer     corev1informer.PodInformer
-	plcyInformer    networkingv1informer.NetworkPolicyInformer
+	quitChan        chan struct{}
+	dockerCli       *docker.DockerInterface
+	netConf         map[string]map[string]interface{}
+	pmhandler       *portmapping.PortMappingHandler
+	client          *kubernetes.Clientset
+	zhiyunConf      *zhiyunapi.Conf
+	pm              *policy.PolicyManager
 	underlayCNIIPAM bool // if set, galaxy delegates to a cni ipam to allocate ip for underlay network
 }
 
@@ -67,8 +58,7 @@ func NewGalaxy() (*Galaxy, error) {
 
 func (g *Galaxy) Start() error {
 	g.initk8sClient()
-	g.pm = policy.New(g.client)
-	g.initInformers()
+	g.pm = policy.New(g.client, g.quitChan)
 	gc.NewFlannelGC(g.dockerCli, g.quitChan).Run()
 	if g.zhiyunConf != nil {
 		gc.NewZhiyunGC(g.dockerCli, g.quitChan, g.zhiyunConf).Run()
@@ -79,7 +69,7 @@ func (g *Galaxy) Start() error {
 		firewall.SetupEbtables(g.quitChan)
 	}
 	firewall.EnsureIptables(g.pmhandler, g.quitChan)
-	go wait.Until(g.pm.Run, time.Minute, g.quitChan)
+	go wait.Until(g.pm.Run, 3*time.Minute, g.quitChan)
 	go wait.Until(g.updateIPInfoCM, time.Minute, g.quitChan)
 	return g.startServer()
 }
@@ -154,30 +144,6 @@ func (g *Galaxy) initk8sClient() {
 		glog.Fatalf("Can not generate client from config: error(%v)", err)
 	}
 	glog.Infof("apiserver address %s, kubeconf %s", *flagApiServer, *flagKubeConf)
-}
-
-func (g *Galaxy) initInformers() {
-	//podInformerFactory := informers.NewFilteredSharedInformerFactory(g.client, time.Minute, v1.NamespaceAll, func(listOptions *v1.ListOptions) {
-	//	listOptions.FieldSelector = fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname("")).String()
-	//})
-	podInformerFactory := informers.NewSharedInformerFactory(g.client, 0)
-	networkingInformerFactory := informers.NewSharedInformerFactory(g.client, 0)
-	g.podInformer = podInformerFactory.Core().V1().Pods()
-	g.plcyInformer = networkingInformerFactory.Networking().V1().NetworkPolicies()
-	g.PodEventHandler = eventhandler.NewPodEventHandler(g.pm)
-	g.plcyHandler = eventhandler.NewNetworkPolicyEventHandler(g.pm)
-	g.podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    g.OnAdd,
-		UpdateFunc: g.OnUpdate,
-		DeleteFunc: g.OnDelete,
-	})
-	g.plcyInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    g.plcyHandler.OnAdd,
-		UpdateFunc: g.plcyHandler.OnUpdate,
-		DeleteFunc: g.plcyHandler.OnDelete,
-	})
-	go podInformerFactory.Start(g.quitChan)
-	go networkingInformerFactory.Start(g.quitChan)
 }
 
 func (g *Galaxy) updateIPInfoCM() {
