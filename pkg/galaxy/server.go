@@ -154,6 +154,9 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 		} else if private.NetworkTypeUnderlay.Has(networkType) {
 			if pod.Annotations != nil && pod.Annotations[private.AnnotationKeyIPInfo] != "" {
 				req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.IPInfoInArgs, pod.Annotations[private.AnnotationKeyIPInfo])
+				if pod.Annotations[private.AnnotationKeySecondIPInfo] != "" {
+					req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.SecondIPInfoInArgs, pod.Annotations[private.AnnotationKeySecondIPInfo])
+				}
 			} else {
 				if !g.underlayCNIIPAM {
 					return nil, fmt.Errorf("neither ipInfo in pod's annotation nor underlay ipam type from netconf")

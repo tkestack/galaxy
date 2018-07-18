@@ -192,7 +192,7 @@ func (d *VlanDriver) CreateBridgeAndVlanDevice(vlanId uint16) error {
 
 	d.Lock()
 	defer d.Unlock()
-	vlan, err := d.createVlanDevice(vlanId)
+	vlan, err := d.getOrCreateVlanDevice(vlanId)
 	if err != nil {
 		return err
 	}
@@ -233,11 +233,16 @@ func (d *VlanDriver) MaybeCreateVlanDevice(vlanId uint16) error {
 	}
 	d.Lock()
 	defer d.Unlock()
-	_, err := d.createVlanDevice(vlanId)
+	_, err := d.getOrCreateVlanDevice(vlanId)
 	return err
 }
 
-func (d *VlanDriver) createVlanDevice(vlanId uint16) (netlink.Link, error) {
+func (d *VlanDriver) getOrCreateVlanDevice(vlanId uint16) (netlink.Link, error) {
+	// check if vlan created by user exist
+	link, err := d.getVlanIfExist(vlanId)
+	if err != nil || link != nil {
+		return link, err
+	}
 	vlanIfName := fmt.Sprintf("%s%d", d.VlanNamePrefix, vlanId)
 	// Get vlan device
 	vlan, err := getOrCreateDevice(vlanIfName, func(name string) error {
@@ -255,6 +260,25 @@ func (d *VlanDriver) createVlanDevice(vlanId uint16) (netlink.Link, error) {
 	}
 	d.DeviceIndex = vlan.Attrs().Index
 	return vlan, nil
+}
+
+func (d *VlanDriver) getVlanIfExist(vlanId uint16) (netlink.Link, error) {
+	links, err := netlink.LinkList()
+	if err != nil {
+		return nil, err
+	}
+	for _, link := range links {
+		if link.Type() == "vlan" {
+			if vlan, ok := link.(*netlink.Vlan); !ok {
+				return nil, fmt.Errorf("vlan device type case error: %T", link)
+			} else {
+				if vlan.VlanId == int(vlanId) && vlan.ParentIndex == d.vlanParentIndex {
+					return link, nil
+				}
+			}
+		}
+	}
+	return nil, nil
 }
 
 func (d *VlanDriver) MacVlanMode() bool {

@@ -57,11 +57,11 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	vlanId, result, err := galaxyIpam.Allocate(conf.IPAM.Type, args)
+	vlanIds, results, err := galaxyIpam.Allocate(conf.IPAM.Type, args)
 	if err != nil {
 		return err
 	}
-	result020, err := t020.GetResult(result)
+	result020, err := t020.GetResult(results[0])
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 	defer netns.Close()
 
-	if err := setupVF(conf, result020, args.IfName, int(vlanId), netns); err != nil {
+	if err := setupVF(conf, result020, args.IfName, int(vlanIds[0]), netns); err != nil {
 		return err
 	}
 	//send Gratuitous ARP to let switch knows IP floats onto this node

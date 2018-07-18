@@ -40,7 +40,8 @@ const (
 )
 
 const (
-	IPInfoInArgs = "IPInfo"
+	IPInfoInArgs       = "IPInfo"
+	SecondIPInfoInArgs = "SecondIPInfo"
 )
 
 // like net.IPNet but adds JSON marshalling and unmarshalling
