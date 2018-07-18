@@ -184,36 +184,42 @@ func getOrCreateDevice(name string, createDevice func(name string) error) (netli
 	return device, nil
 }
 
-func (d *VlanDriver) CreateBridgeAndVlanDevice(vlanId uint16) error {
+func (d *VlanDriver) CreateBridgeAndVlanDevice(vlanId uint16) (string, error) {
 	if vlanId == 0 {
-		return nil
+		return d.BridgeNameForVlan(vlanId), nil
 	}
-	bridgeIfName := fmt.Sprintf("%s%d", d.BridgeNamePrefix, vlanId)
-
 	d.Lock()
 	defer d.Unlock()
 	vlan, err := d.getOrCreateVlanDevice(vlanId)
 	if err != nil {
-		return err
+		return "", err
 	}
+	master, err := getVlanMaster(vlan)
+	if err != nil {
+		return "", err
+	}
+	if master != nil {
+		return master.Attrs().Name, nil
+	}
+	bridgeIfName := fmt.Sprintf("%s%d", d.BridgeNamePrefix, vlanId)
 	bridge, err := getOrCreateBridge(bridgeIfName, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if vlan.Attrs().MasterIndex != bridge.Attrs().Index {
 		if err := netlink.LinkSetMaster(vlan, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: bridgeIfName}}); err != nil {
-			return fmt.Errorf("Failed to add vlan device %s to bridge device %s: %v", vlan.Attrs().Name, bridgeIfName, err)
+			return "", fmt.Errorf("Failed to add vlan device %s to bridge device %s: %v", vlan.Attrs().Name, bridgeIfName, err)
 		}
 	}
 	if err := netlink.LinkSetUp(bridge); err != nil {
-		return fmt.Errorf("Failed to set up bridge device %s: %v", bridgeIfName, err)
+		return "", fmt.Errorf("Failed to set up bridge device %s: %v", bridgeIfName, err)
 	}
 	if d.PureMode() {
 		if err := utils.SetProxyArp(bridgeIfName); err != nil {
-			return err
+			return "", err
 		}
 	}
-	return nil
+	return bridgeIfName, nil
 }
 
 func (d *VlanDriver) BridgeNameForVlan(vlanId uint16) string {
@@ -260,6 +266,23 @@ func (d *VlanDriver) getOrCreateVlanDevice(vlanId uint16) (netlink.Link, error) 
 	}
 	d.DeviceIndex = vlan.Attrs().Index
 	return vlan, nil
+}
+
+func getVlanMaster(link netlink.Link) (netlink.Link, error) {
+	if vlan, ok := link.(*netlink.Vlan); !ok {
+		return nil, fmt.Errorf("not a vlan device")
+	} else if vlan.MasterIndex <= 0 {
+		return nil, nil
+	} else {
+		link, err := netlink.LinkByIndex(vlan.MasterIndex)
+		if err != nil {
+			return nil, err
+		}
+		if link.Type() == "bridge" {
+			return link, nil
+		}
+		return nil, nil
+	}
 }
 
 func (d *VlanDriver) getVlanIfExist(vlanId uint16) (netlink.Link, error) {

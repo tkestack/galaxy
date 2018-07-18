@@ -48,23 +48,25 @@ func main() {
 		glog.Fatalf("invalid gateway %s", *flagGateway)
 	}
 	if *flagVlan != 0 {
-		if err := d.CreateBridgeAndVlanDevice(uint16(*flagVlan)); err != nil {
+		bridgeName, err := d.CreateBridgeAndVlanDevice(uint16(*flagVlan))
+		if err != nil {
 			glog.Fatalf("Error creating vlan device %v", err)
 		}
+		if err := utils.VethConnectsHostWithContainer(&t020.Result{
+			IP4: &t020.IPConfig{
+				IP:      *ipNet,
+				Gateway: gateway,
+				Routes: []types.Route{{
+					Dst: net.IPNet{
+						IP:   net.IPv4(0, 0, 0, 0),
+						Mask: net.IPv4Mask(0, 0, 0, 0),
+					},
+				}},
+			},
+		}, &skel.CmdArgs{Netns: *flagNetns, IfName: "eth0"}, bridgeName, ""); err != nil {
+			glog.Fatalf("Error creating veth %v", err)
+		}
 	}
-	if err := utils.VethConnectsHostWithContainer(&t020.Result{
-		IP4: &t020.IPConfig{
-			IP:      *ipNet,
-			Gateway: gateway,
-			Routes: []types.Route{{
-				Dst: net.IPNet{
-					IP:   net.IPv4(0, 0, 0, 0),
-					Mask: net.IPv4Mask(0, 0, 0, 0),
-				},
-			}},
-		},
-	}, &skel.CmdArgs{Netns: *flagNetns, IfName: "eth0"}, d.BridgeNameForVlan(uint16(*flagVlan))); err != nil {
-		glog.Fatalf("Error creating veth %v", err)
-	}
+
 	glog.Infof("privisioned container %s", *flagNetns)
 }

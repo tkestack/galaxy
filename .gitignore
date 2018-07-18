@@ -47,3 +47,5 @@
 /vendor/**/Vagrantfile
 /vendor/**/.gitignore
 /vendor/**/.gitattributes
+/.vagrant
+ubuntu-*.log

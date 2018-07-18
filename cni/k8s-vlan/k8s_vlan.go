@@ -83,10 +83,13 @@ func cmdAdd(args *skel.CmdArgs) error {
 		for i := 0; i < len(result020s); i++ {
 			vlanId := vlanIds[i]
 			result020 := result020s[i]
-			if err := d.CreateBridgeAndVlanDevice(vlanId); err != nil {
+			bridgeName, err := d.CreateBridgeAndVlanDevice(vlanId)
+			if err != nil {
 				return err
 			}
+			suffix := ""
 			if i != 0 {
+				suffix = fmt.Sprintf("-%d", i+1)
 				ifIndex++
 				args.IfName = fmt.Sprintf("eth%d", ifIndex)
 				if args.IfName == ifName {
@@ -94,7 +97,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 					args.IfName = fmt.Sprintf("eth%d", ifIndex)
 				}
 			}
-			if err := utils.VethConnectsHostWithContainer(result020, args, d.BridgeNameForVlan(vlanId)); err != nil {
+			if err := utils.VethConnectsHostWithContainer(result020, args, bridgeName, suffix); err != nil {
 				return err
 			}
 			utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)

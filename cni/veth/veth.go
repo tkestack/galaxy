@@ -80,7 +80,7 @@ func connectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, conf *Ve
 			{Dst: defaultDst, GW: linkLocalAddress},
 		},
 	}
-	host, sbox, err := utils.CreateVeth(args.ContainerID, conf.Mtu)
+	host, sbox, err := utils.CreateVeth(args.ContainerID, conf.Mtu, "")
 	if err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err := connectsHostWithContainer(result, args, conf); err != nil {
 		return err
 	}
-	if err := addHostRoute(&result.IP4.IP, utils.HostVethName(args.ContainerID), conf.RouteSrc); err != nil {
+	if err := addHostRoute(&result.IP4.IP, utils.HostVethName(args.ContainerID, ""), conf.RouteSrc); err != nil {
 		return err
 	}
 	result.DNS = conf.DNS
