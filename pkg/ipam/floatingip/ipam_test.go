@@ -15,6 +15,10 @@ import (
 )
 
 func Start(t *testing.T) floatingip.IPAM {
+	return CreateIPAMWithTableName(t, database.DefaultFloatingipTableName)
+}
+
+func CreateIPAMWithTableName(t *testing.T, tableName string) floatingip.IPAM {
 	var err error
 	db, err := database.NewTestDB()
 	if err != nil {
@@ -29,7 +33,12 @@ func Start(t *testing.T) floatingip.IPAM {
 	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
 		t.Fatal(err)
 	}
-	i := floatingip.NewIPAM(db)
+	i := floatingip.NewIPAMWithTableName(db, tableName)
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		return tx.Exec(fmt.Sprintf("TRUNCATE %s;", tableName)).Error
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := i.ConfigurePool(conf.Floatingips); err != nil {
 		t.Fatal(err)
 	}
@@ -342,5 +351,87 @@ func TestAllocateSpecificIP(t *testing.T) {
 	// check if an allocated ip can be allocated again, should return an ErrNotUpdated error
 	if err := ipam.AllocateSpecificIP("pod2", ip); err == nil || err != floatingip.ErrNotUpdated {
 		t.Fatal(err)
+	}
+}
+
+func TestMultipleIPAM(t *testing.T) {
+	database.ForceSequential <- true
+	defer func() {
+		<-database.ForceSequential
+	}()
+	ipam := Start(t)
+	defer ipam.Shutdown()
+	secondIPAM := CreateIPAMWithTableName(t, "test_table")
+	defer secondIPAM.Shutdown()
+	var check = func(ip net.IP, expectKey string) {
+		t.Logf("testing expectKey %s, ip %s", expectKey, ip.String())
+		t.Logf("secondIPAM...")
+		// check secondIPAM query result is not empty
+		key, err := secondIPAM.QueryByIP(ip)
+		if err != nil || key != expectKey {
+			t.Fatalf("key %s, err %v", key, err)
+		}
+		ipInfo, err := secondIPAM.QueryFirst(expectKey)
+		if err != nil || ipInfo.IP.IP.String() != ip.String() {
+			t.Fatalf("ipInfo %v, err %v", ipInfo, err)
+		}
+		m, err := secondIPAM.QueryByPrefix(expectKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(m) == 0 || m[ip.String()] != expectKey {
+			t.Fatalf("%v", m)
+		}
+		subnets, err := secondIPAM.QueryRoutableSubnetByKey(expectKey)
+		if err != nil || len(subnets) == 0 {
+			t.Fatalf("%v err %v", subnets, err)
+		}
+		// check ipam query result is empty
+		t.Logf("ipam...")
+		key, err = ipam.QueryByIP(ip)
+		if err != nil || key != "" {
+			t.Fatalf("key %s, err %v", key, err)
+		}
+		ipInfo, err = ipam.QueryFirst(expectKey)
+		if err != nil || ipInfo != nil {
+			t.Fatalf("ipInfo %v, err %v", ipInfo, err)
+		}
+		m, err = ipam.QueryByPrefix(expectKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(m) != 0 {
+			t.Fatalf("%v", m)
+		}
+		subnets, err = ipam.QueryRoutableSubnetByKey(expectKey)
+		if err != nil || len(subnets) != 0 {
+			t.Fatalf("%v err %v", subnets, err)
+		}
+	}
+	ip := net.ParseIP("10.49.27.216")
+	if err := secondIPAM.AllocateSpecificIP("pod1", ip); err != nil {
+		t.Fatal(err)
+	}
+	check(ip, "pod1")
+
+	_, routableSubnet, _ := net.ParseCIDR("10.173.13.0/24")
+	ip2, err := secondIPAM.AllocateInSubnet("pod2", routableSubnet)
+	if err != nil || ip2 == nil {
+		t.Fatalf("ip %v, err %v", ip2, err)
+	}
+	check(ip2, "pod2")
+
+	// check release ips
+	if err := secondIPAM.Release([]string{"pod1"}); err != nil {
+		t.Fatal(err)
+	}
+	if ipInfo, err := secondIPAM.QueryFirst("pod1"); err != nil || ipInfo != nil {
+		t.Fatalf("ipInfo %v, err %v", ipInfo, err)
+	}
+	if err := secondIPAM.ReleaseByPrefix("pod2"); err != nil {
+		t.Fatal(err)
+	}
+	if ipInfo, err := secondIPAM.QueryFirst("pod2"); err != nil || ipInfo != nil {
+		t.Fatalf("ipInfo %v, err %v", ipInfo, err)
 	}
 }

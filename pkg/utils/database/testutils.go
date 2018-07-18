@@ -2,9 +2,6 @@ package database
 
 import (
 	"encoding/json"
-	"fmt"
-
-	"github.com/jinzhu/gorm"
 )
 
 const (
@@ -58,11 +55,6 @@ func NewTestDB() (*DBRecorder, error) {
 	}
 	db := NewDBRecorder(config.DBConfig)
 	if err := db.Run(); err != nil {
-		return nil, err
-	}
-	if err := db.Transaction(func(tx *gorm.DB) error {
-		return tx.Exec(fmt.Sprintf("TRUNCATE %s;", FloatingipTableName)).Error
-	}); err != nil {
 		return nil, err
 	}
 	return db, nil

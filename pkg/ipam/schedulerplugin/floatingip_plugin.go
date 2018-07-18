@@ -44,7 +44,7 @@ type FloatingIPPlugin struct {
 	objectSelector, nodeSelector labels.Selector
 	// whether or not the deployment wants its allocated floatingips immutable accross pod reassigning
 	immutableSeletor labels.Selector
-	ipam             floatingip.IPAM
+	ipam, secondIPAM floatingip.IPAM
 	// node name to subnet cache
 	nodeSubnet     map[string]*net.IPNet
 	nodeSubnetLock sync.Mutex
@@ -70,9 +70,9 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 	if err := db.Run(); err != nil {
 		return nil, err
 	}
-	ipam := floatingip.NewIPAM(db)
 	plugin := &FloatingIPPlugin{
-		ipam:              ipam,
+		ipam:              floatingip.NewIPAM(db),
+		secondIPAM:        floatingip.NewIPAMWithTableName(db, "second_fips"),
 		nodeSubnet:        make(map[string]*net.IPNet),
 		PluginFactoryArgs: args,
 		conf:              &conf,

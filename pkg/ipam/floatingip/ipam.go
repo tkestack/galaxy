@@ -48,11 +48,20 @@ type IPInfo struct {
 type ipam struct {
 	FloatingIPs []*FloatingIP `json:"floatingips,omitempty"`
 	store       *database.DBRecorder
+	TableName   string
 }
 
 func NewIPAM(store *database.DBRecorder) IPAM {
+	return NewIPAMWithTableName(store, database.DefaultFloatingipTableName)
+}
+
+func NewIPAMWithTableName(store *database.DBRecorder, tableName string) IPAM {
+	if err := store.CreateTableIfNotExist(&database.FloatingIP{Table: tableName}); err != nil {
+		glog.Fatalf("failed to create table %s", tableName)
+	}
 	return &ipam{
-		store: store,
+		store:     store,
+		TableName: tableName,
 	}
 }
 
@@ -79,11 +88,13 @@ func (i *ipam) mergeWithDB(fipMap map[string]*FloatingIP) error {
 			toBeDelete = append(toBeDelete, ip.IP)
 		}
 	}
-	deleted, err := i.deleteUnScoped(toBeDelete)
-	if err != nil {
-		return fmt.Errorf("failed to delete ip %v: %v", toBeDelete, err)
+	if len(toBeDelete) > 0 {
+		deleted, err := i.deleteUnScoped(toBeDelete)
+		if err != nil {
+			return fmt.Errorf("failed to delete ip %v: %v", toBeDelete, err)
+		}
+		glog.Infof("expect to delete %d ips from ips from %v, deleted %d", len(toBeDelete), toBeDelete, deleted)
 	}
-	glog.Infof("expect to delete %d ips from ips from %v, deleted %d", len(toBeDelete), toBeDelete, deleted)
 	// insert new floating ips
 	for _, fipConf := range fipMap {
 		subnet := fipConf.RoutableSubnet.String()
@@ -95,12 +106,6 @@ func (i *ipam) mergeWithDB(fipMap map[string]*FloatingIP) error {
 				if err := i.create(&fip); err != nil {
 					if !strings.Contains(err.Error(), fmt.Sprintf(`Duplicate entry '%d' for key 'PRIMARY'`, first)) {
 						return fmt.Errorf("Error creating floating ip %d: %v", first, err)
-					}
-				}
-				// update subnet so that the previous table is compatible
-				if err := i.updateSubnet(&fip); err != nil {
-					if err != ErrNotUpdated {
-						return fmt.Errorf("Error update subnet of floating ip %v: %v", fip, err)
 					}
 				}
 			}
@@ -142,7 +147,7 @@ func (i *ipam) Allocate(keys []string, ops ...database.ActionFunc) (allocated []
 		var updateOps []database.ActionFunc
 		for j := 0; j < len(keys); j++ {
 			fips[j].Key = keys[j]
-			updateOps = append(updateOps, allocateOp(&fips[j]))
+			updateOps = append(updateOps, allocateOp(&fips[j], i.TableName))
 		}
 		updateOps = append(updateOps, ops...)
 		if err = i.store.Transaction(updateOps...); err != nil {
@@ -217,7 +222,7 @@ func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet) (allocate
 		err = ErrNoFIPForSubnet
 		return
 	}
-	if err = i.store.Transaction(allocateOneInSubnet(key, routableSubnet.String())); err != nil {
+	if err = i.allocateOneInSubnet(key, routableSubnet.String()); err != nil {
 		if err == ErrNotUpdated {
 			err = ErrNoEnoughIP
 		}
