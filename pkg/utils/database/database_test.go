@@ -23,6 +23,14 @@ func TestDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Shutdown()
+	if err := db.CreateTableIfNotExist(&FloatingIP{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		return tx.Exec(fmt.Sprintf("TRUNCATE %s;", DefaultFloatingipTableName)).Error
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	fip := FloatingIP{Key: fmt.Sprintf("pod1"), IP: nets.IPToInt(net.IPv4(10, 0, 0, 1))}
 	if err := db.conn.Create(&fip).Error; err != nil {
@@ -38,7 +46,7 @@ func TestDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(fips) != 1 {
-		t.Fatal()
+		t.Fatalf("%v", fips)
 	}
 	if fips[0].Key != fip.Key || fips[0].IP != fip.IP {
 		t.Fatalf("%v %v", fips[0], fip)

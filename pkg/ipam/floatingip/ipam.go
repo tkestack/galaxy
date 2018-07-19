@@ -25,13 +25,14 @@ type IPAM interface {
 	AllocateInSubnet(string, *net.IPNet) (net.IP, error)
 	Release([]string) error
 	ReleaseByPrefix(string) error
-	QueryFirst(string) (*IPInfo, error)
+	QueryFirst(string) (*IPInfo, error) // returns nil,nil if key is not found
 	QueryByIP(net.IP) (string, error)
 	QueryByPrefix(string) (map[string]string, error) //ip to key
 	RoutableSubnet(net.IP) *net.IPNet
 	QueryRoutableSubnetByKey(key string) ([]string, error)
 	Store() *database.DBRecorder //for test
 	Shutdown()
+	Name() string
 
 	ApplyFloatingIPs([]FloatingIP) []*FloatingIP
 }
@@ -63,6 +64,10 @@ func NewIPAMWithTableName(store *database.DBRecorder, tableName string) IPAM {
 		store:     store,
 		TableName: tableName,
 	}
+}
+
+func (i *ipam) Name() string {
+	return i.TableName
 }
 
 func (i *ipam) mergeWithDB(fipMap map[string]*FloatingIP) error {

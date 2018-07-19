@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
@@ -31,12 +32,14 @@ const (
 )
 
 type Conf struct {
-	FloatingIPs        []*floatingip.FloatingIP `json:"floatingips,omitempty"`
-	DBConfig           *database.DBConfig       `json:"database"`
-	ResyncInterval     uint                     `json:"resyncInterval"`
-	ConfigMapName      string                   `json:"configMapName"`
-	ConfigMapNamespace string                   `json:"configMapNamespace"`
-	DisableLabelNode   bool                     `json:"disableLabelNode"`
+	FloatingIPs         []*floatingip.FloatingIP `json:"floatingips,omitempty"`
+	DBConfig            *database.DBConfig       `json:"database"`
+	ResyncInterval      uint                     `json:"resyncInterval"`
+	ConfigMapName       string                   `json:"configMapName"`
+	ConfigMapNamespace  string                   `json:"configMapNamespace"`
+	DisableLabelNode    bool                     `json:"disableLabelNode"`
+	FloatingIPKey       string                   `json:"floatingipKey"`       // configmap floatingip data key
+	SecondFloatingIPKey string                   `json:"secondFloatingipKey"` // configmap second floatingip data key
 }
 
 // FloatingIPPlugin Allocates Floating IP for deployments
@@ -50,9 +53,10 @@ type FloatingIPPlugin struct {
 	nodeSubnetLock sync.Mutex
 	sync.Mutex
 	*PluginFactoryArgs
-	lastFIPConf string
-	conf        *Conf
-	unreleased  chan *corev1.Pod
+	lastIPConf, lastSecondIPConf string
+	conf                         *Conf
+	unreleased                   chan *corev1.Pod
+	hasSecondIPConf              atomic.Value
 }
 
 func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin, error) {
@@ -64,6 +68,12 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 	}
 	if conf.ConfigMapNamespace == "" {
 		conf.ConfigMapNamespace = "kube-system"
+	}
+	if conf.FloatingIPKey == "" {
+		conf.FloatingIPKey = "floatingips"
+	}
+	if conf.SecondFloatingIPKey == "" {
+		conf.SecondFloatingIPKey = "second_floatingips"
 	}
 	glog.Infof("floating ip config: %v", conf)
 	db := database.NewDBRecorder(conf.DBConfig)
@@ -78,6 +88,7 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		conf:              &conf,
 		unreleased:        make(chan *corev1.Pod, 10),
 	}
+	plugin.hasSecondIPConf.Store(false)
 	plugin.initSelector()
 	return plugin, nil
 }
@@ -112,8 +123,13 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 		}, time.Minute, stop)
 	}
 	go wait.Until(func() {
-		if err := p.resyncPod(); err != nil {
-			glog.Warning(err)
+		if err := p.resyncPod(p.ipam); err != nil {
+			glog.Warningf("[%s] %v", p.ipam.Name(), err)
+		}
+		if p.hasSecondIPConf.Load().(bool) {
+			if err := p.resyncPod(p.secondIPAM); err != nil {
+				glog.Warningf("[%s] %v", p.secondIPAM.Name(), err)
+			}
 		}
 		p.syncPodIPsIntoDB()
 		p.syncTAppRequestResource()
@@ -138,31 +154,43 @@ func (p *FloatingIPPlugin) initSelector() error {
 }
 
 // updateConfigMap fetches the newest floatingips configmap and syncs in memory/db config,
-// returns true if updated.
+// returns true if successfully gets floatingip config.
 func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 	cm, err := p.Client.CoreV1().ConfigMaps(p.conf.ConfigMapNamespace).Get(p.conf.ConfigMapName, v1.GetOptions{})
 	if err != nil {
 		return false, fmt.Errorf("failed to get floatingip configmap %s_%s: %v", p.conf.ConfigMapName, p.conf.ConfigMapNamespace, err)
 
 	}
-	val, ok := cm.Data["floatingips"]
+	val, ok := cm.Data[p.conf.FloatingIPKey]
 	if !ok {
 		return false, fmt.Errorf("configmap %s_%s doesn't have a key floatingips", p.conf.ConfigMapName, p.conf.ConfigMapNamespace)
 	}
-	if val == p.lastFIPConf {
-		glog.V(4).Infof("floatingip configmap unchanged")
-		return false, nil
+	if err := ensureIPAMConf(p.ipam, &p.lastIPConf, val); err != nil {
+		return false, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
-	glog.Infof("updating floatingip config %s", val)
-	var conf []*floatingip.FloatingIP
-	if err := json.Unmarshal([]byte(val), &conf); err != nil {
-		return false, fmt.Errorf("failed to unmarshal configmap %s_%s val %s to floatingip config", p.conf.ConfigMapName, p.conf.ConfigMapNamespace, val)
+	secondVal, ok := cm.Data[p.conf.SecondFloatingIPKey]
+	if err = ensureIPAMConf(p.secondIPAM, &p.lastSecondIPConf, secondVal); err != nil {
+		return false, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 	}
-	p.lastFIPConf = val
-	if err := p.ipam.ConfigurePool(conf); err != nil {
-		glog.Warningf("failed to configure pool: %v", err)
-	}
+	p.hasSecondIPConf.Store(p.lastSecondIPConf != "")
 	return true, nil
+}
+
+func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) error {
+	if newConf == *lastConf {
+		glog.V(4).Infof("[%s] floatingip configmap unchanged", ipam.Name())
+		return nil
+	}
+	var conf []*floatingip.FloatingIP
+	if err := json.Unmarshal([]byte(newConf), &conf); err != nil {
+		return fmt.Errorf("failed to unmarshal configmap val %s to floatingip config", newConf)
+	}
+	glog.Infof("[%s] updated floatingip conf from (%s) to (%s)", ipam.Name(), *lastConf, newConf)
+	*lastConf = newConf
+	if err := ipam.ConfigurePool(conf); err != nil {
+		return fmt.Errorf("failed to configure pool: %v", err)
+	}
+	return nil
 }
 
 // Filter marks nodes which haven't been labeled as supporting floating IP or have no available ips as FailedNodes
@@ -173,22 +201,19 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 		return nodes, failedNodesMap, nil
 	}
 	filteredNodes := []corev1.Node{}
-	var (
-		subnets []string
-		err     error
-	)
 	key := keyInDB(pod)
-	if subnets, err = p.ipam.QueryRoutableSubnetByKey(key); err != nil {
-		return filteredNodes, failedNodesMap, fmt.Errorf("failed to query by key %s: %v", key, err)
-	}
-	if len(subnets) != 0 {
-		glog.V(3).Infof("%s already have an allocated floating ip in subnets %v, it may have been deleted or evicted", key, subnets)
-	} else {
-		if subnets, err = p.ipam.QueryRoutableSubnetByKey(""); err != nil {
-			return filteredNodes, failedNodesMap, fmt.Errorf("failed to query allocatable subnet: %v", err)
-		}
+	subnets, err := getAvailableSubnet(p.ipam, key)
+	if err != nil {
+		return filteredNodes, failedNodesMap, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
 	subsetSet := sets.NewString(subnets...)
+	if p.enabledSecondIP(pod) {
+		secondSubnets, err := getAvailableSubnet(p.secondIPAM, key)
+		if err != nil {
+			return filteredNodes, failedNodesMap, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
+		}
+		subsetSet = subsetSet.Intersection(sets.NewString(secondSubnets...))
+	}
 	for i := range nodes {
 		nodeName := nodes[i].Name
 		if !p.nodeSelector.Matches(labels.Set(nodes[i].GetLabels())) {
@@ -216,6 +241,22 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 	return filteredNodes, failedNodesMap, nil
 }
 
+func getAvailableSubnet(ipam floatingip.IPAM, key string) (subnets []string, err error) {
+	if subnets, err = ipam.QueryRoutableSubnetByKey(key); err != nil {
+		err = fmt.Errorf("failed to query by key %s: %v", key, err)
+		return
+	}
+	if len(subnets) != 0 {
+		glog.V(3).Infof("[%s] %s already have an allocated floating ip in subnets %v, it may have been deleted or evicted", ipam.Name(), key, subnets)
+	} else {
+		if subnets, err = ipam.QueryRoutableSubnetByKey(""); err != nil {
+			err = fmt.Errorf("failed to query allocatable subnet: %v", err)
+			return
+		}
+	}
+	return
+}
+
 func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*schedulerapi.HostPriorityList, error) {
 	list := &schedulerapi.HostPriorityList{}
 	if !p.wantedObject(&pod.ObjectMeta) {
@@ -225,10 +266,9 @@ func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*sc
 	return list, nil
 }
 
-// allocateIP Allocates a floating IP to the pod based on the winner node name
-func (p *FloatingIPPlugin) allocateIP(key, nodeName string) (map[string]string, error) {
+func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string) (*floatingip.IPInfo, error) {
 	var how string
-	ipInfo, err := p.ipam.QueryFirst(key)
+	ipInfo, err := ipam.QueryFirst(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
 	}
@@ -237,13 +277,13 @@ func (p *FloatingIPPlugin) allocateIP(key, nodeName string) (map[string]string, 
 		glog.V(3).Infof("pod %s may have been deleted or evicted, it already have an allocated floating ip %s", key, ipInfo.IP.String())
 	} else {
 		subnet, err := p.queryNodeSubnet(nodeName)
-		_, err = p.ipam.AllocateInSubnet(key, subnet)
+		_, err = ipam.AllocateInSubnet(key, subnet)
 		if err != nil {
 			// return this error directly, invokers depend on the error type if it is ErrNoEnoughIP
 			return nil, err
 		}
 		how = "allocated"
-		ipInfo, err = p.ipam.QueryFirst(key)
+		ipInfo, err = ipam.QueryFirst(key)
 		if err != nil {
 			return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
 		}
@@ -251,29 +291,40 @@ func (p *FloatingIPPlugin) allocateIP(key, nodeName string) (map[string]string, 
 			return nil, fmt.Errorf("nil floating ip for key %s: %v", key, err)
 		}
 	}
-	data, err := json.Marshal(ipInfo)
-	if err != nil {
-		return nil, err
-	}
-	glog.Infof("%s floating ip %s for %s", how, ipInfo.IP.String(), key)
-	bind := make(map[string]string)
-	bind[private.AnnotationKeyIPInfo] = string(data)
-	return bind, nil
+	glog.Infof("[%s] %s floating ip %s for %s", ipam.Name(), how, ipInfo.IP.String(), key)
+	return ipInfo, nil
 }
 
-func (p *FloatingIPPlugin) releasePodIP(key string, reason string) error {
-	ipInfo, err := p.ipam.QueryFirst(key)
+func (p *FloatingIPPlugin) releaseIP(key string, reason string, pod *corev1.Pod) error {
+	if err := releaseIP(p.ipam, key, reason); err != nil {
+		return fmt.Errorf("[%s] %v", p.ipam.Name(), err)
+	}
+	// skip release second ip if not enabled
+	if !(p.hasSecondIPConf.Load().(bool)) {
+		return nil
+	}
+	if pod != nil && !wantSecondIP(pod) {
+		return nil
+	}
+	if err := releaseIP(p.secondIPAM, key, reason); err != nil {
+		return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
+	}
+	return nil
+}
+
+func releaseIP(ipam floatingip.IPAM, key string, reason string) error {
+	ipInfo, err := ipam.QueryFirst(key)
 	if err != nil {
 		return fmt.Errorf("failed to query floating ip of %s: %v", key, err)
 	}
 	if ipInfo == nil {
-		glog.Infof("release floating ip from %s because of %s, but already been released", key, reason)
+		glog.Infof("[%s] release floating ip from %s because of %s, but already been released", ipam.Name(), key, reason)
 		return nil
 	}
-	if err := p.ipam.Release([]string{key}); err != nil {
+	if err := ipam.Release([]string{key}); err != nil {
 		return fmt.Errorf("failed to release floating ip of %s because of %s: %v", key, reason, err)
 	}
-	glog.Infof("released floating ip %s from %s because of %s", ipInfo.IP.String(), key, reason)
+	glog.Infof("[%s] released floating ip %s from %s because of %s", ipam.Name(), ipInfo.IP.String(), key, reason)
 	return nil
 }
 
@@ -292,9 +343,27 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 		// see https://github.com/kubernetes/kubernetes/pull/60332
 		return fmt.Errorf("pod which doesn't want floatingip have been sent to plugin")
 	}
-	bindAnnotation, err := p.allocateIP(key, args.Node)
+	ipInfo, err := p.allocateIP(p.ipam, key, args.Node)
 	if err != nil {
 		return err
+	}
+	data, err := json.Marshal(ipInfo)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ipinfo %v: %v", ipInfo, err)
+	}
+	bindAnnotation := make(map[string]string)
+	bindAnnotation[private.AnnotationKeyIPInfo] = string(data)
+	if p.enabledSecondIP(pod) {
+		secondIPInfo, err := p.allocateIP(p.secondIPAM, key, args.Node)
+		// TODO release ip if it's been allocated in this goroutine?
+		if err != nil {
+			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
+		}
+		data, err := json.Marshal(secondIPInfo)
+		if err != nil {
+			return fmt.Errorf("failed to marshal ipinfo %v: %v", secondIPInfo, err)
+		}
+		bindAnnotation[private.AnnotationKeySecondIPInfo] = string(data)
 	}
 	if err := wait.PollImmediate(time.Millisecond*500, 20*time.Second, func() (bool, error) {
 		// It's the extender's response to bind pods to nodes since it is a binder
@@ -343,11 +412,11 @@ func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	key := keyInDB(pod)
 	if !p.immutableSeletor.Matches(labels.Set(pod.GetLabels())) {
-		return p.releasePodIP(key, deleted_and_ip_mutable_pod)
+		return p.releaseIP(key, deleted_and_ip_mutable_pod, pod)
 	} else {
 		tapps, err := p.TAppLister.GetPodTApps(pod)
 		if err != nil {
-			return p.releasePodIP(key, deleted_and_parent_tapp_not_exist_pod)
+			return p.releaseIP(key, deleted_and_parent_tapp_not_exist_pod, pod)
 		}
 		tapp := tapps[0]
 		for i, status := range tapp.Spec.Statuses {
@@ -355,28 +424,11 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 				continue
 			}
 			// build the key namespace_tappname-id
-			return p.releasePodIP(key, deleted_and_killed_tapp_pod)
+			return p.releaseIP(key, deleted_and_killed_tapp_pod, pod)
 		}
 	}
 	if pod.Annotations != nil {
 		glog.V(3).Infof("reserved %s for pod %s", pod.Annotations[private.AnnotationKeyIPInfo], key)
-	}
-	return nil
-}
-
-func (p *FloatingIPPlugin) releaseAppIPs(keyPrefix string) error {
-	ipMap, err := p.ipam.QueryByPrefix(keyPrefix)
-	if err != nil {
-		return fmt.Errorf("failed to query allocated floating ips for app %s: %v", keyPrefix, err)
-	}
-	if err := p.ipam.ReleaseByPrefix(keyPrefix); err != nil {
-		return fmt.Errorf("failed to release floating ip for app %s: %v", keyPrefix, err)
-	} else {
-		ips := []string{}
-		for ip := range ipMap {
-			ips = append(ips, ip)
-		}
-		glog.Infof("released all floating ip %v for %s", ips, keyPrefix)
 	}
 	return nil
 }
@@ -478,4 +530,16 @@ func (p *FloatingIPPlugin) queryNodeSubnet(nodeName string) (*net.IPNet, error) 
 	} else {
 		return subnet, nil
 	}
+}
+
+func (p *FloatingIPPlugin) enabledSecondIP(pod *corev1.Pod) bool {
+	return p.hasSecondIPConf.Load().(bool) && wantSecondIP(pod)
+}
+
+func wantSecondIP(pod *corev1.Pod) bool {
+	labelMap := pod.GetLabels()
+	if labelMap == nil {
+		return false
+	}
+	return labelMap[private.LabelKeyEnableSecondIP] == private.LabelValueEnabled
 }

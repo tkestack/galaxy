@@ -12,8 +12,12 @@ var (
 	LabelValueNetworkTypeNAT            = "NAT"
 	NodeLabelValueNetworkTypeFloatingIP = "floatingip"
 
-	LabelKeyFloatingIP        = "galaxy.io/floatingip"
-	LabelValueImmutable       = "immutable"
+	LabelKeyFloatingIP  = "galaxy.io/floatingip"
+	LabelValueImmutable = "immutable"
+
+	LabelKeyEnableSecondIP = "galaxy.io/secondip"
+	LabelValueEnabled      = "true"
+
 	AnnotationKeyIPInfo       = "galaxy.io/ip"
 	AnnotationKeySecondIPInfo = "galaxy.io/secondip"
 	FloatingIPResource        = "galaxy.io/floatingip"

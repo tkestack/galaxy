@@ -121,11 +121,11 @@ func TestFilter(t *testing.T) {
 	}
 	// check pod allocated the previous ip
 	pod.Spec.NodeName = node_10_173_13_4
-	ipInfo, err := fipPlugin.allocateIP(keyInDB(pod), pod.Spec.NodeName)
+	ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(pod), pod.Spec.NodeName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ipInfo) == 0 || !strings.Contains(ipInfo[private.AnnotationKeyIPInfo], "10.173.13.2") {
+	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
 	// filter again on a new pod2, all good nodes should be filteredNodes
@@ -155,16 +155,19 @@ func TestFilter(t *testing.T) {
 	ipInfoSet := sets.NewString()
 	for i := 0; ; i++ {
 		newPod.Name = fmt.Sprintf("temp-%d", i)
-		if ipInfo, err := fipPlugin.allocateIP(keyInDB(newPod), newPod.Spec.NodeName); err != nil {
+		if ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(newPod), newPod.Spec.NodeName); err != nil {
 			if !strings.Contains(err.Error(), floatingip.ErrNoEnoughIP.Error()) {
 				t.Fatal(err)
 			}
 			break
 		} else {
-			if ipInfoSet.Has(ipInfo[private.AnnotationKeyIPInfo]) {
+			if ipInfo == nil {
+				t.Fatal()
+			}
+			if ipInfoSet.Has(ipInfo.IP.String()) {
 				t.Fatal("allocates an previous allocated ip")
 			}
-			ipInfoSet.Insert(ipInfo[private.AnnotationKeyIPInfo])
+			ipInfoSet.Insert(ipInfo.IP.String())
 		}
 		if i == 10 {
 			t.Fatal("should not have so many ips")
@@ -172,10 +175,10 @@ func TestFilter(t *testing.T) {
 	}
 	t.Log(ipInfoSet)
 	// see if we can allocate the reserved ip
-	if ipInfo, err = fipPlugin.allocateIP(keyInDB(pod), pod.Spec.NodeName); err != nil {
+	if ipInfo, err = fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(pod), pod.Spec.NodeName); err != nil {
 		t.Fatal(err)
 	}
-	if len(ipInfo) == 0 || !strings.Contains(ipInfo[private.AnnotationKeyIPInfo], "10.173.13.2") {
+	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
 }

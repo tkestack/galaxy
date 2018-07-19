@@ -9,6 +9,7 @@ import (
 
 	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -37,12 +38,12 @@ func (p *FloatingIPPlugin) storeReady() bool {
 // 3. deleted pods whose parent tapp exist but is not ip immutable
 // 4. deleted pods whose parent tapp exist but instance status in tapp.spec.statuses = killed
 // 5. existing pods but its status is evicted (TApp doesn't have evicted pods)
-func (p *FloatingIPPlugin) resyncPod() error {
+func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	if !p.storeReady() {
 		return nil
 	}
 	glog.Infof("resync pods")
-	all, err := p.ipam.QueryByPrefix("")
+	all, err := ipam.QueryByPrefix("")
 	if err != nil {
 		return err
 	}
@@ -66,8 +67,8 @@ func (p *FloatingIPPlugin) resyncPod() error {
 	for i := range pods {
 		if evicted(pods[i]) {
 			// 5. existing pods but its status is evicted (TApp doesn't have evicted pods, it simply deletes pods which are evicted by kubelet)
-			if err := p.releasePodIP(keyInDB(pods[i]), evicted_pod); err != nil {
-				glog.Warning(err)
+			if err := releaseIP(ipam, keyInDB(pods[i]), evicted_pod); err != nil {
+				glog.Warningf("[%s] %v", ipam.Name(), err)
 			}
 		}
 		existPods[keyInDB(pods[i])] = pods[i]
@@ -88,8 +89,8 @@ func (p *FloatingIPPlugin) resyncPod() error {
 		} else {
 			// 1. deleted pods whose parent is not tapp
 			// 2. deleted pods whose parent is an unexisting tapp
-			if err := p.releasePodIP(podFullName, deleted_and_parent_tapp_not_exist_pod); err != nil {
-				glog.Warning(err)
+			if err := releaseIP(ipam, podFullName, deleted_and_parent_tapp_not_exist_pod); err != nil {
+				glog.Warningf("[%s] %v", ipam.Name(), err)
 			}
 			continue
 		}
@@ -98,8 +99,8 @@ func (p *FloatingIPPlugin) resyncPod() error {
 		}
 		if !p.immutableSeletor.Matches(labels.Set(tapp.GetLabels())) {
 			// 3. deleted pods whose parent tapp exist but is not ip immutable
-			if err := p.releasePodIP(podFullName, deleted_and_ip_mutable_pod); err != nil {
-				glog.Warning(err)
+			if err := releaseIP(ipam, podFullName, deleted_and_ip_mutable_pod); err != nil {
+				glog.Warningf("[%s] %v", ipam.Name(), err)
 			}
 			continue
 		}
@@ -107,8 +108,8 @@ func (p *FloatingIPPlugin) resyncPod() error {
 		podId := podFullName[len(tapp.Namespace)+1+len(tapp.Name)+1:]
 		if status := tapp.Spec.Statuses[podId]; tappInstanceKilled(status) {
 			// 4. deleted pods whose parent tapp exist but instance status in tapp.spec.statuses = killed
-			if err := p.releasePodIP(podFullName, deleted_and_killed_tapp_pod); err != nil {
-				glog.Warning(err)
+			if err := releaseIP(ipam, podFullName, deleted_and_killed_tapp_pod); err != nil {
+				glog.Warningf("[%s] %v", ipam.Name(), err)
 			}
 		}
 	}
@@ -145,7 +146,7 @@ func TAppFullName(tapp *tappv1.TApp) string {
 
 // resolveTAppPodName returns tappname, podId, namespace
 func resolveTAppPodName(podFullName string) (string, string, string) {
-	// tappname-id_namespace, e.g. default_fip-0
+	// namespace_tappname-id, e.g. default_fip-0
 	// _ is not a valid char in appname
 	parts := strings.SplitN(podFullName, "_", 2)
 	if len(parts) != 2 {
@@ -200,7 +201,27 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 		return nil
 	}
 	key := keyInDB(pod)
-	storedKey, err := p.ipam.QueryByIP(ip)
+	if err := p.syncIP(p.ipam, key, ip); err != nil {
+		return fmt.Errorf("[%s] %v", p.ipam.Name(), err)
+	}
+	if p.enabledSecondIP(pod) && pod.Annotations != nil {
+		secondIPStr := pod.Annotations[private.AnnotationKeySecondIPInfo]
+		var secondIPInfo floatingip.IPInfo
+		if err := json.Unmarshal([]byte(secondIPStr), &secondIPInfo); err != nil {
+			return fmt.Errorf("failed to unmarshal secondip %s: %v", secondIPStr, err)
+		}
+		if secondIPInfo.IP == nil {
+			return fmt.Errorf("invalid secondip annotation: %s", secondIPStr)
+		}
+		if err := p.syncIP(p.secondIPAM, key, secondIPInfo.IP.IP); err != nil {
+			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
+		}
+	}
+	return p.syncPodAnnotation(pod)
+}
+
+func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP) error {
+	storedKey, err := ipam.QueryByIP(ip)
 	if err != nil {
 		return err
 	}
@@ -209,12 +230,12 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
 		}
 	} else {
-		if err := p.ipam.AllocateSpecificIP(key, ip); err != nil {
+		if err := ipam.AllocateSpecificIP(key, ip); err != nil {
 			return err
 		}
-		glog.Infof("updated floatingip %s to key %s", ip.String(), key)
+		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)
 	}
-	return p.syncPodAnnotation(pod)
+	return nil
 }
 
 func (p *FloatingIPPlugin) syncPodAnnotation(pod *corev1.Pod) error {
