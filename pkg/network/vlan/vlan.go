@@ -37,7 +37,8 @@ type NetConf struct {
 	// Supports macvlan, bridge or pure(which avoid create unnecessary bridge), default bridge
 	Switch string `json:"switch"`
 
-	DisableDefaultBridge bool `json:"disable_default_bridge"`
+	// Disable creating default bridge
+	DisableDefaultBridge *bool `json:"disable_default_bridge"`
 
 	DefaultBridgeName string `json:"default_bridge_name"`
 
@@ -77,7 +78,7 @@ func (d *VlanDriver) Init() error {
 		d.vlanParentIndex = device.Attrs().ParentIndex
 		//glog.Infof("root device %s is a vlan device, parent index %d", d.Device, d.vlanParentIndex)
 	}
-	if d.MacVlanMode() || d.IPVlanMode() || d.DisableDefaultBridge {
+	if d.MacVlanMode() || d.IPVlanMode() {
 		return nil
 	}
 	if d.PureMode() {
@@ -91,6 +92,9 @@ func (d *VlanDriver) Init() error {
 			return err
 		}
 		return utils.EnableNonlocalBind()
+	}
+	if *d.DisableDefaultBridge {
+		return nil
 	}
 	v4Addr, err := netlink.AddrList(device, netlink.FAMILY_V4)
 	if err != nil {

@@ -34,12 +34,21 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	if err := d.Init(); err != nil {
-		return fmt.Errorf("failed to setup bridge %v", err)
-	}
 	vlanIds, results, err := ipam.Allocate(conf.IPAM.Type, args)
 	if err != nil {
 		return err
+	}
+	if d.DisableDefaultBridge == nil {
+		defaultTrue := true
+		d.DisableDefaultBridge = &defaultTrue
+		for i := range vlanIds {
+			if vlanIds[i] == 0 {
+				*d.DisableDefaultBridge = false
+			}
+		}
+	}
+	if err := d.Init(); err != nil {
+		return fmt.Errorf("failed to setup bridge %v", err)
 	}
 	var result020s []*t020.Result
 	for i := 0; i < len(results); i++ {
