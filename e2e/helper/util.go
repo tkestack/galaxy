@@ -35,7 +35,17 @@ func fillDefaultArgs(root string, args *invoke.Args) *invoke.Args {
 // CNI_ARGS="IP=192.168.33.3" CNI_COMMAND="ADD" CNI_CONTAINERID=ctn1 CNI_NETNS=/var/run/netns/ctn CNI_IFNAME=eth0 CNI_PATH=`pwd`/bin galaxy-vlan < /etc/cni/net.d/10-mynet.conf
 func ExecCNIWithResult(cniName string, netConfStdin []byte, args *invoke.Args) (types.Result, error) {
 	root := ProjectDir()
-	return invoke.ExecPluginWithResult(path.Join(root, "bin", cniName), netConfStdin, fillDefaultArgs(root, args))
+	pluginPath := path.Join(root, "bin", cniName)
+	cniArgs := fillDefaultArgs(root, args)
+	glog.V(4).Infof("echo %s | %s %s", compressJson(string(netConfStdin)), strings.Join(cniArgs.AsEnv()[:6], " "), pluginPath)
+	return invoke.ExecPluginWithResult(pluginPath, netConfStdin, cniArgs)
+}
+
+func compressJson(str string) string {
+	for _, s := range []string{" ", "\n", " "} {
+		str = strings.Replace(str, s, "", -1)
+	}
+	return str
 }
 
 func ExecCNI(cniName string, netConfStdin []byte, args *invoke.Args) error {

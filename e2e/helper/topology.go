@@ -45,7 +45,7 @@ type NetworkTopology struct {
 	LeaveDevices []*LinkDevice
 	Routes       []Route
 	neighs       []netlink.Neigh
-	Netns        string
+	Netns        string // all these objects are in netns
 }
 
 func (t *NetworkTopology) Verify() error {
@@ -80,29 +80,41 @@ func (t *NetworkTopology) verify() error {
 	return fmt.Errorf("errs %v", errs)
 }
 
-func verifyDevice(device *LinkDevice, child netlink.Link) error {
-	if device.Parent == nil && device.Master == nil {
-		return nil
-	}
+func verifyDevice(device *LinkDevice, link netlink.Link) error {
 	if device.Parent != nil {
 		parent, err := getLinkDevice(device.Parent)
 		if err != nil {
 			return err
 		}
-		if child.Attrs().ParentIndex != parent.Attrs().Index {
-			return fmt.Errorf("device %s's parent device is not %s (index %d), real parent index is %d", child.Attrs().Name, parent.Attrs().Name, parent.Attrs().Index, child.Attrs().ParentIndex)
+		if link.Attrs().ParentIndex != parent.Attrs().Index {
+			return fmt.Errorf("device %s's parent device is not %s (index %d), real parent index is %d", link.Attrs().Name, parent.Attrs().Name, parent.Attrs().Index, link.Attrs().ParentIndex)
 		}
 		return verifyDevice(device.Parent, parent)
+	} else if link.Attrs().ParentIndex != 0 {
+		// A veth device's parent is its peer device which is possibly in another namespace
+		if link.Type() != "veth" {
+			parentLink, err := netlink.LinkByIndex(link.Attrs().ParentIndex)
+			if err != nil {
+				return fmt.Errorf("device %s has a parent index %d", device.Name, link.Attrs().ParentIndex)
+			}
+			return fmt.Errorf("device %s has a parent index %d (%s)", device.Name, link.Attrs().ParentIndex, parentLink.Attrs().Name)
+		}
 	}
 	if device.Master != nil {
 		master, err := getLinkDevice(device.Master)
 		if err != nil {
 			return err
 		}
-		if child.Attrs().MasterIndex != master.Attrs().Index {
-			return fmt.Errorf("device %s's master device is not %s (index %d), real master index is %d", child.Attrs().Name, master.Attrs().Name, master.Attrs().Index, child.Attrs().MasterIndex)
+		if link.Attrs().MasterIndex != master.Attrs().Index {
+			return fmt.Errorf("device %s's master device is not %s (index %d), real master index is %d", link.Attrs().Name, master.Attrs().Name, master.Attrs().Index, link.Attrs().MasterIndex)
 		}
 		return verifyDevice(device.Master, master)
+	} else if link.Attrs().MasterIndex != 0 {
+		masterLink, err := netlink.LinkByIndex(link.Attrs().MasterIndex)
+		if err != nil {
+			return fmt.Errorf("device %s has a master index %d", device.Name, link.Attrs().MasterIndex)
+		}
+		return fmt.Errorf("device %s has a master index %d (%s)", device.Name, link.Attrs().MasterIndex, masterLink.Attrs().Name)
 	}
 	return nil
 }
@@ -168,6 +180,22 @@ func getLinkDevice(device *LinkDevice) (netlink.Link, error) {
 	}
 	if link.Type() != device.Type {
 		return nil, fmt.Errorf("device type %s is not %s", link.Type(), device.Type)
+	}
+	addrs, err := netlink.AddrList(link, nl.FAMILY_V4)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ip address of %s: %v", device.Name, err)
+	}
+	if device.Addr == nil {
+		if len(addrs) != 0 {
+			return nil, fmt.Errorf("expect device %s has no ip address, find %v", device.Name, addrs)
+		}
+	} else {
+		if len(addrs) != 1 {
+			return nil, fmt.Errorf("expect device %s has an ip address %s, find %v", device.Name, device.Addr.String(), addrs)
+		}
+		if addrs[0].IPNet.String() != device.Addr.String() {
+			return nil, fmt.Errorf("expect device %s has an ip address %s, find %v", device.Name, device.Addr.String(), addrs)
+		}
 	}
 	return link, nil
 }

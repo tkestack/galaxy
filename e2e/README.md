@@ -12,6 +12,9 @@ go get github.com/onsi/gomega/...
 ```
 cd $project
 ginkgo e2e/k8s-vlan
+
+# run a single test with verbose logs
+ginkgo -focus "vlan second ips" e2e/k8s-vlan  -- --logtostderr --v=4
 ```
 
 build and test
