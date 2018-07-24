@@ -67,11 +67,11 @@ func ProjectDir() string {
 	return root[:(index + len(packageName))]
 }
 
-func NewNetNS(containerId string) error {
+func NewNetNS(containerId string) (string, error) {
 	if _, err := Command("ip", "netns", "add", containerId).CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to add netns %s: %v", containerId, err)
+		return "", fmt.Errorf("failed to add netns %s: %v", containerId, err)
 	}
-	return nil
+	return fmt.Sprintf("/var/run/netns/%s", containerId), nil
 }
 
 func DelNetNS(containerId string) error {
