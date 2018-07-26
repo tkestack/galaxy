@@ -151,6 +151,39 @@ func DeleteVeth(netnsPath, ifName string) error {
 	})
 }
 
+// DeleteAllVeth deletes all veth device inside the container
+func DeleteAllVeth(netnsPath string) error {
+	netns, err := ns.GetNS(netnsPath)
+	if err != nil {
+		if _, ok := err.(ns.NSPathNotExistErr); ok {
+			return nil
+		}
+		return fmt.Errorf("failed to open netns %q: %v", netnsPath, err)
+	}
+	defer netns.Close()
+
+	return netns.Do(func(_ ns.NetNS) error {
+		links, err := netlink.LinkList()
+		if err != nil {
+			return fmt.Errorf("failed to list links in netns %s", netnsPath)
+		}
+		for _, link := range links {
+			if link.Type() != "veth" {
+				continue
+			}
+			// shutdown sbox device
+			if err = netlink.LinkSetDown(link); err != nil {
+				err = fmt.Errorf("failed to down sbox device %q: %v", link.Attrs().Name, err)
+			}
+
+			if err = netlink.LinkDel(link); err != nil {
+				err = fmt.Errorf("failed to delete sbox device %q: %v", link.Attrs().Name, err)
+			}
+		}
+		return err
+	})
+}
+
 func HostVethName(containerId string, suffix string) string {
 	return fmt.Sprintf("v-h%s%s", containerId[0:9], suffix)
 }

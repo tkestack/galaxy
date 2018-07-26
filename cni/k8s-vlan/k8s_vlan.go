@@ -123,7 +123,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 }
 
 func cmdDel(args *skel.CmdArgs) error {
-	if err := utils.DeleteVeth(args.Netns, args.IfName); err != nil {
+	if err := utils.DeleteAllVeth(args.Netns); err != nil {
 		return err
 	}
 	conf, err := d.LoadConf(args.StdinData)
