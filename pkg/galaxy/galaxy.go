@@ -229,6 +229,9 @@ func getLocalAddr() (map[string]string, error) {
 		if omitLink(link.Attrs().Name) {
 			continue
 		}
+		if link.Type() == "ipip" || link.Type() == "gre" {
+			continue
+		}
 		addrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
 		if err != nil {
 			return nil, err
@@ -242,7 +245,7 @@ func getLocalAddr() (map[string]string, error) {
 
 func omitLink(linkName string) bool {
 	if strings.HasPrefix(linkName, "veth") || strings.HasPrefix(linkName, "tunl") ||
-		strings.HasPrefix(linkName, "cni") || linkName == "lo" {
+		strings.HasPrefix(linkName, "cni") || linkName == "lo" || linkName == "flannel.ipip" {
 		return true
 	}
 	return false
