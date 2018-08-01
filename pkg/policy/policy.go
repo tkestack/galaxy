@@ -236,6 +236,7 @@ func (p *PolicyManager) policyResult(np *networkv1.NetworkPolicy) (*ingressRule,
 		return nil, nil, err
 	}
 	npNameHash := tableNameHash(fmt.Sprintf("%s_%s", np.Name, np.Namespace))
+	// Ingress and egress pod selector share the same ipset table
 	tbl.Name = fmt.Sprintf("%s-ip-%s", NamePrefix, npNameHash)
 	var (
 		inRules         *ingressRule
@@ -658,23 +659,24 @@ func nameHash(data string) string {
 	return encoded[:16]
 }
 
-// SyncPodIPInIPSet ensures pod ip is expected in each policy's ipset
+// SyncPodIPInIPSet ensures pod ip is expected in each policy's ipset. ipset is already created because we have these policies in memory
 func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 	var polices []policy
 	p.Lock()
 	polices = p.policies
 	p.Unlock()
 	for _, policy := range polices {
-		if policy.ingressRule == nil {
-			continue
-		}
 		podLabelSelector, err := v1.LabelSelectorAsSelector(&policy.np.Spec.PodSelector)
 		if err != nil {
 			glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
 			continue
 		}
 		if policy.np.Namespace == pod.Namespace && podLabelSelector.Matches(labels.Set(pod.Labels)) {
-			p.addOrDelIPSetEntry(add, &policy.ingressRule.dstIPTable.IPSet, pod.Status.PodIP)
+			if policy.ingressRule != nil {
+				p.addOrDelIPSetEntry(add, &policy.ingressRule.dstIPTable.IPSet, pod.Status.PodIP)
+			} else {
+				p.addOrDelIPSetEntry(add, &policy.egressRule.srcIPTable.IPSet, pod.Status.PodIP)
+			}
 		}
 		for i, ingress := range policy.np.Spec.Ingress {
 			for _, peer := range ingress.From {
@@ -696,6 +698,32 @@ func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 					for _, ns := range namespaces {
 						if ns.Name == pod.Namespace {
 							p.addOrDelIPSetEntry(add, &policy.ingressRule.srcRules[i].ipTable.IPSet, pod.Status.PodIP)
+							break
+						}
+					}
+				}
+			}
+		}
+		for i, egress := range policy.np.Spec.Egress {
+			for _, peer := range egress.To {
+				if peer.PodSelector != nil {
+					peerPodLabelSelector, err := v1.LabelSelectorAsSelector(peer.PodSelector)
+					if err != nil {
+						glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+						continue
+					}
+					if peerPodLabelSelector.Matches(labels.Set(pod.Labels)) {
+						p.addOrDelIPSetEntry(add, &policy.egressRule.dstRules[i].ipTable.IPSet, pod.Status.PodIP)
+					}
+				} else if peer.NamespaceSelector != nil {
+					namespaces, err := p.getNamespaces(peer.NamespaceSelector)
+					if err != nil {
+						glog.Warning(err)
+						continue
+					}
+					for _, ns := range namespaces {
+						if ns.Name == pod.Namespace {
+							p.addOrDelIPSetEntry(add, &policy.egressRule.dstRules[i].ipTable.IPSet, pod.Status.PodIP)
 							break
 						}
 					}
