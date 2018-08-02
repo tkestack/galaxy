@@ -19,8 +19,8 @@ package testing
 import (
 	"testing"
 
-	"k8s.io/apimachinery/pkg/util/sets"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ipset"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 const testVersion = "v6.19"

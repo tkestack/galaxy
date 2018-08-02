@@ -17,10 +17,13 @@ limitations under the License.
 package testing
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
+	"strings"
 
-	"k8s.io/apimachinery/pkg/util/sets"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ipset"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 // FakeIPSet is a no-op implementation of ipset Interface
@@ -138,6 +141,43 @@ func (f *FakeIPSet) ListSets() ([]string, error) {
 		res = append(res, set)
 	}
 	return res, nil
+}
+
+func (f *FakeIPSet) AddEntryWithOptions(entry *ipset.Entry, set *ipset.IPSet, ignoreExistErr bool) error {
+	return f.AddEntry(strings.Join(append([]string{entry.String()}, entry.Options...), " "), set, ignoreExistErr)
+}
+
+func (f *FakeIPSet) DelEntryWithOptions(set, entry string, options ...string) error {
+	return f.DelEntry(strings.Join(append([]string{entry}, options...), " "), set)
+}
+
+func (f *FakeIPSet) SaveAllSets() ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	var setNames []string
+	for name := range f.Sets {
+		setNames = append(setNames, name)
+	}
+	sort.Strings(setNames)
+	for _, setName := range setNames {
+		if f.Sets[setName] == nil {
+			// should never happen
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("Name: %s\n", setName))
+		buf.WriteString(fmt.Sprintf("Type: %s\n", string(f.Sets[setName].SetType)))
+		buf.WriteString("Members:\n")
+		if entrySet := f.Entries[setName]; entrySet != nil {
+			for _, entry := range entrySet.List() {
+				buf.WriteString(entry)
+				buf.WriteString("\n")
+			}
+		}
+		buf.WriteString("\n")
+	}
+	if buf.Len() > 0 {
+		buf.Truncate(buf.Len() - 1)
+	}
+	return buf.Bytes(), nil
 }
 
 var _ = ipset.Interface(&FakeIPSet{})

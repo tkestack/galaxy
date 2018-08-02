@@ -54,6 +54,8 @@ type Interface interface {
 	AddEntryWithOptions(entry *Entry, set *IPSet, ignoreExistErr bool) error
 
 	DelEntryWithOptions(set, entry string, options ...string) error
+
+	SaveAllSets() ([]byte, error)
 }
 
 // IPSetCmd represents the ipset util.  We use ipset command for ipset execute.
@@ -592,6 +594,15 @@ func parsePortRange(portRange string) (beginPort int, endPort int, err error) {
 		}
 	}
 	return beginPort, endPort, nil
+}
+
+// SaveAllSets list all set names from kernel
+func (runner *runner) SaveAllSets() ([]byte, error) {
+	out, err := runner.exec.Command(IPSetCmd, "list").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("error saving all sets, error: %v", err)
+	}
+	return out, nil
 }
 
 var _ = Interface(&runner{})

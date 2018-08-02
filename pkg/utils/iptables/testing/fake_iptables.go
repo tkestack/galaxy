@@ -20,10 +20,11 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/util/sets"
 	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type fakeChain struct {
@@ -41,8 +42,10 @@ type fakeIPTables struct {
 	builtinChains map[string]sets.String
 }
 
+var _ utiliptables.Interface = &fakeIPTables{}
+
 func NewFakeIPTables() *fakeIPTables {
-	return &fakeIPTables{
+	fi := &fakeIPTables{
 		tables: make(map[string]*fakeTable, 0),
 		builtinChains: map[string]sets.String{
 			string(utiliptables.TableFilter): sets.NewString("INPUT", "FORWARD", "OUTPUT"),
@@ -50,6 +53,12 @@ func NewFakeIPTables() *fakeIPTables {
 			string(utiliptables.TableMangle): sets.NewString("PREROUTING", "INPUT", "FORWARD", "OUTPUT", "POSTROUTING"),
 		},
 	}
+	for table, chainSet := range fi.builtinChains {
+		for _, chain := range chainSet.List() {
+			fi.ensureChain(utiliptables.Table(table), utiliptables.Chain(chain))
+		}
+	}
+	return fi
 }
 
 func (f *fakeIPTables) GetVersion() (string, error) {
@@ -243,9 +252,14 @@ func (f *fakeIPTables) SaveInto(tableName utiliptables.Table, buffer *bytes.Buff
 	buffer.WriteString(fmt.Sprintf("*%s\n", table.name))
 
 	rules := bytes.NewBuffer(nil)
+	var chainNames []string
 	for _, chain := range table.chains {
-		buffer.WriteString(fmt.Sprintf(":%s - [0:0]\n", string(chain.name)))
-		saveChain(chain, rules)
+		chainNames = append(chainNames, string(chain.name))
+	}
+	sort.Strings(chainNames)
+	for _, name := range chainNames {
+		buffer.WriteString(fmt.Sprintf(":%s - [0:0]\n", name))
+		saveChain(table.chains[name], rules)
 	}
 	buffer.Write(rules.Bytes())
 	buffer.WriteString("COMMIT\n")
@@ -350,4 +364,21 @@ func (f *fakeIPTables) isBuiltinChain(tableName utiliptables.Table, chainName ut
 		return true
 	}
 	return false
+}
+
+// ListRule list rules in a chain
+func (f *fakeIPTables) ListRule(table utiliptables.Table, chain utiliptables.Chain, args ...string) ([]string, error) {
+	_, c, err := f.getChain(table, chain)
+	if err != nil {
+		return nil, err
+	}
+	arr := make([]string, len(c.rules))
+	for i := range c.rules {
+		arr[i] = c.rules[i]
+	}
+	return arr, nil
+}
+
+func (f *fakeIPTables) EnsurePolicy(table utiliptables.Table, chain utiliptables.Chain, policy string) error {
+	return nil
 }
