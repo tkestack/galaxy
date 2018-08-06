@@ -12,6 +12,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/types"
+	"github.com/vishvananda/netlink/nl"
 )
 
 const (
@@ -93,7 +94,7 @@ func (d *VlanDriver) Init() error {
 		}
 		return utils.EnableNonlocalBind()
 	}
-	if *d.DisableDefaultBridge {
+	if d.DisableDefaultBridge != nil && *d.DisableDefaultBridge {
 		return nil
 	}
 	v4Addr, err := netlink.AddrList(device, netlink.FAMILY_V4)
@@ -117,48 +118,47 @@ func (d *VlanDriver) Init() error {
 		if err := netlink.LinkSetUp(bri); err != nil {
 			return fmt.Errorf("Failed to set up bridge device %s: %v", d.DefaultBridgeName, err)
 		}
-		if r, err := utils.GetDefaultRoute(); err != nil {
-			return err
-		} else {
-			var err error
-			if r.LinkIndex == device.Attrs().Index {
-				if err := netlink.RouteDel(r); err != nil {
-					return fmt.Errorf("Failed to remove default route %v", err)
-				}
-				defer func() {
-					if err != nil {
-						if err := netlink.RouteAdd(r); err != nil {
-							//glog.Warningf("Failed to rollback default route %v: %v", r, err)
-						}
-					}
-				}()
-			}
-			for i := range filteredAddr {
-				if err = netlink.AddrDel(device, &filteredAddr[i]); err != nil {
-					return fmt.Errorf("Failed to remove v4address from device %s: %v", d.Device, err)
-				}
-				defer func() {
-					if err != nil {
-						if err = netlink.AddrAdd(device, &filteredAddr[i]); err != nil {
-							//glog.Warningf("Failed to rollback v4address to device %s: %v, address %v", device, err, v4Addr[0])
-						}
-					}
-				}()
-				filteredAddr[i].Label = ""
-				if err = netlink.AddrAdd(bri, &filteredAddr[i]); err != nil {
-					if !strings.Contains(err.Error(), "file exists") {
-						return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", d.DefaultBridgeName, err, filteredAddr[i])
-					} else {
-						err = nil
-					}
+		rs, err := netlink.RouteList(device, nl.FAMILY_V4)
+		if err != nil {
+			return fmt.Errorf("Failed to list route of device %s", device.Attrs().Name)
+		}
+		defer func() {
+			if err != nil {
+				for i := range rs {
+					netlink.RouteAdd(&rs[i])
 				}
 			}
-			if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: d.DefaultBridgeName}}); err != nil {
-				return fmt.Errorf("Failed to add device %s to bridge device %s: %v", d.Device, d.DefaultBridgeName, err)
+		}()
+		for i := range filteredAddr {
+			if err = netlink.AddrDel(device, &filteredAddr[i]); err != nil {
+				return fmt.Errorf("Failed to remove v4address from device %s: %v", d.Device, err)
 			}
-			if r.LinkIndex == device.Attrs().Index {
-				if err = netlink.RouteAdd(&netlink.Route{Gw: r.Gw, LinkIndex: bri.Attrs().Index}); err != nil {
-					return fmt.Errorf("Failed to remove default route %v", err)
+			defer func() {
+				if err != nil {
+					if err = netlink.AddrAdd(device, &filteredAddr[i]); err != nil {
+						//glog.Warningf("Failed to rollback v4address to device %s: %v, address %v", device, err, v4Addr[0])
+					}
+				}
+			}()
+			filteredAddr[i].Label = ""
+			if err = netlink.AddrAdd(bri, &filteredAddr[i]); err != nil {
+				if !strings.Contains(err.Error(), "file exists") {
+					return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", d.DefaultBridgeName, err, filteredAddr[i])
+				} else {
+					err = nil
+				}
+			}
+		}
+		if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: d.DefaultBridgeName}}); err != nil {
+			return fmt.Errorf("Failed to add device %s to bridge device %s: %v", d.Device, d.DefaultBridgeName, err)
+		}
+		for i := range rs {
+			newRoute := netlink.Route{Gw: rs[i].Gw, LinkIndex: bri.Attrs().Index, Dst: rs[i].Dst, Src: rs[i].Src, Scope: rs[i].Scope}
+			if err = netlink.RouteAdd(&newRoute); err != nil {
+				if !strings.Contains(err.Error(), "file exists") {
+					return fmt.Errorf("failed to add route %s", newRoute.String())
+				} else {
+					err = nil
 				}
 			}
 		}
