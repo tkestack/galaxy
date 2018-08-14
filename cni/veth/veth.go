@@ -54,6 +54,19 @@ func addHostRoute(containerIP *net.IPNet, vethHostName string, src string) error
 	}); err != nil {
 		// we skip over duplicate routes as we assume the first one wins
 		if !os.IsExist(err) {
+			if s != nil {
+				// compatible change for old kernel which does not support src option such as tlinux 0041 0042
+				if err1 := netlink.RouteAdd(&netlink.Route{
+					LinkIndex: vethHost.Attrs().Index,
+					Scope:     netlink.SCOPE_LINK,
+					Dst:       containerIP,
+					Gw:        nil,
+				}); err1 != nil {
+					return fmt.Errorf("failed to add route '%v dev %v for old linux kernel': %v. With src option err: %v", containerIP, vethHostName, err1, err)
+				} else {
+					return nil
+				}
+			}
 			return fmt.Errorf("failed to add route '%v dev %v src %v': %v", containerIP, vethHostName, s.String(), err)
 		}
 	}
