@@ -60,10 +60,10 @@ func allocateOp(fip *database.FloatingIP, tableName string) database.ActionFunc 
 	}
 }
 
-func (i *ipam) allocateOneInSubnet(key, subnet string) error {
+func (i *ipam) allocateOneInSubnet(key, subnet string, policy uint16) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		//update galaxy_floatingip set `key`=? where `key` = "" AND subnet="192.168.0.0/24" limit 1
-		ret := tx.Table(i.TableName).Where("`key` = \"\" AND subnet = ?", subnet).Limit(1).UpdateColumn(`key`, key)
+		ret := tx.Table(i.TableName).Where("`key` = \"\" AND subnet = ?", subnet).Limit(1).UpdateColumns(map[string]interface{}{`key`: key, "policy": policy})
 		if ret.Error != nil {
 			return ret.Error
 		}
@@ -82,7 +82,7 @@ func (i *ipam) create(fip *database.FloatingIP) error {
 
 func (i *ipam) releaseIPs(keys []string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Table(i.TableName).Where("`key` IN (?)", keys).UpdateColumn(`key`, "").Error
+		return tx.Table(i.TableName).Where("`key` IN (?)", keys).UpdateColumns(map[string]interface{}{`key`: "", "policy": 0}).Error
 	})
 }
 
@@ -138,9 +138,22 @@ func (i *ipam) findKeyOfIP(ip uint32) (database.FloatingIP, error) {
 	})
 }
 
-func (i *ipam) updateKey(ip uint32, key string) error {
+func (i *ipam) updateKey(ip uint32, key string, policy uint16) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Table(i.TableName).Where("ip = ? and `key` = \"\"", ip).UpdateColumn(`key`, key)
+		ret := tx.Table(i.TableName).Where("ip = ? and `key` = \"\"", ip).UpdateColumns(map[string]interface{}{`key`: key, "policy": policy})
+		if ret.Error != nil {
+			return ret.Error
+		}
+		if ret.RowsAffected != 1 {
+			return ErrNotUpdated
+		}
+		return nil
+	})
+}
+
+func (i *ipam) updatePolicy(ip uint32, key string, policy uint16) error {
+	return i.store.Transaction(func(tx *gorm.DB) error {
+		ret := tx.Table(i.TableName).Where("ip = ? and `key` = ?", ip, key).UpdateColumns(map[string]interface{}{"policy": policy})
 		if ret.Error != nil {
 			return ret.Error
 		}

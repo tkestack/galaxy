@@ -45,9 +45,7 @@ type Conf struct {
 // FloatingIPPlugin Allocates Floating IP for deployments
 type FloatingIPPlugin struct {
 	objectSelector, nodeSelector labels.Selector
-	// whether or not the deployment wants its allocated floatingips immutable accross pod reassigning
-	immutableSeletor labels.Selector
-	ipam, secondIPAM floatingip.IPAM
+	ipam, secondIPAM             floatingip.IPAM
 	// node name to subnet cache
 	nodeSubnet     map[string]*net.IPNet
 	nodeSubnetLock sync.Mutex
@@ -143,13 +141,9 @@ func (p *FloatingIPPlugin) initSelector() error {
 	nodeSelectorMap := make(map[string]string)
 	nodeSelectorMap[private.LabelKeyNetworkType] = private.NodeLabelValueNetworkTypeFloatingIP
 
-	immutableLabelMap := make(map[string]string)
-	immutableLabelMap[private.LabelKeyFloatingIP] = private.LabelValueImmutable
-
 	labels.SelectorFromSet(labels.Set(objectSelectorMap))
 	p.objectSelector = labels.SelectorFromSet(labels.Set(objectSelectorMap))
 	p.nodeSelector = labels.SelectorFromSet(labels.Set(nodeSelectorMap))
-	p.immutableSeletor = labels.SelectorFromSet(labels.Set(immutableLabelMap))
 	return nil
 }
 
@@ -266,24 +260,29 @@ func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*sc
 	return list, nil
 }
 
-func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string) (*floatingip.IPInfo, error) {
+func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string, policy database.ReleasePolicy) (*floatingip.IPInfo, error) {
 	var how string
-	ipInfo, err := ipam.QueryFirst(key)
+	ipInfo, err := ipam.First(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
 	}
 	if ipInfo != nil {
 		how = "reused"
-		glog.V(3).Infof("pod %s may have been deleted or evicted, it already have an allocated floating ip %s", key, ipInfo.IP.String())
+		glog.V(3).Infof("pod %s may have been deleted or evicted, it already have an allocated floating ip %s", key, ipInfo.IPInfo.IP.String())
+		if ipInfo.FIP.Policy != uint16(policy) {
+			if err := ipam.UpdatePolicy(key, ipInfo.IPInfo.IP.IP, policy); err != nil {
+				return nil, fmt.Errorf("failed to update floating ip release policy: %v", err)
+			}
+		}
 	} else {
 		subnet, err := p.queryNodeSubnet(nodeName)
-		_, err = ipam.AllocateInSubnet(key, subnet)
+		_, err = ipam.AllocateInSubnet(key, subnet, policy)
 		if err != nil {
 			// return this error directly, invokers depend on the error type if it is ErrNoEnoughIP
 			return nil, err
 		}
 		how = "allocated"
-		ipInfo, err = ipam.QueryFirst(key)
+		ipInfo, err = ipam.First(key)
 		if err != nil {
 			return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
 		}
@@ -291,8 +290,8 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 			return nil, fmt.Errorf("nil floating ip for key %s: %v", key, err)
 		}
 	}
-	glog.Infof("[%s] %s floating ip %s for %s", ipam.Name(), how, ipInfo.IP.String(), key)
-	return ipInfo, nil
+	glog.Infof("[%s] %s floating ip %s for %s", ipam.Name(), how, ipInfo.IPInfo.IP.String(), key)
+	return &ipInfo.IPInfo, nil
 }
 
 func (p *FloatingIPPlugin) releaseIP(key string, reason string, pod *corev1.Pod) error {
@@ -343,7 +342,8 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 		// see https://github.com/kubernetes/kubernetes/pull/60332
 		return fmt.Errorf("pod which doesn't want floatingip have been sent to plugin")
 	}
-	ipInfo, err := p.allocateIP(p.ipam, key, args.Node)
+	releasePolicy := parseReleasePolicy(pod.GetLabels())
+	ipInfo, err := p.allocateIP(p.ipam, key, args.Node, releasePolicy)
 	if err != nil {
 		return err
 	}
@@ -354,7 +354,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	bindAnnotation := make(map[string]string)
 	bindAnnotation[private.AnnotationKeyIPInfo] = string(data)
 	if p.enabledSecondIP(pod) {
-		secondIPInfo, err := p.allocateIP(p.secondIPAM, key, args.Node)
+		secondIPInfo, err := p.allocateIP(p.secondIPAM, key, args.Node, releasePolicy)
 		// TODO release ip if it's been allocated in this goroutine?
 		if err != nil {
 			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
@@ -411,7 +411,12 @@ func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
 
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	key := keyInDB(pod)
-	if !p.immutableSeletor.Matches(labels.Set(pod.GetLabels())) {
+
+	if pod.GetLabels()[private.LabelKeyFloatingIP] == private.LabelValueNeverRelease {
+		glog.V(3).Infof("reserved %s for pod %s (never release)", pod.Annotations[private.AnnotationKeyIPInfo], key)
+		return nil
+	}
+	if pod.GetLabels()[private.LabelKeyFloatingIP] != private.LabelValueImmutable {
 		return p.releaseIP(key, deleted_and_ip_mutable_pod, pod)
 	} else {
 		tapps, err := p.TAppLister.GetPodTApps(pod)
@@ -542,4 +547,19 @@ func wantSecondIP(pod *corev1.Pod) bool {
 		return false
 	}
 	return labelMap[private.LabelKeyEnableSecondIP] == private.LabelValueEnabled
+}
+
+func parseReleasePolicy(labels map[string]string) database.ReleasePolicy {
+	if _, ok := labels[tappv1.TAppInstanceKey]; !ok {
+		// return pod delete for non tapp pods
+		return database.PodDelete
+	}
+	switch labels[private.LabelKeyFloatingIP] {
+	case private.LabelValueNeverRelease:
+		return database.Never
+	case private.LabelValueImmutable:
+		return database.AppDeleteOrScaleDown
+	default:
+		return database.PodDelete
+	}
 }

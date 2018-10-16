@@ -10,6 +10,7 @@ import (
 	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -43,21 +44,25 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		return nil
 	}
 	glog.Infof("resync pods")
-	all, err := ipam.QueryByPrefix("")
+	all, err := ipam.ByPrefix("")
 	if err != nil {
 		return err
 	}
 	podInDB := make(map[string]string) // podFullName to TappFullName
-	for _, key := range all {
-		if key == "" {
+	for _, fip := range all {
+		if fip.Key == "" {
 			continue
 		}
-		tappName, _, namespace := resolveTAppPodName(key)
+		if fip.Policy == uint16(database.Never) {
+			// never release these ips
+			continue
+		}
+		tappName, _, namespace := resolveTAppPodName(fip.Key)
 		if namespace == "" {
-			glog.Warningf("unexpected key: %s", key)
+			glog.Warningf("unexpected key: %s", fip.Key)
 			continue
 		}
-		podInDB[key] = fmtKey(namespace, tappName)
+		podInDB[fip.Key] = fmtKey(namespace, tappName)
 	}
 	pods, err := p.PodLister.List(p.objectSelector)
 	if err != nil {
@@ -97,7 +102,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		if !p.wantedObject(&tapp.ObjectMeta) {
 			continue
 		}
-		if !p.immutableSeletor.Matches(labels.Set(tapp.GetLabels())) {
+		if tapp.GetLabels()[private.LabelKeyFloatingIP] != private.LabelValueImmutable {
 			// 3. deleted pods whose parent tapp exist but is not ip immutable
 			if err := releaseIP(ipam, podFullName, deleted_and_ip_mutable_pod); err != nil {
 				glog.Warningf("[%s] %v", ipam.Name(), err)
@@ -201,7 +206,8 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 		return nil
 	}
 	key := keyInDB(pod)
-	if err := p.syncIP(p.ipam, key, ip); err != nil {
+	releasePolicy := parseReleasePolicy(pod.GetLabels())
+	if err := p.syncIP(p.ipam, key, ip, releasePolicy); err != nil {
 		return fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
 	if p.enabledSecondIP(pod) && pod.Annotations != nil {
@@ -213,14 +219,14 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 		if secondIPInfo.IP == nil {
 			return fmt.Errorf("invalid secondip annotation: %s", secondIPStr)
 		}
-		if err := p.syncIP(p.secondIPAM, key, secondIPInfo.IP.IP); err != nil {
+		if err := p.syncIP(p.secondIPAM, key, secondIPInfo.IP.IP, releasePolicy); err != nil {
 			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 		}
 	}
 	return p.syncPodAnnotation(pod)
 }
 
-func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP) error {
+func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, policy database.ReleasePolicy) error {
 	storedKey, err := ipam.QueryByIP(ip)
 	if err != nil {
 		return err
@@ -230,7 +236,7 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP) e
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
 		}
 	} else {
-		if err := ipam.AllocateSpecificIP(key, ip); err != nil {
+		if err := ipam.AllocateSpecificIP(key, ip, policy); err != nil {
 			return err
 		}
 		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)

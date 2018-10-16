@@ -121,7 +121,7 @@ spec:
       - name: hello
         image: docker.oa.com:8080/public/2048:onion
         resources:
-          request:
+          requests:
             galaxy.io/floatingip: 1
             memory: 20M
             cpu: 200m
@@ -137,7 +137,8 @@ Besides the following is optional.
 labels | meaning
 -------|--------
 galaxy.io/secondip: true | Pod wants two floatingips, the second floatingip will be the default route in container.
-galaxy.io/floatingip: immutable | If pod is evicted, its floating ip is preserved. Supports only TApp.
+galaxy.io/floatingip: immutable | Release a deleted pod's ip only if the App is deleted or scales down. If pod is evicted, its floating ip is preserved. Supports only TApp.
+galaxy.io/floatingip: never | Never release ip from this Pod. Supports only TApp.
 
 # Release
 

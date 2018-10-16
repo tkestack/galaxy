@@ -105,7 +105,7 @@ func TestFilter(t *testing.T) {
 	}
 	// allocate a ip of 10.173.13.0/24
 	_, ipNet, _ := net.ParseCIDR("10.173.13.0/24")
-	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns1_pod1-0", ipNet); err != nil || ipInfo == nil || "10.173.13.2" != ipInfo.String() {
+	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns1_pod1-0", ipNet, database.PodDelete); err != nil || ipInfo == nil || "10.173.13.2" != ipInfo.String() {
 		t.Fatal(err, ipInfo)
 	}
 	// check filter result is expected
@@ -121,7 +121,7 @@ func TestFilter(t *testing.T) {
 	}
 	// check pod allocated the previous ip
 	pod.Spec.NodeName = node_10_173_13_4
-	ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(pod), pod.Spec.NodeName)
+	ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(pod), pod.Spec.NodeName, database.PodDelete)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestFilter(t *testing.T) {
 	ipInfoSet := sets.NewString()
 	for i := 0; ; i++ {
 		newPod.Name = fmt.Sprintf("temp-%d", i)
-		if ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(newPod), newPod.Spec.NodeName); err != nil {
+		if ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(newPod), newPod.Spec.NodeName, database.PodDelete); err != nil {
 			if !strings.Contains(err.Error(), floatingip.ErrNoEnoughIP.Error()) {
 				t.Fatal(err)
 			}
@@ -175,7 +175,7 @@ func TestFilter(t *testing.T) {
 	}
 	t.Log(ipInfoSet)
 	// see if we can allocate the reserved ip
-	if ipInfo, err = fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(pod), pod.Spec.NodeName); err != nil {
+	if ipInfo, err = fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(pod), pod.Spec.NodeName, database.PodDelete); err != nil {
 		t.Fatal(err)
 	}
 	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {

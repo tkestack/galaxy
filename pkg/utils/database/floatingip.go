@@ -10,7 +10,16 @@ type FloatingIP struct {
 	IP     uint32 `gorm:"primary_key;not null"`
 	Key    string `gorm:"type:varchar(255)"`
 	Subnet string `gorm:"type:varchar(50)"` // node subnet, not container ip's subnet
+	Policy uint16
 }
+
+type ReleasePolicy uint16
+
+const (
+	PodDelete ReleasePolicy = iota
+	AppDeleteOrScaleDown
+	Never
+)
 
 func (f FloatingIP) TableName() string {
 	if f.Table == "" {

@@ -21,13 +21,16 @@ type IPAM interface {
 	ConfigurePool([]*FloatingIP) error
 	Config() []*FloatingIP
 	Allocate([]string, ...database.ActionFunc) ([]net.IP, error)
-	AllocateSpecificIP(string, net.IP) error
-	AllocateInSubnet(string, *net.IPNet) (net.IP, error)
+	AllocateSpecificIP(string, net.IP, database.ReleasePolicy) error
+	AllocateInSubnet(string, *net.IPNet, database.ReleasePolicy) (net.IP, error)
+	UpdatePolicy(string, net.IP, database.ReleasePolicy) error
 	Release([]string) error
 	ReleaseByPrefix(string) error
 	QueryFirst(string) (*IPInfo, error) // returns nil,nil if key is not found
+	First(string) (*FloatingIPInfo, error)
 	QueryByIP(net.IP) (string, error)
 	QueryByPrefix(string) (map[string]string, error) //ip to key
+	ByPrefix(string) ([]database.FloatingIP, error)
 	RoutableSubnet(net.IP) *net.IPNet
 	QueryRoutableSubnetByKey(key string) ([]string, error)
 	Store() *database.DBRecorder //for test
@@ -35,6 +38,11 @@ type IPAM interface {
 	Name() string
 
 	ApplyFloatingIPs([]FloatingIP) []*FloatingIP
+}
+
+type FloatingIPInfo struct {
+	IPInfo IPInfo
+	FIP    database.FloatingIP
 }
 
 type IPInfo struct {
@@ -181,6 +189,14 @@ func (i *ipam) ReleaseByPrefix(keyPrefix string) error {
 }
 
 func (i *ipam) QueryFirst(key string) (*IPInfo, error) {
+	fipInfo, err := i.First(key)
+	if err != nil || fipInfo == nil {
+		return nil, err
+	}
+	return &fipInfo.IPInfo, nil
+}
+
+func (i *ipam) First(key string) (*FloatingIPInfo, error) {
 	var fip database.FloatingIP
 	if err := i.findByKey(key, &fip); err != nil {
 		return nil, err
@@ -189,17 +205,20 @@ func (i *ipam) QueryFirst(key string) (*IPInfo, error) {
 		return nil, nil
 	}
 	netIP := nets.IntToIP(fip.IP)
-	for _, fip := range i.FloatingIPs {
-		if fip.Contains(netIP) {
+	for _, fips := range i.FloatingIPs {
+		if fips.Contains(netIP) {
 			ip := nets.IPNet(net.IPNet{
 				IP:   netIP,
-				Mask: fip.Mask,
+				Mask: fips.Mask,
 			})
-			return &IPInfo{
-				IP:             &ip,
-				Vlan:           fip.Vlan,
-				Gateway:        fip.Gateway,
-				RoutableSubnet: nets.NetsIPNet(fip.RoutableSubnet),
+			return &FloatingIPInfo{
+				IPInfo: IPInfo{
+					IP:             &ip,
+					Vlan:           fips.Vlan,
+					Gateway:        fips.Gateway,
+					RoutableSubnet: nets.NetsIPNet(fips.RoutableSubnet),
+				},
+				FIP: fip,
 			}, nil
 		}
 	}
@@ -212,7 +231,7 @@ func (i *ipam) Shutdown() {
 	}
 }
 
-func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet) (allocated net.IP, err error) {
+func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy database.ReleasePolicy) (allocated net.IP, err error) {
 	if routableSubnet == nil {
 		// this should never happen
 		return nil, fmt.Errorf("nil routableSubnet")
@@ -227,7 +246,7 @@ func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet) (allocate
 		err = ErrNoFIPForSubnet
 		return
 	}
-	if err = i.allocateOneInSubnet(key, routableSubnet.String()); err != nil {
+	if err = i.allocateOneInSubnet(key, routableSubnet.String(), uint16(policy)); err != nil {
 		if err == ErrNotUpdated {
 			err = ErrNoEnoughIP
 		}
@@ -296,15 +315,23 @@ func (i *ipam) Config() []*FloatingIP {
 }
 
 func (i *ipam) QueryByPrefix(prefix string) (map[string]string, error) {
-	var fips []database.FloatingIP
-	if err := i.findByPrefix(prefix, &fips); err != nil {
-		return nil, fmt.Errorf("failed to find by prefix %s: %v", prefix, err)
+	fips, err := i.ByPrefix(prefix)
+	if err != nil {
+		return nil, err
 	}
 	ips := make(map[string]string, len(fips))
 	for i := range fips {
 		ips[nets.IntToIP(fips[i].IP).String()] = fips[i].Key
 	}
 	return ips, nil
+}
+
+func (i *ipam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
+	var fips []database.FloatingIP
+	if err := i.findByPrefix(prefix, &fips); err != nil {
+		return nil, fmt.Errorf("failed to find by prefix %s: %v", prefix, err)
+	}
+	return fips, nil
 }
 
 func (i *ipam) RoutableSubnet(nodeIP net.IP) *net.IPNet {
@@ -330,6 +357,10 @@ func (i *ipam) QueryByIP(ip net.IP) (string, error) {
 	return fip.Key, err
 }
 
-func (i *ipam) AllocateSpecificIP(key string, ip net.IP) error {
-	return i.updateKey(nets.IPToInt(ip), key)
+func (i *ipam) AllocateSpecificIP(key string, ip net.IP, policy database.ReleasePolicy) error {
+	return i.updateKey(nets.IPToInt(ip), key, uint16(policy))
+}
+
+func (i *ipam) UpdatePolicy(key string, ip net.IP, policy database.ReleasePolicy) error {
+	return i.updatePolicy(nets.IPToInt(ip), key, uint16(policy))
 }
