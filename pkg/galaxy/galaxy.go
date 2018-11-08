@@ -52,7 +52,17 @@ func NewGalaxy() (*Galaxy, error) {
 	if err := g.parseConfig(); err != nil {
 		return nil, err
 	}
-	g.pmhandler = portmapping.New()
+	natInterfaceName := ""
+	if overlayConfMap, ok := g.netConf[private.NetworkTypeOverlay.CNIType]; ok {
+		if delegateConf, ok := overlayConfMap["delegate"]; ok {
+			if delegateConfMap, ok := delegateConf.(map[string]interface{}); ok {
+				if typ, ok := delegateConfMap["type"]; ok && typ == private.CNIBridgePlugin {
+					natInterfaceName = "cni0"
+				}
+			}
+		}
+	}
+	g.pmhandler = portmapping.New(natInterfaceName)
 	return g, nil
 }
 

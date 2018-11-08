@@ -29,12 +29,14 @@ type PortMappingHandler struct {
 	utiliptables.Interface
 	podPortMap map[string]map[hostport]closeable
 	sync.Mutex
+	natInterfaceName string
 }
 
-func New() *PortMappingHandler {
+func New(natInterfaceName string) *PortMappingHandler {
 	return &PortMappingHandler{
-		Interface:  utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4),
-		podPortMap: make(map[string]map[hostport]closeable),
+		Interface:        utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4),
+		podPortMap:       make(map[string]map[hostport]closeable),
+		natInterfaceName: natInterfaceName,
 	}
 }
 
@@ -280,15 +282,17 @@ func ensureBasicRule(natInterfaceName string, iptInterface utiliptables.Interfac
 			return fmt.Errorf("Failed to ensure that %s chain %s jumps to %s: %v", tc.table, tc.chain, kubeHostportsChain, err)
 		}
 	}
-	// Need to SNAT traffic from localhost
-	args = []string{"-m", "comment", "--comment", "SNAT for localhost access to hostports", "-o", natInterfaceName, "-s", "127.0.0.0/8", "-j", "MASQUERADE"}
-	if _, err := iptInterface.EnsureRule(utiliptables.Append, utiliptables.TableNAT, utiliptables.ChainPostrouting, args...); err != nil {
-		return fmt.Errorf("Failed to ensure that %s chain %s jumps to MASQUERADE: %v", utiliptables.TableNAT, utiliptables.ChainPostrouting, err)
+	if natInterfaceName != "" {
+		// Need to SNAT traffic from localhost
+		args = []string{"-m", "comment", "--comment", "SNAT for localhost access to hostports", "-o", natInterfaceName, "-s", "127.0.0.0/8", "-j", "MASQUERADE"}
+		if _, err := iptInterface.EnsureRule(utiliptables.Append, utiliptables.TableNAT, utiliptables.ChainPostrouting, args...); err != nil {
+			return fmt.Errorf("Failed to ensure that %s chain %s jumps to MASQUERADE: %v", utiliptables.TableNAT, utiliptables.ChainPostrouting, err)
+		}
 	}
 	return nil
 }
 
 // Ensure basic rules of Host Port iptables
 func (h *PortMappingHandler) EnsureBasicRule() error {
-	return ensureBasicRule("cni0", h.Interface)
+	return ensureBasicRule(h.natInterfaceName, h.Interface)
 }
