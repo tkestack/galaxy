@@ -69,7 +69,7 @@ func NewGalaxy() (*Galaxy, error) {
 func (g *Galaxy) Start() error {
 	g.initk8sClient()
 	g.pm = policy.New(g.client, g.quitChan)
-	gc.NewFlannelGC(g.dockerCli, g.quitChan).Run()
+	gc.NewFlannelGC(g.dockerCli, g.quitChan, g.cleanIPtables).Run()
 	if g.zhiyunConf != nil {
 		gc.NewZhiyunGC(g.dockerCli, g.quitChan, g.zhiyunConf).Run()
 	}

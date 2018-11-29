@@ -104,7 +104,7 @@ func (h *PortMappingHandler) SetupPortMapping(natInterfaceName string, ports []k
 	return nil
 }
 
-func (h *PortMappingHandler) CleanPortMapping(natInterfaceName string, ports []k8s.Port) {
+func (h *PortMappingHandler) CleanPortMapping(ports []k8s.Port) {
 	var kubeHostportsChainRules [][]string
 	natChains := bytes.NewBuffer(nil)
 	natRules := bytes.NewBuffer(nil)

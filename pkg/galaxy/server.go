@@ -234,7 +234,11 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 
 func (g *Galaxy) cleanupPortMapping(req *galaxyapi.PodRequest) error {
 	g.pmhandler.CloseHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace))
-	ports, err := k8s.ConsumePort(req.ContainerID)
+	return g.cleanIPtables(req.ContainerID)
+}
+
+func (g *Galaxy) cleanIPtables(containerID string) error {
+	ports, err := k8s.ConsumePort(containerID)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -242,7 +246,7 @@ func (g *Galaxy) cleanupPortMapping(req *galaxyapi.PodRequest) error {
 		return fmt.Errorf("failed to read ports %v", err)
 	}
 	if len(ports) != 0 {
-		g.pmhandler.CleanPortMapping("cni0", ports)
+		g.pmhandler.CleanPortMapping(ports)
 	}
 	return nil
 }
