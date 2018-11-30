@@ -40,7 +40,7 @@ func New(natInterfaceName string) *PortMappingHandler {
 	}
 }
 
-func (h *PortMappingHandler) SetupPortMapping(natInterfaceName string, ports []k8s.Port) error {
+func (h *PortMappingHandler) SetupPortMapping(ports []k8s.Port) error {
 	var kubeHostportsChainRules [][]string
 	natChains := bytes.NewBuffer(nil)
 	natRules := bytes.NewBuffer(nil)
@@ -146,10 +146,9 @@ func (h *PortMappingHandler) CleanPortMapping(ports []k8s.Port) {
 	}
 }
 
-// setupPortMappingForAllPods setup iptables for all pods at start time
-func setupPortMappingForAllPods(natInterfaceName string, ports []k8s.Port) error {
-	iptInterface := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
-	if err := ensureBasicRule(natInterfaceName, iptInterface); err != nil {
+// SetupPortMappingForAllPods setup iptables for all pods at start time
+func (h *PortMappingHandler) SetupPortMappingForAllPods(ports []k8s.Port) error {
+	if err := h.EnsureBasicRule(); err != nil {
 		return err
 	}
 
@@ -157,7 +156,7 @@ func setupPortMappingForAllPods(natInterfaceName string, ports []k8s.Port) error
 	// Get iptables-save output so we can check for existing chains and rules.
 	// This will be a map of chain name to chain with rules as stored in iptables-save/iptables-restore
 	existingNATChains := make(map[utiliptables.Chain]string)
-	err := iptInterface.SaveInto(utiliptables.TableNAT, iptablesSaveRaw)
+	err := h.Interface.SaveInto(utiliptables.TableNAT, iptablesSaveRaw)
 	if err != nil { // if we failed to get any rules
 		return fmt.Errorf("Failed to execute iptables-save, syncing all rules: %v", err)
 	} else { // otherwise parse the output
@@ -237,7 +236,7 @@ func setupPortMappingForAllPods(natInterfaceName string, ports []k8s.Port) error
 	writeLine(natRules, "COMMIT")
 
 	natLines := append(natChains.Bytes(), natRules.Bytes()...)
-	err = iptInterface.RestoreAll(natLines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
+	err = h.Interface.RestoreAll(natLines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
 	if err != nil {
 		return fmt.Errorf("Failed to execute iptables-restore for ruls %s: %v", string(natLines), err)
 	}
@@ -260,11 +259,11 @@ func hostportChainName(port k8s.Port, podFullName string) utiliptables.Chain {
 	return utiliptables.Chain(kubeHostportChainPrefix + encoded[:16])
 }
 
-func ensureBasicRule(natInterfaceName string, iptInterface utiliptables.Interface) error {
-	if err := iptInterface.EnsurePolicy(utiliptables.TableFilter, utiliptables.ChainForward, "ACCEPT"); err != nil {
+func (h *PortMappingHandler) EnsureBasicRule() error {
+	if err := h.Interface.EnsurePolicy(utiliptables.TableFilter, utiliptables.ChainForward, "ACCEPT"); err != nil {
 		glog.Warningf("set policy for %v/%v failed: %v", utiliptables.TableFilter, utiliptables.ChainForward, err.Error())
 	}
-	if _, err := iptInterface.EnsureChain(utiliptables.TableNAT, kubeHostportsChain); err != nil {
+	if _, err := h.Interface.EnsureChain(utiliptables.TableNAT, kubeHostportsChain); err != nil {
 		return fmt.Errorf("Failed to ensure that %s chain %s exists: %v", utiliptables.TableNAT, kubeHostportsChain, err)
 	}
 	tableChainsNeedJumpServices := []struct {
@@ -278,21 +277,16 @@ func ensureBasicRule(natInterfaceName string, iptInterface utiliptables.Interfac
 		"-m", "addrtype", "--dst-type", "LOCAL",
 		"-j", string(kubeHostportsChain)}
 	for _, tc := range tableChainsNeedJumpServices {
-		if _, err := iptInterface.EnsureRule(utiliptables.Prepend, tc.table, tc.chain, args...); err != nil {
+		if _, err := h.Interface.EnsureRule(utiliptables.Prepend, tc.table, tc.chain, args...); err != nil {
 			return fmt.Errorf("Failed to ensure that %s chain %s jumps to %s: %v", tc.table, tc.chain, kubeHostportsChain, err)
 		}
 	}
-	if natInterfaceName != "" {
+	if h.natInterfaceName != "" {
 		// Need to SNAT traffic from localhost
-		args = []string{"-m", "comment", "--comment", "SNAT for localhost access to hostports", "-o", natInterfaceName, "-s", "127.0.0.0/8", "-j", "MASQUERADE"}
-		if _, err := iptInterface.EnsureRule(utiliptables.Append, utiliptables.TableNAT, utiliptables.ChainPostrouting, args...); err != nil {
+		args = []string{"-m", "comment", "--comment", "SNAT for localhost access to hostports", "-o", h.natInterfaceName, "-s", "127.0.0.0/8", "-j", "MASQUERADE"}
+		if _, err := h.Interface.EnsureRule(utiliptables.Append, utiliptables.TableNAT, utiliptables.ChainPostrouting, args...); err != nil {
 			return fmt.Errorf("Failed to ensure that %s chain %s jumps to MASQUERADE: %v", utiliptables.TableNAT, utiliptables.ChainPostrouting, err)
 		}
 	}
 	return nil
-}
-
-// Ensure basic rules of Host Port iptables
-func (h *PortMappingHandler) EnsureBasicRule() error {
-	return ensureBasicRule(h.natInterfaceName, h.Interface)
 }

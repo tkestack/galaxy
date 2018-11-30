@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 	"github.com/golang/glog"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
@@ -35,14 +34,4 @@ func SetupEbtables(quit <-chan struct{}) {
 		}
 		glog.Infof("executed ebtables restore %s", string(ret))
 	}, 5*time.Minute, quit)
-}
-
-func EnsureIptables(h *portmapping.PortMappingHandler, quit <-chan struct{}) {
-	go wait.Until(func() {
-		glog.Infof("starting to ensure iptables rules")
-		defer glog.Infof("ensure iptables rules complete")
-		if err := h.EnsureBasicRule(); err != nil {
-			glog.Warningf("failed to ensure iptables rules")
-		}
-	}, 1*time.Minute, quit)
 }

@@ -3,6 +3,8 @@ package galaxy
 import (
 	"fmt"
 	"testing"
+
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 )
 
 func TestCniRequestToPodRequest(t *testing.T) {
@@ -22,9 +24,20 @@ func TestCniRequestToPodRequest(t *testing.T) {
 		t.Error(err)
 	}
 	if len(pr.Ports) != 1 {
-		t.Fatal()
+		t.Fatal(pr.Ports)
 	}
 	if fmt.Sprintf("%+v", pr.Ports[0]) != "{HostPort:30001 ContainerPort:80 Protocol:tcp HostIP: PodName: PodIP:}" {
 		t.Fatalf("%+v", pr.Ports[0])
+	}
+}
+func TestCleanDuplicate(t *testing.T) {
+	ports := cleanDuplicate([]k8s.Port{
+		{ContainerPort: 80, Protocol: "tcp"},
+		{ContainerPort: 80, Protocol: "udp"},
+		{ContainerPort: 80, Protocol: "tcp"},
+		{ContainerPort: 81, Protocol: "tcp"},
+	})
+	if fmt.Sprintf("%+v", ports) != "[{HostPort:0 ContainerPort:80 Protocol:tcp HostIP: PodName: PodIP:} {HostPort:0 ContainerPort:80 Protocol:udp HostIP: PodName: PodIP:} {HostPort:0 ContainerPort:81 Protocol:tcp HostIP: PodName: PodIP:}]" {
+		t.Fatalf("%+v", ports)
 	}
 }

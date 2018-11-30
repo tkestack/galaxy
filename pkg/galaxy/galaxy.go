@@ -14,7 +14,6 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 	"git.code.oa.com/gaiastack/galaxy/pkg/policy"
@@ -75,10 +74,9 @@ func (g *Galaxy) Start() error {
 	}
 	kernel.BridgeNFCallIptables(g.quitChan, *flagBridgeNFCallIptables)
 	kernel.IPForward(g.quitChan, *flagIPForward)
-	if *flagEbtableRules {
-		firewall.SetupEbtables(g.quitChan)
+	if err := g.setupIPtables(); err != nil {
+		return err
 	}
-	firewall.EnsureIptables(g.pmhandler, g.quitChan)
 	go wait.Until(g.pm.Run, 3*time.Minute, g.quitChan)
 	go wait.Until(g.updateIPInfoCM, time.Minute, g.quitChan)
 	return g.startServer()

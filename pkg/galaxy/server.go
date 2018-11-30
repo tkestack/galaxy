@@ -16,6 +16,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	k8sutil "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/utils"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
 
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
@@ -24,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -172,6 +174,51 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 	return cniutil.CmdAdd(req.ContainerID, req.CmdArgs, g.netConf, networkInfo)
 }
 
+func (g *Galaxy) setupIPtables() error {
+	if *flagEbtableRules {
+		firewall.SetupEbtables(g.quitChan)
+	}
+	// filter all running pods on node
+	pods, err := g.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
+	if err != nil {
+		return fmt.Errorf("failed to get pods on node: %v", err)
+	}
+	var allPorts []k8s.Port
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		if pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+		if pod.Annotations == nil || pod.Annotations[k8s.PortMappingPortsAnnotation] == "" {
+			continue
+		}
+		var ports []k8s.Port
+		if err := json.Unmarshal([]byte(pod.Annotations[k8s.PortMappingPortsAnnotation]), &ports); err != nil {
+			glog.Warningf("failed to unmarshal %s_%s annotation %s: %v", pod.Name, pod.Namespace, k8s.PortMappingPortsAnnotation, err)
+			continue
+		}
+		// open ports on start
+		if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(pod.Name, pod.Namespace), false, ports); err != nil {
+			// port maybe taken by other process during restart, but we can do nothing about that
+			// we should still setting up iptables for it.
+			glog.Warning(err)
+		}
+		allPorts = append(allPorts, ports...)
+	}
+	// sync all iptables on start
+	if err := g.pmhandler.SetupPortMappingForAllPods(allPorts); err != nil {
+		return fmt.Errorf("failed to setup portmappings for all pods, ports %+v: %v", allPorts, err)
+	}
+	go wait.Until(func() {
+		glog.Infof("starting to ensure iptables rules")
+		defer glog.Infof("ensure iptables rules complete")
+		if err := g.pmhandler.EnsureBasicRule(); err != nil {
+			glog.Warningf("failed to ensure iptables rules")
+		}
+	}, 1*time.Minute, make(chan struct{}))
+	return nil
+}
+
 func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string, result *t020.Result, pod *corev1.Pod) error {
 	if len(req.Ports) == 0 {
 		return nil
@@ -205,7 +252,7 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 	if err := k8s.SavePort(containerID, data); err != nil {
 		return fmt.Errorf("failed to save ports %v", err)
 	}
-	if err := g.pmhandler.SetupPortMapping("cni0", req.Ports); err != nil {
+	if err := g.pmhandler.SetupPortMapping(req.Ports); err != nil {
 		return fmt.Errorf("failed to setup port mapping %v: %v", req.Ports, err)
 	}
 	if err := wait.Poll(10*time.Millisecond, 1*time.Minute, func() (bool, error) {
