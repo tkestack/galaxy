@@ -206,8 +206,7 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 		return nil
 	}
 	key := keyInDB(pod)
-	releasePolicy := parseReleasePolicy(pod.GetLabels())
-	if err := p.syncIP(p.ipam, key, ip, releasePolicy); err != nil {
+	if err := p.syncIP(p.ipam, key, ip, pod); err != nil {
 		return fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
 	if p.enabledSecondIP(pod) && pod.Annotations != nil {
@@ -219,14 +218,14 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 		if secondIPInfo.IP == nil {
 			return fmt.Errorf("invalid secondip annotation: %s", secondIPStr)
 		}
-		if err := p.syncIP(p.secondIPAM, key, secondIPInfo.IP.IP, releasePolicy); err != nil {
+		if err := p.syncIP(p.secondIPAM, key, secondIPInfo.IP.IP, pod); err != nil {
 			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 		}
 	}
 	return p.syncPodAnnotation(pod)
 }
 
-func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, policy database.ReleasePolicy) error {
+func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, pod *corev1.Pod) error {
 	storedKey, err := ipam.QueryByIP(ip)
 	if err != nil {
 		return err
@@ -236,7 +235,7 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, p
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
 		}
 	} else {
-		if err := ipam.AllocateSpecificIP(key, ip, policy); err != nil {
+		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(pod.Labels), getAttr(pod)); err != nil {
 			return err
 		}
 		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)

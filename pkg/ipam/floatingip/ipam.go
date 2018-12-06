@@ -21,9 +21,9 @@ type IPAM interface {
 	ConfigurePool([]*FloatingIP) error
 	Config() []*FloatingIP
 	Allocate([]string, ...database.ActionFunc) ([]net.IP, error)
-	AllocateSpecificIP(string, net.IP, database.ReleasePolicy) error
-	AllocateInSubnet(string, *net.IPNet, database.ReleasePolicy) (net.IP, error)
-	UpdatePolicy(string, net.IP, database.ReleasePolicy) error
+	AllocateSpecificIP(string, net.IP, database.ReleasePolicy, string) error
+	AllocateInSubnet(string, *net.IPNet, database.ReleasePolicy, string) (net.IP, error)
+	UpdatePolicy(string, net.IP, database.ReleasePolicy, string) error
 	Release([]string) error
 	ReleaseByPrefix(string) error
 	QueryFirst(string) (*IPInfo, error) // returns nil,nil if key is not found
@@ -231,7 +231,7 @@ func (i *ipam) Shutdown() {
 	}
 }
 
-func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy database.ReleasePolicy) (allocated net.IP, err error) {
+func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy database.ReleasePolicy, attr string) (allocated net.IP, err error) {
 	if routableSubnet == nil {
 		// this should never happen
 		return nil, fmt.Errorf("nil routableSubnet")
@@ -246,7 +246,7 @@ func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy da
 		err = ErrNoFIPForSubnet
 		return
 	}
-	if err = i.allocateOneInSubnet(key, routableSubnet.String(), uint16(policy)); err != nil {
+	if err = i.allocateOneInSubnet(key, routableSubnet.String(), uint16(policy), attr); err != nil {
 		if err == ErrNotUpdated {
 			err = ErrNoEnoughIP
 		}
@@ -357,10 +357,10 @@ func (i *ipam) QueryByIP(ip net.IP) (string, error) {
 	return fip.Key, err
 }
 
-func (i *ipam) AllocateSpecificIP(key string, ip net.IP, policy database.ReleasePolicy) error {
-	return i.updateKey(nets.IPToInt(ip), key, uint16(policy))
+func (i *ipam) AllocateSpecificIP(key string, ip net.IP, policy database.ReleasePolicy, attr string) error {
+	return i.updateKey(nets.IPToInt(ip), key, uint16(policy), attr)
 }
 
-func (i *ipam) UpdatePolicy(key string, ip net.IP, policy database.ReleasePolicy) error {
-	return i.updatePolicy(nets.IPToInt(ip), key, uint16(policy))
+func (i *ipam) UpdatePolicy(key string, ip net.IP, policy database.ReleasePolicy, attr string) error {
+	return i.updatePolicy(nets.IPToInt(ip), key, uint16(policy), attr)
 }

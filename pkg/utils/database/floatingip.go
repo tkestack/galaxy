@@ -11,6 +11,7 @@ type FloatingIP struct {
 	Key    string `gorm:"type:varchar(255)"`
 	Subnet string `gorm:"type:varchar(50)"` // node subnet, not container ip's subnet
 	Policy uint16
+	Attr   string `gorm:"type:varchar(1000)"`
 }
 
 type ReleasePolicy uint16

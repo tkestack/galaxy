@@ -60,10 +60,10 @@ func allocateOp(fip *database.FloatingIP, tableName string) database.ActionFunc 
 	}
 }
 
-func (i *ipam) allocateOneInSubnet(key, subnet string, policy uint16) error {
+func (i *ipam) allocateOneInSubnet(key, subnet string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		//update galaxy_floatingip set `key`=? where `key` = "" AND subnet="192.168.0.0/24" limit 1
-		ret := tx.Table(i.TableName).Where("`key` = \"\" AND subnet = ?", subnet).Limit(1).UpdateColumns(map[string]interface{}{`key`: key, "policy": policy})
+		//update galaxy_floatingip set `key`=? and policy=? and attr=? where `key` = "" AND subnet="192.168.0.0/24" limit 1
+		ret := tx.Table(i.TableName).Where("`key` = \"\" AND subnet = ?", subnet).Limit(1).UpdateColumns(map[string]interface{}{`key`: key, "policy": policy, "attr": attr})
 		if ret.Error != nil {
 			return ret.Error
 		}
@@ -138,9 +138,9 @@ func (i *ipam) findKeyOfIP(ip uint32) (database.FloatingIP, error) {
 	})
 }
 
-func (i *ipam) updateKey(ip uint32, key string, policy uint16) error {
+func (i *ipam) updateKey(ip uint32, key string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Table(i.TableName).Where("ip = ? and `key` = \"\"", ip).UpdateColumns(map[string]interface{}{`key`: key, "policy": policy})
+		ret := tx.Table(i.TableName).Where("ip = ? and `key` = \"\"", ip).UpdateColumns(map[string]interface{}{`key`: key, "policy": policy, "attr": attr})
 		if ret.Error != nil {
 			return ret.Error
 		}
@@ -151,15 +151,13 @@ func (i *ipam) updateKey(ip uint32, key string, policy uint16) error {
 	})
 }
 
-func (i *ipam) updatePolicy(ip uint32, key string, policy uint16) error {
+func (i *ipam) updatePolicy(ip uint32, key string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Table(i.TableName).Where("ip = ? and `key` = ?", ip, key).UpdateColumns(map[string]interface{}{"policy": policy})
+		ret := tx.Table(i.TableName).Where("ip = ? and `key` = ?", ip, key).UpdateColumns(map[string]interface{}{"policy": policy, "attr": attr})
 		if ret.Error != nil {
 			return ret.Error
 		}
-		if ret.RowsAffected != 1 {
-			return ErrNotUpdated
-		}
+		// don't check RowsAffected != 1 as attr and policy may not be changed
 		return nil
 	})
 }

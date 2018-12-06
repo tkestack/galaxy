@@ -23,6 +23,9 @@ var (
 	AnnotationKeySecondIPInfo = "galaxy.io/secondip"
 	FloatingIPResource        = "galaxy.io/floatingip"
 
+	AnnotationKeyAppID = "appID"
+	EnvKeySubmitter    = "SUBMITTER"
+
 	NetworkTypeOverlay  = NetworkType{String: sets.NewString("", "DEFAULT", LabelValueNetworkTypeNAT), CNIType: "galaxy-flannel"}
 	NetworkTypeUnderlay = NetworkType{String: sets.NewString(LabelValueNetworkTypeFloatingIP), CNIType: "galaxy-k8s-vlan"}
 

@@ -260,23 +260,23 @@ func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*sc
 	return list, nil
 }
 
-func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string, policy database.ReleasePolicy) (*floatingip.IPInfo, error) {
+func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string, pod *corev1.Pod) (*floatingip.IPInfo, error) {
 	var how string
 	ipInfo, err := ipam.First(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
 	}
+	policy := parseReleasePolicy(pod.GetLabels())
+	attr := getAttr(pod)
 	if ipInfo != nil {
 		how = "reused"
-		glog.V(3).Infof("pod %s may have been deleted or evicted, it already have an allocated floating ip %s", key, ipInfo.IPInfo.IP.String())
-		if ipInfo.FIP.Policy != uint16(policy) {
-			if err := ipam.UpdatePolicy(key, ipInfo.IPInfo.IP.IP, policy); err != nil {
-				return nil, fmt.Errorf("failed to update floating ip release policy: %v", err)
-			}
+		glog.Infof("pod %s have an allocated floating ip %s, updating policy to %v attr %s", key, ipInfo.IPInfo.IP.String(), policy, attr)
+		if err := ipam.UpdatePolicy(key, ipInfo.IPInfo.IP.IP, policy, attr); err != nil {
+			return nil, fmt.Errorf("failed to update floating ip release policy: %v", err)
 		}
 	} else {
 		subnet, err := p.queryNodeSubnet(nodeName)
-		_, err = ipam.AllocateInSubnet(key, subnet, policy)
+		_, err = ipam.AllocateInSubnet(key, subnet, policy, attr)
 		if err != nil {
 			// return this error directly, invokers depend on the error type if it is ErrNoEnoughIP
 			return nil, err
@@ -290,7 +290,7 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 			return nil, fmt.Errorf("nil floating ip for key %s: %v", key, err)
 		}
 	}
-	glog.Infof("[%s] %s floating ip %s for %s", ipam.Name(), how, ipInfo.IPInfo.IP.String(), key)
+	glog.Infof("[%s] %s floating ip %s, policy %v, attr %s for %s", ipam.Name(), how, ipInfo.IPInfo.IP.String(), policy, attr, key)
 	return &ipInfo.IPInfo, nil
 }
 
@@ -342,8 +342,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 		// see https://github.com/kubernetes/kubernetes/pull/60332
 		return fmt.Errorf("pod which doesn't want floatingip have been sent to plugin")
 	}
-	releasePolicy := parseReleasePolicy(pod.GetLabels())
-	ipInfo, err := p.allocateIP(p.ipam, key, args.Node, releasePolicy)
+	ipInfo, err := p.allocateIP(p.ipam, key, args.Node, pod)
 	if err != nil {
 		return err
 	}
@@ -354,7 +353,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	bindAnnotation := make(map[string]string)
 	bindAnnotation[private.AnnotationKeyIPInfo] = string(data)
 	if p.enabledSecondIP(pod) {
-		secondIPInfo, err := p.allocateIP(p.secondIPAM, key, args.Node, releasePolicy)
+		secondIPInfo, err := p.allocateIP(p.secondIPAM, key, args.Node, pod)
 		// TODO release ip if it's been allocated in this goroutine?
 		if err != nil {
 			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
@@ -562,4 +561,38 @@ func parseReleasePolicy(labels map[string]string) database.ReleasePolicy {
 	default:
 		return database.PodDelete
 	}
+}
+
+func getAttr(pod *corev1.Pod) string {
+	var submitter string
+	for i := range pod.Spec.Containers {
+		for _, env := range pod.Spec.Containers[i].Env {
+			if env.Name == private.EnvKeySubmitter {
+				submitter = env.Value
+				break
+			}
+		}
+		if submitter != "" {
+			break
+		}
+	}
+	var appID string
+	if pod.Annotations != nil {
+		appID = pod.Annotations[private.AnnotationKeyAppID]
+	}
+	t := time.Now().Unix()
+	obj := struct {
+		Submitter string
+		Time      int64
+		AppID     string
+	}{
+		Submitter: submitter,
+		Time:      t,
+		AppID:     appID,
+	}
+	attr, err := json.Marshal(obj)
+	if err != nil {
+		glog.Warningf("failed to marshal attr %+v: %v", obj, err)
+	}
+	return string(attr)
 }
