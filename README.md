@@ -114,7 +114,7 @@ spec:
       labels:
         app: ramitapp
         network: FLOATINGIP
-        galaxy.io/secondip: true
+        galaxy.io/secondip: "true"
         galaxy.io/floatingip: immutable
     spec:
       containers:
