@@ -262,7 +262,6 @@ func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, brid
 		desIP := result.IP4.IP.IP
 		ipn := net.IPNet{IP: desIP, Mask: net.CIDRMask(32, 32)}
 		if err = ip.AddRoute(&ipn, nil, host); err != nil {
-			fmt.Printf("error add route: %v %v %v %v", err, result.IP4.IP, host.Attrs().Index, host.Attrs().Name)
 			return err
 		}
 	}
