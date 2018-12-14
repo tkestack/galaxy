@@ -15,6 +15,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/masq"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 	"git.code.oa.com/gaiastack/galaxy/pkg/policy"
 
@@ -79,6 +80,15 @@ func (g *Galaxy) Start() error {
 	}
 	go wait.Until(g.pm.Run, 3*time.Minute, g.quitChan)
 	go wait.Until(g.updateIPInfoCM, time.Minute, g.quitChan)
+	if v1, exist := g.netConf["galaxy-flannel"]; exist {
+		if v2, exist := v1["subnetFile"]; exist {
+			if file, ok := v2.(string); ok && file == "/etc/kubernetes/subnet.env" {
+				// assume we are in vpc(tce/qcloud) mode when subnetFiel = `/etc/kubernetes/subnet.env`
+				glog.Infof("in vpc mode, setup masq")
+				go wait.Forever(masq.EnsureIPMasq, time.Minute)
+			}
+		}
+	}
 	return g.startServer()
 }
 
