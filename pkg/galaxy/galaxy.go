@@ -18,6 +18,8 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/masq"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 	"git.code.oa.com/gaiastack/galaxy/pkg/policy"
+	utildbus "git.code.oa.com/gaiastack/galaxy/pkg/utils/dbus"
+	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
 
 	"github.com/golang/glog"
 	"github.com/vishvananda/netlink"
@@ -27,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	utilexec "k8s.io/utils/exec"
 )
 
 type Galaxy struct {
@@ -85,7 +88,8 @@ func (g *Galaxy) Start() error {
 			if file, ok := v2.(string); ok && file == "/etc/kubernetes/subnet.env" {
 				// assume we are in vpc(tce/qcloud) mode when subnetFiel = `/etc/kubernetes/subnet.env`
 				glog.Infof("in vpc mode, setup masq")
-				go wait.Forever(masq.EnsureIPMasq, time.Minute)
+				iptablesCli := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
+				go wait.Forever(masq.EnsureIPMasq(iptablesCli), time.Minute)
 			}
 		}
 	}

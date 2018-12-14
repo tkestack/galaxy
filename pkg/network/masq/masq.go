@@ -4,36 +4,35 @@ import (
 	"bytes"
 	"strings"
 
-	utildbus "git.code.oa.com/gaiastack/galaxy/pkg/utils/dbus"
 	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
 
 	"github.com/golang/glog"
-	utilexec "k8s.io/utils/exec"
 )
 
 var masqChain = utiliptables.Chain("IP-MASQ-AGENT")
 
-func EnsureIPMasq() {
-	iptablesCli := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
-	iptablesCli.EnsureChain(utiliptables.TableNAT, masqChain)
-	comment := "ip-masq-agent: ensure nat POSTROUTING directs all non-LOCAL destination traffic to our custom IP-MASQ-AGENT chain"
-	if _, err := iptablesCli.EnsureRule(utiliptables.Append, utiliptables.TableNAT, utiliptables.ChainPostrouting,
-		"-m", "comment", "--comment", comment,
-		"-m", "addrtype", "!", "--dst-type", "LOCAL", "-j", string(masqChain)); err != nil {
-		glog.Errorf("failed to ensure that %s chain %s jumps to %s: %v", utiliptables.TableNAT, utiliptables.ChainPostrouting, masqChain, err)
-		return
-	}
-	lines := bytes.NewBuffer(nil)
-	writeLine(lines, "*nat")
-	writeLine(lines, utiliptables.MakeChainLine(masqChain))
-	for _, cidr := range []string{"169.254.0.0/16", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"} {
-		writeNonMasqRule(lines, cidr)
-	}
-	// masquerade all other traffic that is not bound for a --dst-type LOCAL destination
-	writeMasqRule(lines)
-	writeLine(lines, "COMMIT")
-	if err := iptablesCli.RestoreAll(lines.Bytes(), utiliptables.NoFlushTables, utiliptables.NoRestoreCounters); err != nil {
-		glog.Errorf("commit IP-MASQ-AGENT rules failed: %s", err.Error())
+func EnsureIPMasq(iptablesCli utiliptables.Interface) func() {
+	return func() {
+		iptablesCli.EnsureChain(utiliptables.TableNAT, masqChain)
+		comment := "ip-masq-agent: ensure nat POSTROUTING directs all non-LOCAL destination traffic to our custom IP-MASQ-AGENT chain"
+		if _, err := iptablesCli.EnsureRule(utiliptables.Append, utiliptables.TableNAT, utiliptables.ChainPostrouting,
+			"-m", "comment", "--comment", comment,
+			"-m", "addrtype", "!", "--dst-type", "LOCAL", "-j", string(masqChain)); err != nil {
+			glog.Errorf("failed to ensure that %s chain %s jumps to %s: %v", utiliptables.TableNAT, utiliptables.ChainPostrouting, masqChain, err)
+			return
+		}
+		lines := bytes.NewBuffer(nil)
+		writeLine(lines, "*nat")
+		writeLine(lines, utiliptables.MakeChainLine(masqChain))
+		for _, cidr := range []string{"169.254.0.0/16", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"} {
+			writeNonMasqRule(lines, cidr)
+		}
+		// masquerade all other traffic that is not bound for a --dst-type LOCAL destination
+		writeMasqRule(lines)
+		writeLine(lines, "COMMIT")
+		if err := iptablesCli.RestoreAll(lines.Bytes(), utiliptables.NoFlushTables, utiliptables.NoRestoreCounters); err != nil {
+			glog.Errorf("commit IP-MASQ-AGENT rules failed: %s", err.Error())
+		}
 	}
 }
 
