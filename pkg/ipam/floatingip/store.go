@@ -82,13 +82,13 @@ func (i *ipam) create(fip *database.FloatingIP) error {
 
 func (i *ipam) releaseIPs(keys []string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Table(i.TableName).Where("`key` IN (?)", keys).UpdateColumns(map[string]interface{}{`key`: "", "policy": 0}).Error
+		return tx.Table(i.TableName).Where("`key` IN (?)", keys).UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": ""}).Error
 	})
 }
 
 func (i *ipam) releaseByPrefix(prefix string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Table(i.TableName).Where("substr(`key`, 1, length(?)) = ?", prefix, prefix).UpdateColumn(`key`, "").Error
+		return tx.Table(i.TableName).Where("substr(`key`, 1, length(?)) = ?", prefix, prefix).UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": ""}).Error
 	})
 }
 
