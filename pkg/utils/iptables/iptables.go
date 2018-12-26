@@ -128,7 +128,7 @@ const MinCheckVersion = "1.4.11"
 const WaitMinVersion = "1.4.20"
 const WaitSecondsMinVersion = "1.4.22"
 const WaitString = "-w"
-const WaitSecondsString = "-w5"
+const WaitSecondsValue = "5"
 
 const LockfilePath16x = "/run/xtables.lock"
 
@@ -586,7 +586,7 @@ func getIPTablesWaitFlag(vstring string) []string {
 	if version.LessThan(minVersion) {
 		return []string{WaitString}
 	} else {
-		return []string{WaitSecondsString}
+		return []string{WaitString, WaitSecondsValue}
 	}
 }
 
@@ -622,7 +622,7 @@ func getIPTablesRestoreWaitFlag(exec utilexec.Interface, protocol Protocol) []st
 		return nil
 	}
 
-	return []string{WaitSecondsString}
+	return []string{WaitString, WaitSecondsValue}
 }
 
 // getIPTablesRestoreVersionString runs "iptables-restore --version" to get the version string
