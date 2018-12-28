@@ -36,8 +36,6 @@ var (
 	flagEbtableRules         = flag.Bool("ebtable-rules", false, "whether galaxy should ensure ebtable-rules")
 	flagApiServer            = flag.String("api-servers", "", "The address of apiserver")
 	flagKubeConf             = flag.String("kubeconf", "", "kube configure file")
-	flagLabelSubnet          = flag.Bool("label-subnet", true, "whether galaxy should label the kubelet node with subnet={maskedIP}-{onesInMask}, this label is used by rackfilter scheduler plugin")
-	Note                     = `If ipam type is from third party, e.g. zhiyun, galaxy invokes third party ipam binaries to allocate ip.`
 )
 
 func (g *Galaxy) startServer() error {

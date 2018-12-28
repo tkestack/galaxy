@@ -29,7 +29,6 @@ var (
 	NetworkTypeOverlay  = NetworkType{String: sets.NewString("", "DEFAULT", LabelValueNetworkTypeNAT), CNIType: "galaxy-flannel"}
 	NetworkTypeUnderlay = NetworkType{String: sets.NewString(LabelValueNetworkTypeFloatingIP), CNIType: "galaxy-k8s-vlan"}
 
-	IPAMTypeZhiyun  = "galaxy-zhiyun-ipam"
 	CNIBridgePlugin = "galaxy-bridge"
 )
 

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	zhiyunapi "git.code.oa.com/gaiastack/galaxy/cni/zhiyun-ipam/api"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
@@ -38,7 +37,6 @@ type Galaxy struct {
 	netConf         map[string]map[string]interface{}
 	pmhandler       *portmapping.PortMappingHandler
 	client          *kubernetes.Clientset
-	zhiyunConf      *zhiyunapi.Conf
 	pm              *policy.PolicyManager
 	underlayCNIIPAM bool // if set, galaxy delegates to a cni ipam to allocate ip for underlay network
 }
@@ -73,9 +71,6 @@ func (g *Galaxy) Start() error {
 	g.initk8sClient()
 	g.pm = policy.New(g.client, g.quitChan)
 	gc.NewFlannelGC(g.dockerCli, g.quitChan, g.cleanIPtables).Run()
-	if g.zhiyunConf != nil {
-		gc.NewZhiyunGC(g.dockerCli, g.quitChan, g.zhiyunConf).Run()
-	}
 	kernel.BridgeNFCallIptables(g.quitChan, *flagBridgeNFCallIptables)
 	kernel.IPForward(g.quitChan, *flagIPForward)
 	if err := g.setupIPtables(); err != nil {
@@ -128,18 +123,8 @@ func (g *Galaxy) parseConfig() error {
 		if ipamObj, exist := vlanConfMap["ipam"]; exist {
 			if ipamMap, isMap := ipamObj.(map[string]interface{}); isMap {
 				ipamMap["node_ip"] = flags.GetNodeIP()
-				if typ, hasType := ipamMap["type"]; hasType {
+				if _, hasType := ipamMap["type"]; hasType {
 					g.underlayCNIIPAM = true
-					if typeStr, isStr := typ.(string); isStr {
-						if typeStr == private.IPAMTypeZhiyun {
-							var zhiyunConf zhiyunapi.Conf
-							data, _ := json.Marshal(ipamMap)
-							if err := json.Unmarshal(data, &zhiyunConf); err != nil {
-								return fmt.Errorf("failed to unmarshal zhiyun conf %s: %v", string(data), err)
-							}
-							g.zhiyunConf = &zhiyunConf
-						}
-					}
 				}
 			}
 		}
