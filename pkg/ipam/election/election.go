@@ -17,7 +17,7 @@ import (
 const (
 	JitterFactor = 1.2
 
-	LeaderElectionRecordAnnotationKey = "gaiastack.tencent.com/leader"
+	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 )
 
 type Config struct {
