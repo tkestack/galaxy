@@ -25,10 +25,12 @@ import (
 )
 
 const (
-	deleted_and_ip_mutable_pod            = "deleted_and_ip_mutable_pod"
-	deleted_and_parent_tapp_not_exist_pod = "deleted_and_parent_tapp_not_exist_pod"
-	deleted_and_killed_tapp_pod           = "deleted_and_killed_tapp_pod"
-	evicted_pod                           = "evicted_pod"
+	deletedAndIPMutablePod         = "deletedAndIPMutablePod"
+	deletedAndParentAppNotExistPod = "deletedAndParentAppNotExistPod"
+	deletedAndKilledTappPod        = "deletedAndKilledTappPod"
+	deletedAndScaledDownSSPod      = "deletedAndScaledDownSSPod"
+	evictedPod                     = "evictedPod"
+	deletedAndLabelMissMatchPod    = "deletedAndLabelMissMatchPod"
 )
 
 type Conf struct {
@@ -411,16 +413,36 @@ func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	key := keyInDB(pod)
 
-	if pod.GetLabels()[private.LabelKeyFloatingIP] == private.LabelValueNeverRelease {
+	switch pod.GetLabels()[private.LabelKeyFloatingIP] {
+	case private.LabelValueNeverRelease:
 		glog.V(3).Infof("reserved %s for pod %s (never release)", pod.Annotations[private.AnnotationKeyIPInfo], key)
 		return nil
+	case private.LabelValueImmutable:
+		break
+	default:
+		return p.releaseIP(key, deletedAndIPMutablePod, pod)
 	}
-	if pod.GetLabels()[private.LabelKeyFloatingIP] != private.LabelValueImmutable {
-		return p.releaseIP(key, deleted_and_ip_mutable_pod, pod)
+	statefulSet, err := p.StatefulSetLister.GetPodStatefulSets(pod)
+	if err == nil {
+		// it's a statefulset pod
+		if len(statefulSet) > 1 {
+			glog.Warningf("multiple ss found for pod %s", key)
+		}
+		ss := statefulSet[0]
+		index, err := parsePodIndex(pod.Name)
+		if err != nil {
+			return fmt.Errorf("invalid pod name %s of ss %s: %v", key, statefulsetName(ss), err)
+		}
+		if ss.Spec.Replicas != nil && *ss.Spec.Replicas < int32(index)+1 {
+			return p.releaseIP(key, deletedAndScaledDownSSPod, pod)
+		}
 	} else {
 		tapps, err := p.TAppLister.GetPodTApps(pod)
 		if err != nil {
-			return p.releaseIP(key, deleted_and_parent_tapp_not_exist_pod, pod)
+			return p.releaseIP(key, deletedAndParentAppNotExistPod, pod)
+		}
+		if len(tapps) > 1 {
+			glog.Warningf("multiple tapp found for pod %s", key)
 		}
 		tapp := tapps[0]
 		for i, status := range tapp.Spec.Statuses {
@@ -428,7 +450,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 				continue
 			}
 			// build the key namespace_tappname-id
-			return p.releaseIP(key, deleted_and_killed_tapp_pod, pod)
+			return p.releaseIP(key, deletedAndKilledTappPod, pod)
 		}
 	}
 	if pod.Annotations != nil {
@@ -549,10 +571,6 @@ func wantSecondIP(pod *corev1.Pod) bool {
 }
 
 func parseReleasePolicy(labels map[string]string) database.ReleasePolicy {
-	if _, ok := labels[tappv1.TAppInstanceKey]; !ok {
-		// return pod delete for non tapp pods
-		return database.PodDelete
-	}
 	switch labels[private.LabelKeyFloatingIP] {
 	case private.LabelValueNeverRelease:
 		return database.Never

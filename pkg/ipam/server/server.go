@@ -17,11 +17,8 @@ import (
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/informers"
-	"k8s.io/client-go/informers/internalinterfaces"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -36,10 +33,9 @@ type Server struct {
 	client              *kubernetes.Clientset
 	tappClient          *versioned.Clientset
 	plugin              *schedulerplugin.FloatingIPPlugin
-	podInformerFactory  informers.SharedInformerFactory // do not use it for other object types because they may need a different internalinterfaces.TweakListOptionsFunc
+	informerFactory     informers.SharedInformerFactory
 	tappInformerFactory tappInformers.SharedInformerFactory
-	*eventhandler.PodEventHandler
-	stopChan chan struct{}
+	stopChan            chan struct{}
 }
 
 func NewServer() *Server {
@@ -62,28 +58,26 @@ func (s *Server) init() error {
 	}
 	s.initk8sClient()
 
-	s.podInformerFactory = informers.NewFilteredSharedInformerFactory(s.client, time.Minute, v1.NamespaceAll, s.podListOptions())
+	s.informerFactory = informers.NewFilteredSharedInformerFactory(s.client, time.Minute, v1.NamespaceAll, nil)
 	s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)
-	podInformer := s.podInformerFactory.Core().V1().Pods()
+	podInformer := s.informerFactory.Core().V1().Pods()
+	statefulsetInformer := s.informerFactory.Apps().V1().StatefulSets()
 	tappInformer := s.tappInformerFactory.Tappcontroller().V1alpha1().TApps()
 	pluginArgs := &schedulerplugin.PluginFactoryArgs{
-		PodLister:     podInformer.Lister(),
-		TAppLister:    tappInformer.Lister(),
-		Client:        s.client,
-		TAppClient:    s.tappClient,
-		PodHasSynced:  podInformer.Informer().HasSynced,
-		TAppHasSynced: tappInformer.Informer().HasSynced,
+		PodLister:         podInformer.Lister(),
+		TAppLister:        tappInformer.Lister(),
+		StatefulSetLister: statefulsetInformer.Lister(),
+		Client:            s.client,
+		TAppClient:        s.tappClient,
+		PodHasSynced:      podInformer.Informer().HasSynced,
+		TAppHasSynced:     tappInformer.Informer().HasSynced,
+		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
 	}
 	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
 	if err != nil {
 		return err
 	}
-	s.PodEventHandler = eventhandler.NewPodEventHandler(s.plugin)
-	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    s.OnAdd,
-		UpdateFunc: s.OnUpdate,
-		DeleteFunc: s.OnDelete,
-	})
+	podInformer.Informer().AddEventHandler(eventhandler.NewPodEventHandler(s.plugin))
 	return nil
 }
 
@@ -113,7 +107,7 @@ func (s *Server) Run() error {
 		return err
 	}
 	s.plugin.Run(s.stopChan)
-	go s.podInformerFactory.Start(s.stopChan)
+	go s.informerFactory.Start(s.stopChan)
 	go s.tappInformerFactory.Start(s.stopChan)
 	s.startServer()
 	return nil
@@ -137,12 +131,6 @@ func (s *Server) initk8sClient() {
 	s.tappClient, err = versioned.NewForConfig(cfg)
 	if err != nil {
 		glog.Fatalf("Error building example clientset: %v", err)
-	}
-}
-
-func (s *Server) podListOptions() internalinterfaces.TweakListOptionsFunc {
-	return func(listOptions *v1.ListOptions) {
-		listOptions.FieldSelector = fields.Everything().String()
 	}
 }
 

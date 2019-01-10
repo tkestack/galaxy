@@ -276,15 +276,15 @@ func createPod(name, namespace string, labels map[string]string) *corev1.Pod {
 	}
 }
 
-func TestResolveTAppPodName(t *testing.T) {
+func TestResolveAppPodName(t *testing.T) {
 	tests := map[string][]string{"default_fip-0": {"default", "fip", "0"}, "kube-system_fip-bj-111": {"kube-system", "fip-bj", "111"}}
 	for k, v := range tests {
-		tappname, podId, namespace := resolveTAppPodName(k)
+		appname, podId, namespace := resolveAppPodName(k)
 		if namespace != v[0] {
 			t.Fatal(namespace)
 		}
-		if tappname != v[1] {
-			t.Fatal(tappname)
+		if appname != v[1] {
+			t.Fatal(appname)
 		}
 		if podId != v[2] {
 			t.Fatal(podId)
