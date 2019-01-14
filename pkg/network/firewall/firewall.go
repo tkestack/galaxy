@@ -5,14 +5,14 @@ import (
 	"os/exec"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
-	"git.code.oa.com/gaiastack/galaxy/pkg/wait"
 	"github.com/golang/glog"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-func SetupEbtables(quit chan error) {
+func SetupEbtables(quit <-chan struct{}) {
 	ebtableFile := "/etc/sysconfig/galaxy-ebtable-filter"
-	go wait.UntilQuitSignal("ensure ebtable rules", func() {
+	go wait.Until(func() {
+		glog.Infof("starting to ensure ebtable rules")
 		ebtablesRestore, err := exec.LookPath("ebtables-restore")
 		if err != nil {
 			glog.Warning("ebtables unavailable - unable to locate ebtables-restore")
@@ -34,12 +34,4 @@ func SetupEbtables(quit chan error) {
 		}
 		glog.Infof("executed ebtables restore %s", string(ret))
 	}, 5*time.Minute, quit)
-}
-
-func EnsureIptables(h *portmapping.PortMappingHandler, quit chan error) {
-	go wait.UntilQuitSignal("ensure iptables rules", func() {
-		if err := h.EnsureBasicRule(); err != nil {
-			glog.Warningf("failed to ensure iptables rules")
-		}
-	}, 1*time.Minute, quit)
 }

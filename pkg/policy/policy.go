@@ -8,8 +8,10 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
 	utildbus "git.code.oa.com/gaiastack/galaxy/pkg/utils/dbus"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ipset"
 	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
@@ -20,7 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	corev1Lister "k8s.io/client-go/listers/core/v1"
+	networkingv1Lister "k8s.io/client-go/listers/networking/v1"
+	"k8s.io/client-go/tools/cache"
 	utilexec "k8s.io/utils/exec"
 )
 
@@ -49,63 +56,137 @@ var (
 //  INPUT             GLX-POD-XXXX - GLX-PLCY-XXXX
 type PolicyManager struct {
 	sync.Mutex
-	policies      []policy
-	client        *kubernetes.Clientset
-	ipsetHandle   ipset.Interface
-	iptableHandle utiliptables.Interface
-	hostName      string
+	policies           []policy
+	client             *kubernetes.Clientset
+	ipsetHandle        ipset.Interface
+	iptableHandle      utiliptables.Interface
+	hostName           string
+	podInformerOnce    sync.Once
+	podCachedInformer  cache.SharedIndexInformer
+	podInformerFactory informers.SharedInformerFactory
+	podLister          corev1Lister.PodLister
+	namespaceLister    corev1Lister.NamespaceLister
+	policyLister       networkingv1Lister.NetworkPolicyLister
+	quitChan           <-chan struct{}
 }
 
-func New(client *kubernetes.Clientset) *PolicyManager {
-	return &PolicyManager{
+func New(client *kubernetes.Clientset, quitChan <-chan struct{}) *PolicyManager {
+	pm := &PolicyManager{
 		client:        client,
 		ipsetHandle:   ipset.New(utilexec.New()),
 		iptableHandle: utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4),
 		hostName:      k8s.GetHostname(),
+		quitChan:      quitChan,
 	}
+	pm.initInformers()
+	return pm
+}
+
+func (p *PolicyManager) initInformers() {
+	//podInformerFactory := informers.NewFilteredSharedInformerFactory(g.client, time.Minute, v1.NamespaceAll, func(listOptions *v1.ListOptions) {
+	//	listOptions.FieldSelector = fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname("")).String()
+	//})
+	p.podInformerFactory = informers.NewSharedInformerFactory(p.client, 0)
+	networkingInformerFactory := informers.NewSharedInformerFactory(p.client, 0)
+	podInformer := p.podInformerFactory.Core().V1().Pods()
+	p.podCachedInformer = podInformer.Informer()
+	p.podLister = podInformer.Lister()
+	policyInformer := networkingInformerFactory.Networking().V1().NetworkPolicies()
+	podEventHandler := eventhandler.NewPodEventHandler(p)
+	policyHandler := eventhandler.NewNetworkPolicyEventHandler(p)
+	p.podCachedInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    podEventHandler.OnAdd,
+		UpdateFunc: podEventHandler.OnUpdate,
+		DeleteFunc: podEventHandler.OnDelete,
+	})
+	policyInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    policyHandler.OnAdd,
+		UpdateFunc: policyHandler.OnUpdate,
+		DeleteFunc: policyHandler.OnDelete,
+	})
+	p.policyLister = policyInformer.Lister()
+	go networkingInformerFactory.Start(p.quitChan)
+}
+
+// It's expensive to sync all pods. So don't start podInformerFactory until there is any network policy object
+func (p *PolicyManager) startPodInformerFactory() {
+	p.podInformerOnce.Do(func() {
+		glog.Infof("starting pod informer factory")
+		defer glog.Infof("started pod informer factory")
+		namespaceInformer := p.podInformerFactory.Core().V1().Namespaces()
+		namespaceCachedInformer := namespaceInformer.Informer()
+		p.namespaceLister = namespaceInformer.Lister()
+		go p.podInformerFactory.Start(p.quitChan)
+		// wait for syncing pods
+		wait.PollInfinite(time.Second, func() (done bool, err error) {
+			return p.podCachedInformer.HasSynced() && namespaceCachedInformer.HasSynced(), nil
+		})
+	})
 }
 
 func (p *PolicyManager) Run() {
+	glog.Infof("start resyncing network policies")
 	p.syncNetworkPolices()
 	p.syncNetworkPolicyRules()
 	p.syncPods()
 }
 
 func (p *PolicyManager) syncPods() {
-	list, err := p.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
-	if err != nil {
-		glog.Warningf("failed to list pods: %v", err)
-		return
-	}
 	var wg sync.WaitGroup
-	for i := range list.Items {
-		wg.Add(1)
-		go func(pod *corev1.Pod) {
-			defer wg.Done()
-			if err := p.SyncPodChains(pod); err != nil {
-				glog.Warningf("failed to sync pod policy %s_%s: %v", pod.Name, pod.Namespace, err)
+	syncPodChains := func(pod *corev1.Pod) {
+		defer wg.Done()
+		if err := p.SyncPodChains(pod); err != nil {
+			glog.Warningf("failed to sync pod policy %s_%s: %v", pod.Name, pod.Namespace, err)
+		}
+	}
+	if p.podCachedInformer.HasSynced() {
+		pods, err := p.podLister.Pods(v1.NamespaceAll).List(labels.Everything())
+		if err != nil {
+			glog.Warningf("failed to list pods: %v", err)
+			return
+		}
+		nodeHostName := k8s.GetHostname()
+		for i := range pods {
+			if pods[i].Spec.Hostname != nodeHostName {
+				continue
 			}
-		}(&list.Items[i])
+			wg.Add(1)
+			go syncPodChains(pods[i])
+		}
+	} else {
+		// PodInformerFactory not started meaning there isn't any network policy right now, ensure pods' chains are deleted
+		list, err := p.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
+		if err != nil {
+			glog.Warningf("failed to list pods: %v", err)
+			return
+		}
+		for i := range list.Items {
+			wg.Add(1)
+			go syncPodChains(&list.Items[i])
+		}
 	}
 	wg.Wait()
 }
 
 func (p *PolicyManager) syncNetworkPolices() {
-	list, err := p.client.NetworkingV1().NetworkPolicies(v1.NamespaceAll).List(v1.ListOptions{})
+	list, err := p.policyLister.NetworkPolicies(v1.NamespaceAll).List(labels.Everything())
 	if err != nil {
 		glog.Warningf("failed to list network policies: %v", err)
 		return
 	}
+	if len(list) > 0 {
+		p.startPodInformerFactory()
+	}
 	var (
 		policies []policy
 	)
-	for i := range list.Items {
-		ingress, egress, err := p.policyResult(&list.Items[i])
+	for i := range list {
+		ingress, egress, err := p.policyResult(list[i])
 		if err != nil {
 			glog.Warning(err)
 			continue
 		}
-		policies = append(policies, policy{ingressRule: ingress, egressRule: egress, np: &list.Items[i]})
+		policies = append(policies, policy{ingressRule: ingress, egressRule: egress, np: list[i]})
 	}
 	p.Lock()
 	p.policies = policies
@@ -155,6 +236,7 @@ func (p *PolicyManager) policyResult(np *networkv1.NetworkPolicy) (*ingressRule,
 		return nil, nil, err
 	}
 	npNameHash := tableNameHash(fmt.Sprintf("%s_%s", np.Name, np.Namespace))
+	// Ingress and egress pod selector share the same ipset table
 	tbl.Name = fmt.Sprintf("%s-ip-%s", NamePrefix, npNameHash)
 	var (
 		inRules         *ingressRule
@@ -226,41 +308,39 @@ func (p *PolicyManager) peerRule(ports []networkv1.NetworkPolicyPort, peers []ne
 }
 
 func (p *PolicyManager) podSelectorToTable(podSelector *v1.LabelSelector, namespace string) (*ipsetTable, error) {
-	//TODO MatchExpressions
-	selectorStr := labels.FormatLabels(podSelector.MatchLabels)
-	if len(podSelector.MatchLabels) == 0 {
-		selectorStr = ""
-	}
-	list, err := p.client.CoreV1().Pods(namespace).List(v1.ListOptions{LabelSelector: selectorStr})
+	podLabelSelector, err := v1.LabelSelectorAsSelector(podSelector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list pods by selector %s: %v", selectorStr, err)
+		return nil, fmt.Errorf("failed to convert pod labelSelector %s to selector: %v", podSelector.String(), err)
+	}
+	list, err := p.podLister.Pods(namespace).List(podLabelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods by selector %s: %v", podLabelSelector.String(), err)
 	}
 	if glog.V(5) {
 		var podIPs []string
-		for _, pod := range list.Items {
+		for _, pod := range list {
 			if pod.Status.PodIP == "" {
 				continue
 			}
 			podIPs = append(podIPs, pod.Status.PodIP)
 		}
-		glog.V(5).Infof("selectorStr %s pods %s", selectorStr, strings.Join(podIPs, " "))
+		glog.V(5).Infof("selectorStr %s pods %s", podLabelSelector.String(), strings.Join(podIPs, " "))
 	}
-	return &ipsetTable{IPSet: ipset.IPSet{SetType: ipset.HashIP}, entries: entries(list.Items, ipset.HashIP)}, nil
+	return &ipsetTable{IPSet: ipset.IPSet{SetType: ipset.HashIP}, entries: entries(list, ipset.HashIP)}, nil
 }
 
 func (p *PolicyManager) namespaceSelectorToTable(namespaceSelector *v1.LabelSelector) (*ipsetTable, error) {
-	//TODO MatchExpressions
 	namespaces, err := p.getNamespaces(namespaceSelector)
 	if err != nil {
 		return nil, err
 	}
-	var pods []corev1.Pod
+	var pods []*corev1.Pod
 	for i := range namespaces {
-		list, err := p.client.CoreV1().Pods(namespaces[i].Name).List(v1.ListOptions{})
+		list, err := p.podLister.Pods(namespaces[i].Name).List(labels.Everything())
 		if err != nil {
 			return nil, fmt.Errorf("failed to list pods in namespace %s: %v", namespaces[i].Name, err)
 		}
-		pods = append(pods, list.Items[i])
+		pods = append(pods, list...)
 	}
 	return &ipsetTable{IPSet: ipset.IPSet{SetType: ipset.HashIP}, entries: entries(pods, ipset.HashIP)}, nil
 }
@@ -314,7 +394,7 @@ func formatCidr(cidr string) (string, error) {
 	return strings.TrimSuffix(ipnet.String(), "/32"), nil
 }
 
-func entries(pods []corev1.Pod, setType ipset.Type) []ipset.Entry {
+func entries(pods []*corev1.Pod, setType ipset.Type) []ipset.Entry {
 	var entries []ipset.Entry
 	for i := range pods {
 		if pods[i].Status.PodIP == "" {
@@ -489,7 +569,7 @@ func (p *PolicyManager) syncRules(polices []policy) error {
 	}
 
 	// Delete chains no longer in use.
-	// TODO fix if any pod reference this plcy chain
+	// TODO fix if any pod reference this policy chain
 	for chain := range existingChains {
 		if !activeChains[chain] {
 			chainString := string(chain)
@@ -579,24 +659,34 @@ func nameHash(data string) string {
 	return encoded[:16]
 }
 
-// SyncPodIPInIPSet ensures pod ip is expected in each policy's ipset
+// SyncPodIPInIPSet ensures pod ip is expected in each policy's ipset. ipset is already created because we have these policies in memory
 func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 	var polices []policy
 	p.Lock()
 	polices = p.policies
 	p.Unlock()
 	for _, policy := range polices {
-		if policy.ingressRule == nil {
+		podLabelSelector, err := v1.LabelSelectorAsSelector(&policy.np.Spec.PodSelector)
+		if err != nil {
+			glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
 			continue
 		}
-		//TODO MatchExpressions
-		if policy.np.Namespace == pod.Namespace && labels.SelectorFromSet(labels.Set(policy.np.Spec.PodSelector.MatchLabels)).Matches(labels.Set(pod.Labels)) {
-			p.addOrDelIPSetEntry(add, &policy.ingressRule.dstIPTable.IPSet, pod.Status.PodIP)
+		if policy.np.Namespace == pod.Namespace && podLabelSelector.Matches(labels.Set(pod.Labels)) {
+			if policy.ingressRule != nil {
+				p.addOrDelIPSetEntry(add, &policy.ingressRule.dstIPTable.IPSet, pod.Status.PodIP)
+			} else {
+				p.addOrDelIPSetEntry(add, &policy.egressRule.srcIPTable.IPSet, pod.Status.PodIP)
+			}
 		}
 		for i, ingress := range policy.np.Spec.Ingress {
 			for _, peer := range ingress.From {
 				if peer.PodSelector != nil {
-					if labels.SelectorFromSet(labels.Set(peer.PodSelector.MatchLabels)).Matches(labels.Set(pod.Labels)) {
+					peerPodLabelSelector, err := v1.LabelSelectorAsSelector(peer.PodSelector)
+					if err != nil {
+						glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+						continue
+					}
+					if peerPodLabelSelector.Matches(labels.Set(pod.Labels)) {
 						p.addOrDelIPSetEntry(add, &policy.ingressRule.srcRules[i].ipTable.IPSet, pod.Status.PodIP)
 					}
 				} else if peer.NamespaceSelector != nil {
@@ -608,6 +698,32 @@ func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 					for _, ns := range namespaces {
 						if ns.Name == pod.Namespace {
 							p.addOrDelIPSetEntry(add, &policy.ingressRule.srcRules[i].ipTable.IPSet, pod.Status.PodIP)
+							break
+						}
+					}
+				}
+			}
+		}
+		for i, egress := range policy.np.Spec.Egress {
+			for _, peer := range egress.To {
+				if peer.PodSelector != nil {
+					peerPodLabelSelector, err := v1.LabelSelectorAsSelector(peer.PodSelector)
+					if err != nil {
+						glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+						continue
+					}
+					if peerPodLabelSelector.Matches(labels.Set(pod.Labels)) {
+						p.addOrDelIPSetEntry(add, &policy.egressRule.dstRules[i].ipTable.IPSet, pod.Status.PodIP)
+					}
+				} else if peer.NamespaceSelector != nil {
+					namespaces, err := p.getNamespaces(peer.NamespaceSelector)
+					if err != nil {
+						glog.Warning(err)
+						continue
+					}
+					for _, ns := range namespaces {
+						if ns.Name == pod.Namespace {
+							p.addOrDelIPSetEntry(add, &policy.egressRule.dstRules[i].ipTable.IPSet, pod.Status.PodIP)
 							break
 						}
 					}
@@ -632,15 +748,18 @@ func (p *PolicyManager) SyncPodChains(pod *corev1.Pod) error {
 		if policy.np.Namespace != pod.Namespace {
 			continue
 		}
+		podLabelSelector, err := v1.LabelSelectorAsSelector(&policy.np.Spec.PodSelector)
+		if err != nil {
+			glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+			continue
+		}
 		if policy.ingressRule != nil {
-			//TODO MatchExpressions
-			if labels.SelectorFromSet(labels.Set(policy.np.Spec.PodSelector.MatchLabels)).Matches(labels.Set(pod.Labels)) {
+			if podLabelSelector.Matches(labels.Set(pod.Labels)) {
 				filteredIngressPolicy.Insert(i)
 			}
 		}
 		if policy.egressRule != nil {
-			//TODO MatchExpressions
-			if labels.SelectorFromSet(labels.Set(policy.np.Spec.PodSelector.MatchLabels)).Matches(labels.Set(pod.Labels)) {
+			if podLabelSelector.Matches(labels.Set(pod.Labels)) {
 				filteredEgressPolicy.Insert(i)
 			}
 		}
@@ -745,7 +864,6 @@ func (p *PolicyManager) deletePodChains(pod *corev1.Pod) error {
 	if err := p.iptableHandle.DeleteChain(utiliptables.TableFilter, podChain); err != nil {
 		glog.Warningf("failed to delete pod %s_%s chain %s: %v", pod.Name, pod.Namespace, string(podChain), err)
 	}
-	//TODO egress
 	return nil
 }
 
@@ -783,16 +901,16 @@ func (p *PolicyManager) deletePodRuleByKeyword(pod *corev1.Pod, chain utiliptabl
 	return nil
 }
 
-func (p *PolicyManager) getNamespaces(namespaceSelector *v1.LabelSelector) ([]corev1.Namespace, error) {
-	selectorStr := labels.FormatLabels(namespaceSelector.MatchLabels)
-	if len(namespaceSelector.MatchLabels) == 0 {
-		selectorStr = ""
-	}
-	list, err := p.client.CoreV1().Namespaces().List(v1.ListOptions{LabelSelector: selectorStr})
+func (p *PolicyManager) getNamespaces(namespaceSelector *v1.LabelSelector) ([]*corev1.Namespace, error) {
+	namespaceLabelSelector, err := v1.LabelSelectorAsSelector(namespaceSelector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list namespaces by selector %s: %v", selectorStr, err)
+		return nil, fmt.Errorf("failed to convert namespace labelSelector %s to selector: %v", namespaceLabelSelector.String(), err)
 	}
-	return list.Items, nil
+	namespaces, err := p.namespaceLister.List(namespaceLabelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list namespaces by selector %s: %v", namespaceLabelSelector.String(), err)
+	}
+	return namespaces, nil
 }
 
 func (p *PolicyManager) addOrDelIPSetEntry(add bool, set *ipset.IPSet, podIP string) {

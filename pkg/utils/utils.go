@@ -151,12 +151,45 @@ func DeleteVeth(netnsPath, ifName string) error {
 	})
 }
 
-func HostVethName(containerId string) string {
-	return fmt.Sprintf("veth-h%s", containerId[0:9])
+// DeleteAllVeth deletes all veth device inside the container
+func DeleteAllVeth(netnsPath string) error {
+	netns, err := ns.GetNS(netnsPath)
+	if err != nil {
+		if _, ok := err.(ns.NSPathNotExistErr); ok {
+			return nil
+		}
+		return fmt.Errorf("failed to open netns %q: %v", netnsPath, err)
+	}
+	defer netns.Close()
+
+	return netns.Do(func(_ ns.NetNS) error {
+		links, err := netlink.LinkList()
+		if err != nil {
+			return fmt.Errorf("failed to list links in netns %s", netnsPath)
+		}
+		for _, link := range links {
+			if link.Type() != "veth" {
+				continue
+			}
+			// shutdown sbox device
+			if err = netlink.LinkSetDown(link); err != nil {
+				err = fmt.Errorf("failed to down sbox device %q: %v", link.Attrs().Name, err)
+			}
+
+			if err = netlink.LinkDel(link); err != nil {
+				err = fmt.Errorf("failed to delete sbox device %q: %v", link.Attrs().Name, err)
+			}
+		}
+		return err
+	})
 }
 
-func ContainerVethName(containerId string) string {
-	return fmt.Sprintf("veth-s%s", containerId[0:9])
+func HostVethName(containerId string, suffix string) string {
+	return fmt.Sprintf("v-h%s%s", containerId[0:9], suffix)
+}
+
+func ContainerVethName(containerId string, suffix string) string {
+	return fmt.Sprintf("v-s%s%s", containerId[0:9], suffix)
 }
 
 func HostMacVlanName(containerId string) string {
@@ -167,9 +200,9 @@ func HostIPVlanName(containerId string) string {
 	return fmt.Sprintf("iv-%s", containerId[0:9])
 }
 
-func CreateVeth(containerID string, mtu int) (netlink.Link, netlink.Link, error) {
-	hostIfName := HostVethName(containerID)
-	containerIfName := ContainerVethName(containerID)
+func CreateVeth(containerID string, mtu int, suffix string) (netlink.Link, netlink.Link, error) {
+	hostIfName := HostVethName(containerID, suffix)
+	containerIfName := ContainerVethName(containerID, suffix)
 	// Generate and add the interface pipe host <-> sandbox
 	veth := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0, MTU: mtu},
@@ -195,8 +228,8 @@ func CreateVeth(containerID string, mtu int) (netlink.Link, netlink.Link, error)
 
 // VethConnectsHostWithContainer creates veth device pairs and connects container with host
 // If bridgeName specified, it attaches host side veth device to the bridge
-func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, bridgeName string) error {
-	host, sbox, err := CreateVeth(args.ContainerID, 1500)
+func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, bridgeName string, suffix string) error {
+	host, sbox, err := CreateVeth(args.ContainerID, 1500, suffix)
 	if err != nil {
 		return err
 	}
@@ -218,8 +251,7 @@ func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, brid
 	} else {
 		// when vlanid=0 and in pure vlan mode, no bridge create, set proxy_arp instead
 		if err = SetProxyArp(host.Attrs().Name); err != nil {
-			fmt.Printf("error set proxyarp: %v", err)
-			return err
+			return fmt.Errorf("error set proxyarp: %v", err)
 		}
 	}
 	// Up the host interface after finishing all netlink configuration
@@ -230,7 +262,6 @@ func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, brid
 		desIP := result.IP4.IP.IP
 		ipn := net.IPNet{IP: desIP, Mask: net.CIDRMask(32, 32)}
 		if err = ip.AddRoute(&ipn, nil, host); err != nil {
-			fmt.Printf("error add route: %v %v %v %v", err, result.IP4.IP, host.Attrs().Index, host.Attrs().Name)
 			return err
 		}
 	}

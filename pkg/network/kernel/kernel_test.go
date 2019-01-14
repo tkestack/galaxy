@@ -20,7 +20,7 @@ func TestIPForward(t *testing.T) {
 	if err := ioutil.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	quit := make(chan error)
+	quit := make(chan struct{})
 	// make loop runs quickly to avoid race condition
 	interval = time.Millisecond * 10
 	IPForward(quit, true)
@@ -36,6 +36,5 @@ func TestIPForward(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	quit <- nil
-	<-quit
+	close(quit)
 }

@@ -11,3 +11,13 @@ func TestParseIPv4Mask(t *testing.T) {
 		t.Fatal()
 	}
 }
+
+func TestParseCIDR(t *testing.T) {
+	ipNet, err := ParseCIDR("192.168.0.1/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ipNet.String() != "192.168.0.1/24" {
+		t.Fatal(ipNet.String())
+	}
+}

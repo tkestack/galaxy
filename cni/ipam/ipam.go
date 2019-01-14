@@ -4,59 +4,61 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.code.oa.com/gaiastack/galaxy/cni/apiswitch-ipam"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/plugins/pkg/ipam"
 )
 
-// Allocate tries to find IPInfo from args firstly. If it can't and ipamType is empty, try to allocate ip from apiswitch.
+// Allocate tries to find IPInfo from args firstly
 // Otherwise invoke third party ipam binaries
-func Allocate(ipamType string, args *skel.CmdArgs) (uint16, types.Result, error) {
+func Allocate(ipamType string, args *skel.CmdArgs) ([]uint16, []types.Result, error) {
 	var (
 		vlanId uint16
 		err    error
 	)
-	kvMap, err := k8s.ParseK8SCNIArgs(args.Args)
+	kvMap, err := cniutil.ParseCNIArgs(args.Args)
 	if err != nil {
-		return vlanId, nil, err
+		return nil, nil, err
 	}
+	var results []types.Result
+	var vlanIDs []uint16
 	if ipInfoStr := kvMap[cniutil.IPInfoInArgs]; ipInfoStr != "" {
 		// get ipinfo from cni args
 		var ipInfo cniutil.IPInfo
 		if err := json.Unmarshal([]byte(ipInfoStr), &ipInfo); err != nil {
-			return vlanId, nil, fmt.Errorf("failed to unmarshal ipInfo from args %q: %v", args.Args, err)
+			return nil, nil, fmt.Errorf("failed to unmarshal ipInfo from args %q: %v", args.Args, err)
 		}
-		return ipInfo.Vlan, cniutil.IPInfoToResult(&ipInfo), nil
+		results = append(results, cniutil.IPInfoToResult(&ipInfo))
+		vlanIDs = append(vlanIDs, ipInfo.Vlan)
+
+		if ipInfoStr2 := kvMap[cniutil.SecondIPInfoInArgs]; ipInfoStr2 != "" {
+			var ipInfo2 cniutil.IPInfo
+			if err := json.Unmarshal([]byte(ipInfoStr2), &ipInfo2); err != nil {
+				return nil, nil, fmt.Errorf("failed to unmarshal ipInfo from args %q: %v", args.Args, err)
+			}
+			results = append(results, cniutil.IPInfoToResult(&ipInfo2))
+			vlanIDs = append(vlanIDs, ipInfo2.Vlan)
+		}
+		return vlanIDs, results, nil
 	}
 	if ipamType == "" {
-		// get ipinfo from apiswitch
-		ipamConf, err := apiswitch_ipam.LoadIPAMConf(args.StdinData)
-		if err != nil {
-			return vlanId, nil, err
-		}
-		ipInfo, err := apiswitch_ipam.Allocate(ipamConf, kvMap)
-		if err != nil {
-			return vlanId, nil, err
-		}
-		return ipInfo.Vlan, cniutil.IPInfoToResult(ipInfo), nil
+		return nil, nil, fmt.Errorf("neither ipInfo from cni args nor ipam type from netconf")
 	}
 	// run the IPAM plugin and get back the config to apply
 	generalResult, err := ipam.ExecAdd(ipamType, args.StdinData)
 	if err != nil {
-		return vlanId, nil, err
+		return nil, nil, err
 	}
 	result, err := t020.GetResult(generalResult)
 	if err != nil {
-		return vlanId, nil, err
+		return nil, nil, err
 	}
 	if result.IP4 == nil {
-		return vlanId, nil, fmt.Errorf("IPAM plugin returned missing IPv4 config")
+		return nil, nil, fmt.Errorf("IPAM plugin returned missing IPv4 config")
 	}
-	return vlanId, generalResult, err
+	return append(vlanIDs, vlanId), append(results, generalResult), err
 }
 
 func Release(ipamType string, args *skel.CmdArgs) error {

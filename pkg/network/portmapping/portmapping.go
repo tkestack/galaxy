@@ -10,7 +10,7 @@ import (
 )
 
 //OpenHostports opens all hostport for pod. The opened hostports are assigned to k8sPorts
-func (h *PortMappingHandler) OpenHostports(podName string, randomPortMapping bool, k8sPorts []k8s.Port) error {
+func (h *PortMappingHandler) OpenHostports(podFullName string, randomPortMapping bool, k8sPorts []k8s.Port) error {
 	var retErr error
 	ports := make(map[hostport]closeable)
 	for i := range k8sPorts {
@@ -25,7 +25,7 @@ func (h *PortMappingHandler) OpenHostports(podName string, randomPortMapping boo
 		// we bind to :0 if portmapping == true && hostport == 0 which asks kernel to allocate an unused port from its ip_local_port_range
 		socket, err := openLocalPort(&hp)
 		if err != nil {
-			retErr = fmt.Errorf("cannot open hostport %d for %s: %v", k8sPorts[i].HostPort, podName, err)
+			retErr = fmt.Errorf("cannot open hostport %d for %s: %v", k8sPorts[i].HostPort, podFullName, err)
 			break
 		}
 		k8sPorts[i].HostPort = hp.port
@@ -36,7 +36,7 @@ func (h *PortMappingHandler) OpenHostports(podName string, randomPortMapping boo
 		glog.Error(retErr)
 		for hp, socket := range ports {
 			if err := socket.Close(); err != nil {
-				glog.Errorf("Cannot clean up hostport %d for pod %s: %v", hp.port, podName, err)
+				glog.Errorf("Cannot clean up hostport %d for pod %s: %v", hp.port, podFullName, err)
 			}
 		}
 		return retErr
@@ -44,7 +44,7 @@ func (h *PortMappingHandler) OpenHostports(podName string, randomPortMapping boo
 
 	if len(ports) != 0 {
 		h.Lock()
-		h.podPortMap[podName] = ports
+		h.podPortMap[podFullName] = ports
 		h.Unlock()
 	}
 

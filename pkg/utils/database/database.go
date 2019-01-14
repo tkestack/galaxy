@@ -93,7 +93,7 @@ func (db *DBRecorder) Run() (err error) {
 		return
 	}
 
-	//db.conn.LogMode(true)
+	// db.conn.LogMode(true)
 	db.conn.SetLogger(new(WrappedLogger))
 	if db.MaxConn > 0 {
 		db.conn.DB().SetMaxOpenConns(db.MaxConn)
@@ -104,22 +104,6 @@ func (db *DBRecorder) Run() (err error) {
 		db.conn.DB().SetMaxIdleConns(idleNum)
 	}
 
-	// If table is not existed, we create before any table operation
-	for _, entity := range []interface{}{
-		&FloatingIP{},
-	} {
-		if !db.conn.HasTable(entity) {
-			if err = db.conn.CreateTable(entity).Error; err != nil {
-				err = fmt.Errorf("Failed to create table %v, error(%v)", reflect.TypeOf(entity), err)
-				return
-			}
-		} else {
-			if err = db.conn.AutoMigrate(entity).Error; err != nil {
-				err = fmt.Errorf("Failed to auto migrate table %v, error(%v)", reflect.TypeOf(entity), err)
-				return
-			}
-		}
-	}
 	go wait.Until(func() {
 		// Reconnect to database if connection is lost
 		var err error
@@ -129,6 +113,21 @@ func (db *DBRecorder) Run() (err error) {
 	}, time.Second, db.stopCh)
 
 	return
+}
+
+func (db *DBRecorder) CreateTableIfNotExist(entity interface{}) error {
+	if !db.conn.HasTable(entity) {
+		if err := db.conn.CreateTable(entity).Error; err != nil {
+			err = fmt.Errorf("Failed to create table %v, error(%v)", reflect.TypeOf(entity), err)
+			return err
+		}
+	} else {
+		if err := db.conn.AutoMigrate(entity).Error; err != nil {
+			err = fmt.Errorf("Failed to auto migrate table %v, error(%v)", reflect.TypeOf(entity), err)
+			return err
+		}
+	}
+	return nil
 }
 
 func (db *DBRecorder) Transaction(ops ...ActionFunc) (err error) {

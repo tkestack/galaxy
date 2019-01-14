@@ -40,7 +40,8 @@ const (
 )
 
 const (
-	IPInfoInArgs = "IPInfo"
+	IPInfoInArgs       = "IPInfo"
+	SecondIPInfoInArgs = "SecondIPInfo"
 )
 
 // like net.IPNet but adds JSON marshalling and unmarshalling
@@ -103,6 +104,22 @@ func BuildCNIArgs(args map[string]string) string {
 		entries = append(entries, fmt.Sprintf("%s=%s", k, v))
 	}
 	return strings.Join(entries, ";")
+}
+
+func ParseCNIArgs(args string) (map[string]string, error) {
+	kvMap := make(map[string]string)
+	kvs := strings.Split(args, ";")
+	if len(kvs) == 0 {
+		return kvMap, fmt.Errorf("invalid args %s", args)
+	}
+	for _, kv := range kvs {
+		part := strings.SplitN(kv, "=", 2)
+		if len(part) != 2 {
+			continue
+		}
+		kvMap[strings.TrimSpace(part[0])] = strings.TrimSpace(part[1])
+	}
+	return kvMap, nil
 }
 
 func DelegateCmd(netconf map[string]interface{}, add bool) (types.Result, error) {

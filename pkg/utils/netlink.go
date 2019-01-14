@@ -10,7 +10,7 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/kernel"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/kernel"
 )
 
 const (

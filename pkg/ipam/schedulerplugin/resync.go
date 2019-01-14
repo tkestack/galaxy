@@ -4,12 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
 	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"github.com/golang/glog"
+	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,31 +36,36 @@ func (p *FloatingIPPlugin) storeReady() bool {
 }
 
 // resyncPod releases ips from
-// 1. deleted pods whose parent is not tapp
-// 2. deleted pods whose parent is an unexisting tapp
-// 3. deleted pods whose parent tapp exist but is not ip immutable
-// 4. deleted pods whose parent tapp exist but instance status in tapp.spec.statuses = killed
+// 1. deleted pods whose parent app does not exist
+// 2. deleted pods whose parent tapp or statefulset exist but is not ip immutable
+// 3. deleted pods whose parent tapp exist but instance status in tapp.spec.statuses = killed
+// 4. deleted pods whose parent statefulset exist but pod index > *statefulset.spec.replica
 // 5. existing pods but its status is evicted (TApp doesn't have evicted pods)
-func (p *FloatingIPPlugin) resyncPod() error {
+// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
+func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	if !p.storeReady() {
 		return nil
 	}
 	glog.Infof("resync pods")
-	all, err := p.ipam.QueryByPrefix("")
+	all, err := ipam.ByPrefix("")
 	if err != nil {
 		return err
 	}
-	podInDB := make(map[string]string) // podFullName to TappFullName
-	for _, key := range all {
-		if key == "" {
+	podInDB := make(map[string]string) // podFullName to AppFullName
+	for _, fip := range all {
+		if fip.Key == "" {
 			continue
 		}
-		tappName, _, namespace := resolveTAppPodName(key)
+		if fip.Policy == uint16(database.Never) {
+			// never release these ips
+			continue
+		}
+		appName, _, namespace := resolveAppPodName(fip.Key)
 		if namespace == "" {
-			glog.Warningf("unexpected key: %s", key)
+			glog.Warningf("unexpected key: %s", fip.Key)
 			continue
 		}
-		podInDB[key] = fmtKey(namespace, tappName)
+		podInDB[fip.Key] = fmtKey(namespace, appName)
 	}
 	pods, err := p.PodLister.List(p.objectSelector)
 	if err != nil {
@@ -66,8 +75,8 @@ func (p *FloatingIPPlugin) resyncPod() error {
 	for i := range pods {
 		if evicted(pods[i]) {
 			// 5. existing pods but its status is evicted (TApp doesn't have evicted pods, it simply deletes pods which are evicted by kubelet)
-			if err := p.releasePodIP(keyInDB(pods[i]), evicted_pod); err != nil {
-				glog.Warning(err)
+			if err := releaseIP(ipam, keyInDB(pods[i]), evictedPod); err != nil {
+				glog.Warningf("[%s] %v", ipam.Name(), err)
 			}
 		}
 		existPods[keyInDB(pods[i])] = pods[i]
@@ -76,39 +85,76 @@ func (p *FloatingIPPlugin) resyncPod() error {
 	if err != nil {
 		return err
 	}
+	ssMap, err := p.getSSMap()
+	if err != nil {
+		return err
+	}
 	glog.V(4).Infof("existPods %v", existPods)
-	for podFullName, tappFullName := range podInDB {
+	for podFullName, appFullName := range podInDB {
 		if _, ok := existPods[podFullName]; ok {
 			continue
 		}
-		// we can't get labels of not exist pod, so get them from it's rs or tapp
+		// we can't get labels of not exist pod, so get them from it's ss or tapp
+		ss, ok := ssMap[appFullName]
+		if ok {
+			if !p.wantedObject(&ss.ObjectMeta) {
+				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
+				if err := releaseIP(ipam, podFullName, deletedAndLabelMissMatchPod); err != nil {
+					glog.Warningf("[%s] %v", ipam.Name(), err)
+				}
+				continue
+			}
+			if ss.GetLabels()[private.LabelKeyFloatingIP] != private.LabelValueImmutable {
+				// 2. deleted pods whose parent tapp or statefulset exist but is not ip immutable
+				if err := releaseIP(ipam, podFullName, deletedAndIPMutablePod); err != nil {
+					glog.Warningf("[%s] %v", ipam.Name(), err)
+				}
+				continue
+			}
+			index, err := parsePodIndex(podFullName)
+			if err != nil {
+				glog.Errorf("invalid pod name %s of ss %s: %v", podFullName, statefulsetName(ss), err)
+				continue
+			}
+			if ss.Spec.Replicas != nil && *ss.Spec.Replicas < int32(index)+1 {
+				if err := releaseIP(ipam, podFullName, deletedAndIPMutablePod); err != nil {
+					glog.Warningf("[%s] %v", ipam.Name(), err)
+				}
+				continue
+			}
+			continue
+		}
+		// it may be a tapp pod
 		var tapp *tappv1.TApp
-		if existTapp, ok := tappMap[tappFullName]; ok {
+		if existTapp, ok := tappMap[appFullName]; ok {
 			tapp = existTapp
 		} else {
-			// 1. deleted pods whose parent is not tapp
-			// 2. deleted pods whose parent is an unexisting tapp
-			if err := p.releasePodIP(podFullName, deleted_and_parent_tapp_not_exist_pod); err != nil {
-				glog.Warning(err)
+			// 1. deleted pods whose parent app does not exist
+			if err := releaseIP(ipam, podFullName, deletedAndParentAppNotExistPod); err != nil {
+				glog.Warningf("[%s] %v", ipam.Name(), err)
 			}
 			continue
 		}
 		if !p.wantedObject(&tapp.ObjectMeta) {
+			// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
+			if err := releaseIP(ipam, podFullName, deletedAndLabelMissMatchPod); err != nil {
+				glog.Warningf("[%s] %v", ipam.Name(), err)
+			}
 			continue
 		}
-		if !p.immutableSeletor.Matches(labels.Set(tapp.GetLabels())) {
-			// 3. deleted pods whose parent tapp exist but is not ip immutable
-			if err := p.releasePodIP(podFullName, deleted_and_ip_mutable_pod); err != nil {
-				glog.Warning(err)
+		if tapp.GetLabels()[private.LabelKeyFloatingIP] != private.LabelValueImmutable {
+			// 2. deleted pods whose parent tapp or statefulset exist but is not ip immutable
+			if err := releaseIP(ipam, podFullName, deletedAndIPMutablePod); err != nil {
+				glog.Warningf("[%s] %v", ipam.Name(), err)
 			}
 			continue
 		}
 		// ns_tapp-12, "12" = str[(2+1+4+1):]
 		podId := podFullName[len(tapp.Namespace)+1+len(tapp.Name)+1:]
 		if status := tapp.Spec.Statuses[podId]; tappInstanceKilled(status) {
-			// 4. deleted pods whose parent tapp exist but instance status in tapp.spec.statuses = killed
-			if err := p.releasePodIP(podFullName, deleted_and_killed_tapp_pod); err != nil {
-				glog.Warning(err)
+			// 3. deleted pods whose parent tapp exist but instance status in tapp.spec.statuses = killed
+			if err := releaseIP(ipam, podFullName, deletedAndKilledTappPod); err != nil {
+				glog.Warningf("[%s] %v", ipam.Name(), err)
 			}
 		}
 	}
@@ -131,6 +177,22 @@ func (p *FloatingIPPlugin) getTAppMap() (map[string]*tappv1.TApp, error) {
 	return app2TApp, nil
 }
 
+func (p *FloatingIPPlugin) getSSMap() (map[string]*appv1.StatefulSet, error) {
+	sss, err := p.StatefulSetLister.List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+	key2App := make(map[string]*appv1.StatefulSet)
+	for i := range sss {
+		if !p.wantedObject(&sss[i].ObjectMeta) {
+			continue
+		}
+		key2App[statefulsetName(sss[i])] = sss[i]
+	}
+	glog.V(4).Infof("%v", key2App)
+	return key2App, nil
+}
+
 func keyInDB(pod *corev1.Pod) string {
 	return fmt.Sprintf("%s_%s", pod.Namespace, pod.Name)
 }
@@ -143,9 +205,18 @@ func TAppFullName(tapp *tappv1.TApp) string {
 	return fmt.Sprintf("%s_%s", tapp.Namespace, tapp.Name)
 }
 
-// resolveTAppPodName returns tappname, podId, namespace
-func resolveTAppPodName(podFullName string) (string, string, string) {
-	// tappname-id_namespace, e.g. default_fip-0
+func statefulsetName(ss *appv1.StatefulSet) string {
+	return fmt.Sprintf("%s_%s", ss.Namespace, ss.Name)
+}
+
+func parsePodIndex(name string) (int, error) {
+	parts := strings.Split(name, "-")
+	return strconv.Atoi(parts[len(parts)-1])
+}
+
+// resolveAppPodName returns appname, podId, namespace
+func resolveAppPodName(podFullName string) (string, string, string) {
+	// namespace_tappname-id, e.g. default_fip-0
 	// _ is not a valid char in appname
 	parts := strings.SplitN(podFullName, "_", 2)
 	if len(parts) != 2 {
@@ -200,7 +271,27 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 		return nil
 	}
 	key := keyInDB(pod)
-	storedKey, err := p.ipam.QueryByIP(ip)
+	if err := p.syncIP(p.ipam, key, ip, pod); err != nil {
+		return fmt.Errorf("[%s] %v", p.ipam.Name(), err)
+	}
+	if p.enabledSecondIP(pod) && pod.Annotations != nil {
+		secondIPStr := pod.Annotations[private.AnnotationKeySecondIPInfo]
+		var secondIPInfo floatingip.IPInfo
+		if err := json.Unmarshal([]byte(secondIPStr), &secondIPInfo); err != nil {
+			return fmt.Errorf("failed to unmarshal secondip %s: %v", secondIPStr, err)
+		}
+		if secondIPInfo.IP == nil {
+			return fmt.Errorf("invalid secondip annotation: %s", secondIPStr)
+		}
+		if err := p.syncIP(p.secondIPAM, key, secondIPInfo.IP.IP, pod); err != nil {
+			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
+		}
+	}
+	return p.syncPodAnnotation(pod)
+}
+
+func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, pod *corev1.Pod) error {
+	storedKey, err := ipam.QueryByIP(ip)
 	if err != nil {
 		return err
 	}
@@ -209,12 +300,12 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
 		}
 	} else {
-		if err := p.ipam.AllocateSpecificIP(key, ip); err != nil {
+		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(pod.Labels), getAttr(pod)); err != nil {
 			return err
 		}
-		glog.Infof("updated floatingip %s to key %s", ip.String(), key)
+		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)
 	}
-	return p.syncPodAnnotation(pod)
+	return nil
 }
 
 func (p *FloatingIPPlugin) syncPodAnnotation(pod *corev1.Pod) error {

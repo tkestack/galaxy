@@ -1,20 +1,26 @@
-#!/usr/bin/env bash
+#! /bin/bash
+set -o errexit
+set -o nounset
+set -o pipefail
 
-set -e
+flags=${debug:+"-v"}
+ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd -P)
+LOCAL_GOPATH="${ROOT}/go"
+PKG=git.code.oa.com/gaiastack/galaxy
 
-# we are in the project root dir
-cur_dir=`pwd`
-package=git.code.oa.com/gaiastack/galaxy
+source ${ROOT}/hack/init.sh
+create_go_path_tree
 
-mkdir -p go/src/`dirname $package`
-ln -sfn $cur_dir $cur_dir/go/src/$package
-export GOPATH=$cur_dir/go
+export GOPATH=${ROOT}/go
 export GOOS=linux
 function cleanup() {
-	rm $cur_dir/go/src/$package
+	rm ${ROOT}/go/src/${PKG}
 }
 trap cleanup EXIT
 
+commit=${commit-$(git log --first-parent -1 --oneline | awk '{print $1}')}
+version_package=${PKG}/pkg/utils/ldflags
 # build galaxy-ipam
 echo "Building galaxy-ipam"
-go build -o bin/galaxy-ipam -v $package/cmd/galaxy-ipam
+echo "   galaxy-ipam"
+go build -o bin/galaxy-ipam $flags -ldflags "$(print_ldflags)" ${PKG}/cmd/galaxy-ipam

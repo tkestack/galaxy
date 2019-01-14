@@ -70,7 +70,7 @@ func (p *cniPlugin) doCNI(url string, req *galaxyapi.CNIRequest) ([]byte, error)
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("CNI request failed with status %v: '%s'", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("galaxy returns: %s", string(body))
 	}
 
 	return body, nil

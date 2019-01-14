@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
@@ -18,6 +19,10 @@ import (
 
 var (
 	node_unlabeld, node_hasNoIP, node_10_49_27_3, node_10_173_13_4 = "node1", "node2", "node3", "node4"
+	appID                                                          = "12345xxx"
+	submitter                                                      = "rami"
+	expectContainsAppID                                            = `"AppID":"` + appID + `"`
+	expectContainsSubmmiter                                        = `"Submitter":"` + submitter + `"`
 )
 
 func TestFilter(t *testing.T) {
@@ -34,6 +39,9 @@ func TestFilter(t *testing.T) {
 		TAppHasSynced: func() bool { return false },
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "Failed to open") {
+			t.Skipf("skip testing db due to %q", err.Error())
+		}
 		t.Fatal(err)
 	}
 	if err = fipPlugin.Init(); err != nil {
@@ -46,13 +54,14 @@ func TestFilter(t *testing.T) {
 	immutableLabel := make(map[string]string)
 	immutableLabel[private.LabelKeyFloatingIP] = private.LabelValueImmutable
 	immutableLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
+	immutableLabel[tappv1.TAppInstanceKey] = ""
 	nodes := []corev1.Node{
 		// no floating ip label node
 		{
 			ObjectMeta: v1.ObjectMeta{Name: node_unlabeld},
 			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.49.27.2"}}},
 		},
-		// no floating ip configured node
+		// no floating ip configured for this node
 		{
 			ObjectMeta: v1.ObjectMeta{Name: node_hasNoIP, Labels: nodeLabel},
 			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.48.27.2"}}},
@@ -79,7 +88,7 @@ func TestFilter(t *testing.T) {
 	if err := fipPlugin.ipam.ReleaseByPrefix(""); err != nil {
 		t.Fatal(err)
 	}
-	// pod doesn't has floating ip label, filter should return all nodes
+	// pod doesn't have floating ip label, filter should return all nodes
 	filtered, failed, err := fipPlugin.Filter(createPod("pod1", "ns1", nil), nodes)
 	if err != nil {
 		t.Fatal(err)
@@ -100,13 +109,18 @@ func TestFilter(t *testing.T) {
 	if err := checkFailed(failed, node_unlabeld, node_hasNoIP); err != nil {
 		t.Fatal(err)
 	}
+
+	// the following is to check release policy
 	// allocate a ip of 10.173.13.0/24
 	_, ipNet, _ := net.ParseCIDR("10.173.13.0/24")
-	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns1_pod1-0", ipNet); err != nil || ipInfo == nil || "10.173.13.2" != ipInfo.String() {
+	pod := createPod("pod1-0", "ns1", immutableLabel)
+	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet(keyInDB(pod), ipNet, database.PodDelete, ""); err != nil || ipInfo == nil || "10.173.13.2" != ipInfo.String() {
 		t.Fatal(err, ipInfo)
 	}
+	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.PodDelete, expectAttrEmpty()); err != nil {
+		t.Fatal(err)
+	}
 	// check filter result is expected
-	pod := createPod("pod1-0", "ns1", immutableLabel)
 	if filtered, failed, err = fipPlugin.Filter(pod, nodes); err != nil {
 		t.Fatal(err)
 	}
@@ -116,15 +130,19 @@ func TestFilter(t *testing.T) {
 	if err := checkFailed(failed, node_unlabeld, node_hasNoIP, node_10_49_27_3); err != nil {
 		t.Fatal(err)
 	}
-	// check pod allocated the previous ip
+	// check pod allocated the previous ip and policy should be updated to AppDeleteOrScaleDown
 	pod.Spec.NodeName = node_10_173_13_4
-	ipInfo, err := fipPlugin.allocateIP(keyInDB(pod), pod.Spec.NodeName)
+	ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(pod), pod.Spec.NodeName, pod)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ipInfo) == 0 || !strings.Contains(ipInfo[private.AnnotationKeyIPInfo], "10.173.13.2") {
+	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
+	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrContains(expectContainsAppID, expectContainsSubmmiter)); err != nil {
+		t.Fatal(err)
+	}
+
 	// filter again on a new pod2, all good nodes should be filteredNodes
 	if filtered, failed, err = fipPlugin.Filter(createPod("pod2-1", "ns1", immutableLabel), nodes); err != nil {
 		t.Fatal(err)
@@ -135,11 +153,11 @@ func TestFilter(t *testing.T) {
 	if err := checkFailed(failed, node_unlabeld, node_hasNoIP); err != nil {
 		t.Fatal(err)
 	}
-	// forget the pod1, the ip should be reserved
+	// forget the pod1, the ip should be reserved, because pod1 has immutable label attached
 	if err := fipPlugin.DeletePod(pod); err != nil {
 		t.Fatal(err)
 	}
-	if ipInfo, err := fipPlugin.ipam.QueryFirst("ns1_pod1-0"); err != nil || ipInfo == nil {
+	if ipInfo, err := fipPlugin.ipam.QueryFirst(keyInDB(pod)); err != nil || ipInfo == nil {
 		t.Fatal(err, ipInfo)
 	} else {
 		if ipInfo.IP.String() != "10.173.13.2/24" {
@@ -152,16 +170,19 @@ func TestFilter(t *testing.T) {
 	ipInfoSet := sets.NewString()
 	for i := 0; ; i++ {
 		newPod.Name = fmt.Sprintf("temp-%d", i)
-		if ipInfo, err := fipPlugin.allocateIP(keyInDB(newPod), newPod.Spec.NodeName); err != nil {
+		if ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(newPod), newPod.Spec.NodeName, newPod); err != nil {
 			if !strings.Contains(err.Error(), floatingip.ErrNoEnoughIP.Error()) {
 				t.Fatal(err)
 			}
 			break
 		} else {
-			if ipInfoSet.Has(ipInfo[private.AnnotationKeyIPInfo]) {
+			if ipInfo == nil {
+				t.Fatal()
+			}
+			if ipInfoSet.Has(ipInfo.IP.String()) {
 				t.Fatal("allocates an previous allocated ip")
 			}
-			ipInfoSet.Insert(ipInfo[private.AnnotationKeyIPInfo])
+			ipInfoSet.Insert(ipInfo.IP.String())
 		}
 		if i == 10 {
 			t.Fatal("should not have so many ips")
@@ -169,12 +190,49 @@ func TestFilter(t *testing.T) {
 	}
 	t.Log(ipInfoSet)
 	// see if we can allocate the reserved ip
-	if ipInfo, err = fipPlugin.allocateIP(keyInDB(pod), pod.Spec.NodeName); err != nil {
+	if ipInfo, err = fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(pod), pod.Spec.NodeName, pod); err != nil {
 		t.Fatal(err)
 	}
-	if len(ipInfo) == 0 || !strings.Contains(ipInfo[private.AnnotationKeyIPInfo], "10.173.13.2") {
+	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
+	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrContains(expectContainsAppID, expectContainsSubmmiter)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Attr has a time field which makes it hard to check, so creating this struct to do part check
+type expectAttr struct {
+	empty    bool
+	contains []string
+}
+
+func expectAttrContains(substr ...string) expectAttr {
+	return expectAttr{contains: substr}
+}
+
+func expectAttrEmpty() expectAttr {
+	return expectAttr{empty: true}
+}
+
+func checkPolicyAndAttr(ipam floatingip.IPAM, key string, expectPolicy database.ReleasePolicy, expectAttr expectAttr) error {
+	fip, err := ipam.First(key)
+	if err != nil {
+		return err
+	}
+	// policy should be
+	if fip.FIP.Policy != uint16(expectPolicy) {
+		return fmt.Errorf("expect policy %d, real %d", expectPolicy, fip.FIP.Policy)
+	}
+	if expectAttr.empty && fip.FIP.Attr != "" {
+		return fmt.Errorf("expect attr empty, real attr %q", fip.FIP.Attr)
+	}
+	for i := range expectAttr.contains {
+		if !strings.Contains(fip.FIP.Attr, expectAttr.contains[i]) {
+			return fmt.Errorf("expect attr contains %q, real attr %q", expectAttr.contains[i], fip.FIP.Attr)
+		}
+	}
+	return nil
 }
 
 func checkFiltered(realFilterd []corev1.Node, filtererd ...string) error {
@@ -208,18 +266,25 @@ func checkFailed(realFailed schedulerapi.FailedNodesMap, failed ...string) error
 }
 
 func createPod(name, namespace string, labels map[string]string) *corev1.Pod {
-	return &corev1.Pod{ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels}}
+	return &corev1.Pod{
+		ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels, Annotations: map[string]string{private.AnnotationKeyAppID: appID}},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Env: []corev1.EnvVar{{Name: private.EnvKeySubmitter, Value: submitter}}},
+			},
+		},
+	}
 }
 
-func TestResolveTAppPodName(t *testing.T) {
+func TestResolveAppPodName(t *testing.T) {
 	tests := map[string][]string{"default_fip-0": {"default", "fip", "0"}, "kube-system_fip-bj-111": {"kube-system", "fip-bj", "111"}}
 	for k, v := range tests {
-		tappname, podId, namespace := resolveTAppPodName(k)
+		appname, podId, namespace := resolveAppPodName(k)
 		if namespace != v[0] {
 			t.Fatal(namespace)
 		}
-		if tappname != v[1] {
-			t.Fatal(tappname)
+		if appname != v[1] {
+			t.Fatal(appname)
 		}
 		if podId != v[2] {
 			t.Fatal(podId)

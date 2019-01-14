@@ -9,16 +9,16 @@ import (
 	"strings"
 	"time"
 
-	zhiyunapi "git.code.oa.com/gaiastack/galaxy/cni/zhiyun-ipam/api"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
+	"git.code.oa.com/gaiastack/galaxy/pkg/network/masq"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 	"git.code.oa.com/gaiastack/galaxy/pkg/policy"
+	utildbus "git.code.oa.com/gaiastack/galaxy/pkg/utils/dbus"
+	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
 
 	"github.com/golang/glog"
 	"github.com/vishvananda/netlink"
@@ -26,26 +26,19 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/informers"
-	corev1informer "k8s.io/client-go/informers/core/v1"
-	networkingv1informer "k8s.io/client-go/informers/networking/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	utilexec "k8s.io/utils/exec"
 )
 
 type Galaxy struct {
-	quitChannels []chan error
-	dockerCli    *docker.DockerInterface
-	netConf      map[string]map[string]interface{}
-	pmhandler    *portmapping.PortMappingHandler
-	client       *kubernetes.Clientset
-	zhiyunConf   *zhiyunapi.Conf
-	pm           *policy.PolicyManager
-	*eventhandler.PodEventHandler
-	plcyHandler  *eventhandler.NetworkPolicyEventHandler
-	podInformer  corev1informer.PodInformer
-	plcyInformer networkingv1informer.NetworkPolicyInformer
+	quitChan        chan struct{}
+	dockerCli       *docker.DockerInterface
+	netConf         map[string]map[string]interface{}
+	pmhandler       *portmapping.PortMappingHandler
+	client          *kubernetes.Clientset
+	pm              *policy.PolicyManager
+	underlayCNIIPAM bool // if set, galaxy delegates to a cni ipam to allocate ip for underlay network
 }
 
 func NewGalaxy() (*Galaxy, error) {
@@ -53,53 +46,54 @@ func NewGalaxy() (*Galaxy, error) {
 	if err != nil {
 		return nil, err
 	}
-	g := &Galaxy{}
+	g := &Galaxy{
+		quitChan: make(chan struct{}),
+	}
 	g.dockerCli = dockerClient
 	if err := g.parseConfig(); err != nil {
 		return nil, err
 	}
-	g.pmhandler = portmapping.New()
+	natInterfaceName := ""
+	if overlayConfMap, ok := g.netConf[private.NetworkTypeOverlay.CNIType]; ok {
+		if delegateConf, ok := overlayConfMap["delegate"]; ok {
+			if delegateConfMap, ok := delegateConf.(map[string]interface{}); ok {
+				if typ, ok := delegateConfMap["type"]; ok && typ == private.CNIBridgePlugin {
+					natInterfaceName = "cni0"
+				}
+			}
+		}
+	}
+	g.pmhandler = portmapping.New(natInterfaceName)
 	return g, nil
-}
-
-func (g *Galaxy) newQuitChannel() chan error {
-	quitChannel := make(chan error)
-	g.quitChannels = append(g.quitChannels, quitChannel)
-	return quitChannel
 }
 
 func (g *Galaxy) Start() error {
 	g.initk8sClient()
-	g.pm = policy.New(g.client)
-	g.initInformers()
-	gc.NewFlannelGC(g.dockerCli, g.newQuitChannel(), g.newQuitChannel()).Run()
-	if g.zhiyunConf != nil {
-		gc.NewZhiyunGC(g.dockerCli, g.newQuitChannel(), g.zhiyunConf).Run()
+	g.pm = policy.New(g.client, g.quitChan)
+	gc.NewFlannelGC(g.dockerCli, g.quitChan, g.cleanIPtables).Run()
+	kernel.BridgeNFCallIptables(g.quitChan, *flagBridgeNFCallIptables)
+	kernel.IPForward(g.quitChan, *flagIPForward)
+	if err := g.setupIPtables(); err != nil {
+		return err
 	}
-	kernel.BridgeNFCallIptables(g.newQuitChannel(), *flagBridgeNFCallIptables)
-	kernel.IPForward(g.newQuitChannel(), *flagIPForward)
-	if *flagEbtableRules {
-		firewall.SetupEbtables(g.newQuitChannel())
+	go wait.Until(g.pm.Run, 3*time.Minute, g.quitChan)
+	go wait.Until(g.updateIPInfoCM, time.Minute, g.quitChan)
+	if v1, exist := g.netConf["galaxy-flannel"]; exist {
+		if v2, exist := v1["subnetFile"]; exist {
+			if file, ok := v2.(string); ok && file == "/etc/kubernetes/subnet.env" {
+				// assume we are in vpc(tce/qcloud) mode when subnetFiel = `/etc/kubernetes/subnet.env`
+				glog.Infof("in vpc mode, setup masq")
+				iptablesCli := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
+				go wait.Forever(masq.EnsureIPMasq(iptablesCli), time.Minute)
+			}
+		}
 	}
-	firewall.EnsureIptables(g.pmhandler, g.newQuitChannel())
-	go wait.Forever(g.pm.Run, time.Minute)
-	go wait.Forever(g.updateIPInfoCM, time.Minute)
 	return g.startServer()
 }
 
 func (g *Galaxy) Stop() error {
-	// Stop and wait on all quit channels.
-	for i, c := range g.quitChannels {
-		// Send the exit signal and wait on the thread to exit (by closing the channel).
-		c <- nil
-		err := <-c
-		if err != nil {
-			// Remove the channels that quit successfully.
-			g.quitChannels = g.quitChannels[i:]
-			return err
-		}
-	}
-	g.quitChannels = make([]chan error, 0)
+	close(g.quitChan)
+	g.quitChan = make(chan struct{})
 	return nil
 }
 
@@ -126,22 +120,11 @@ func (g *Galaxy) parseConfig() error {
 		}
 	}
 	if vlanConfMap, ok := g.netConf[private.NetworkTypeUnderlay.CNIType]; ok {
-		vlanConfMap["url"] = *flagMaster
-		vlanConfMap["node_ip"] = flags.GetNodeIP()
 		if ipamObj, exist := vlanConfMap["ipam"]; exist {
 			if ipamMap, isMap := ipamObj.(map[string]interface{}); isMap {
 				ipamMap["node_ip"] = flags.GetNodeIP()
-				if typ, hasType := ipamMap["type"]; hasType {
-					if typeStr, isStr := typ.(string); isStr {
-						if typeStr == private.IPAMTypeZhiyun {
-							var zhiyunConf zhiyunapi.Conf
-							data, _ := json.Marshal(ipamMap)
-							if err := json.Unmarshal(data, &zhiyunConf); err != nil {
-								return fmt.Errorf("failed to unmarshal zhiyun conf %s: %v", string(data), err)
-							}
-							g.zhiyunConf = &zhiyunConf
-						}
-					}
+				if _, hasType := ipamMap["type"]; hasType {
+					g.underlayCNIIPAM = true
 				}
 			}
 		}
@@ -168,30 +151,6 @@ func (g *Galaxy) initk8sClient() {
 		glog.Fatalf("Can not generate client from config: error(%v)", err)
 	}
 	glog.Infof("apiserver address %s, kubeconf %s", *flagApiServer, *flagKubeConf)
-}
-
-func (g *Galaxy) initInformers() {
-	//podInformerFactory := informers.NewFilteredSharedInformerFactory(g.client, time.Minute, v1.NamespaceAll, func(listOptions *v1.ListOptions) {
-	//	listOptions.FieldSelector = fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname("")).String()
-	//})
-	podInformerFactory := informers.NewSharedInformerFactory(g.client, 0)
-	networkingInformerFactory := informers.NewSharedInformerFactory(g.client, 0)
-	g.podInformer = podInformerFactory.Core().V1().Pods()
-	g.plcyInformer = networkingInformerFactory.Networking().V1().NetworkPolicies()
-	g.PodEventHandler = eventhandler.NewPodEventHandler(g.pm)
-	g.plcyHandler = eventhandler.NewNetworkPolicyEventHandler(g.pm)
-	g.podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    g.OnAdd,
-		UpdateFunc: g.OnUpdate,
-		DeleteFunc: g.OnDelete,
-	})
-	g.plcyInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    g.plcyHandler.OnAdd,
-		UpdateFunc: g.plcyHandler.OnUpdate,
-		DeleteFunc: g.plcyHandler.OnDelete,
-	})
-	go podInformerFactory.Start(make(chan struct{}))
-	go networkingInformerFactory.Start(make(chan struct{}))
 }
 
 func (g *Galaxy) updateIPInfoCM() {
@@ -277,6 +236,9 @@ func getLocalAddr() (map[string]string, error) {
 		if omitLink(link.Attrs().Name) {
 			continue
 		}
+		if link.Type() == "ipip" || link.Type() == "gre" {
+			continue
+		}
 		addrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
 		if err != nil {
 			return nil, err
@@ -290,7 +252,7 @@ func getLocalAddr() (map[string]string, error) {
 
 func omitLink(linkName string) bool {
 	if strings.HasPrefix(linkName, "veth") || strings.HasPrefix(linkName, "tunl") ||
-		strings.HasPrefix(linkName, "cni") || linkName == "lo" {
+		strings.HasPrefix(linkName, "cni") || linkName == "lo" || linkName == "flannel.ipip" {
 		return true
 	}
 	return false

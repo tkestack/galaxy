@@ -35,6 +35,31 @@ func NsInvoke(f func()) {
 	netns.Set(origns)
 }
 
+func InvokeIn(nsFile string, f func()) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// Save the current network namespace
+	origns, err := netns.Get()
+	if err != nil {
+		glog.Fatal(err)
+	}
+	defer origns.Close()
+
+	// Create a new network namespace
+	newns, err := netns.GetFromPath(nsFile)
+	if err != nil {
+		glog.Fatal(err)
+	}
+	err = netns.Set(newns)
+	if err != nil {
+		glog.Fatal(err)
+	}
+	defer newns.Close()
+	f()
+	netns.Set(origns)
+}
+
 func NewContainerForTest() func() {
 	runtime.LockOSThread()
 	originmnt, err := GetMntNS()

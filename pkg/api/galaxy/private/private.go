@@ -12,15 +12,24 @@ var (
 	LabelValueNetworkTypeNAT            = "NAT"
 	NodeLabelValueNetworkTypeFloatingIP = "floatingip"
 
-	LabelKeyFloatingIP  = "galaxy.io/floatingip"
-	LabelValueImmutable = "immutable"
-	AnnotationKeyIPInfo = "galaxy.io/ip"
-	FloatingIPResource  = "galaxy.io/floatingip"
+	LabelKeyFloatingIP     = "galaxy.io/floatingip"
+	LabelValueImmutable    = "immutable" // Release IP Only when deleting or scale down App
+	LabelValueNeverRelease = "never"     // Never Release IP
+
+	LabelKeyEnableSecondIP = "galaxy.io/secondip"
+	LabelValueEnabled      = "true"
+
+	AnnotationKeyIPInfo       = "galaxy.io/ip"
+	AnnotationKeySecondIPInfo = "galaxy.io/secondip"
+	FloatingIPResource        = "galaxy.io/floatingip"
+
+	AnnotationKeyAppID = "appID"
+	EnvKeySubmitter    = "SUBMITTER"
 
 	NetworkTypeOverlay  = NetworkType{String: sets.NewString("", "DEFAULT", LabelValueNetworkTypeNAT), CNIType: "galaxy-flannel"}
 	NetworkTypeUnderlay = NetworkType{String: sets.NewString(LabelValueNetworkTypeFloatingIP), CNIType: "galaxy-k8s-vlan"}
 
-	IPAMTypeZhiyun = "galaxy-zhiyun-ipam"
+	CNIBridgePlugin = "galaxy-bridge"
 )
 
 type NetworkType struct {
