@@ -1,5 +1,5 @@
 hash: 139352f5815f9d8cb222069c9b9830810e00bb0a6d3387e2516bf082a12af636
-updated: 2019-01-14T15:50:44.056219+08:00
+updated: 2019-01-14T18:34:37.608787+08:00
 imports:
 - name: git.code.oa.com/gaia/tapp-controller
   version: 9a7ae8cd85dd18303582bd5ca61f0ac33b60a3cc
@@ -143,18 +143,12 @@ imports:
   - jwriter
 - name: github.com/Microsoft/go-winio
   version: 6c8aa416ae893afe5671c38161833ff14ae6d6c0
-- name: github.com/moul/http2curl
-  version: faeffb3553568c6ecaa9c103c09dea941ca9c570
 - name: github.com/opencontainers/runc
   version: bbb17efcb4c0ab986407812a31ba333a7450064c
   subpackages:
   - libcontainer/user
-- name: github.com/parnurzeal/gorequest
-  version: 9433d8c3b4c5f3bbeca487a6a410008eab3ce5ee
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
-- name: github.com/pkg/errors
-  version: ffb6e22f01932bf7ac35e0bad9be11f01d1c8685
 - name: github.com/PuerkitoBio/purell
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
@@ -179,12 +173,14 @@ imports:
   version: 1c05540f6879653db88113bc4a2b70aec4bd491f
   subpackages:
   - context
+  - html
+  - html/atom
+  - html/charset
   - http2
   - http2/hpack
   - idna
   - lex/httplex
   - proxy
-  - publicsuffix
 - name: golang.org/x/sys
   version: 076b546753157f758b316e59bcb51e6807c04057
   subpackages:
@@ -194,8 +190,19 @@ imports:
   version: b19bf474d317b857955b12035d2c5acb57ce8b01
   subpackages:
   - cases
+  - encoding
+  - encoding/charmap
+  - encoding/htmlindex
+  - encoding/internal
+  - encoding/internal/identifier
+  - encoding/japanese
+  - encoding/korean
+  - encoding/simplifiedchinese
+  - encoding/traditionalchinese
+  - encoding/unicode
   - internal
   - internal/tag
+  - internal/utf8internal
   - language
   - runes
   - secure/bidirule
@@ -407,7 +414,48 @@ imports:
   subpackages:
   - exec
 testImports:
+- name: github.com/hpcloud/tail
+  version: a1dbeea552b7c8df4b542c66073e393de198a800
+  subpackages:
+  - ratelimiter
+  - util
+  - watch
+  - winfile
 - name: github.com/onsi/ginkgo
   version: 2e1be8f7d90e9d3e3e58b0ce470f2f14d075406f
+  subpackages:
+  - config
+  - internal/codelocation
+  - internal/containernode
+  - internal/failer
+  - internal/leafnodes
+  - internal/remote
+  - internal/spec
+  - internal/spec_iterator
+  - internal/specrunner
+  - internal/suite
+  - internal/testingtproxy
+  - internal/writer
+  - reporters
+  - reporters/stenographer
+  - reporters/stenographer/support/go-colorable
+  - reporters/stenographer/support/go-isatty
+  - types
 - name: github.com/onsi/gomega
   version: 65fb64232476ad9046e57c26cd0bff3d3a8dc6cd
+  subpackages:
+  - format
+  - internal/assertion
+  - internal/asyncassertion
+  - internal/oraclematcher
+  - internal/testingtsupport
+  - matchers
+  - matchers/support/goraph/bipartitegraph
+  - matchers/support/goraph/edge
+  - matchers/support/goraph/node
+  - matchers/support/goraph/util
+  - types
+- name: gopkg.in/fsnotify/fsnotify.v1
+  version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
+- name: gopkg.in/tomb.v1
+  version: c131134a1947e9afd9cecfe11f4c6dff0732ae58
