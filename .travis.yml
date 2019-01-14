@@ -22,4 +22,5 @@ before_script:
   - sudo service mysql restart
 
 script:
+  - hack/build.sh
   - sudo -E env "PATH=$PATH" hack/test.sh
