@@ -1,0 +1,15 @@
+language: go
+os: linux
+go:
+  - "1.11.x"
+
+go_import_path: git.code.oa.com/gaiastack/galaxy
+
+install: true
+
+before_script:
+  - go get -u github.com/Masterminds/glide
+  - go get -u github.com/onsi/ginkgo/ginkgo
+
+script:
+  - hack/test.sh
