@@ -81,7 +81,7 @@ func (gc *flannelGC) cleanupIP() error {
 		if _, err := gc.dockerCli.InspectContainer(containerId); err != nil {
 			if _, ok := err.(docker.ContainerNotFoundError); ok {
 				if err := os.Remove(ipFile); err != nil && !os.IsNotExist(err) {
-					glog.Warningf("Error deleting leaky ip file %s container: %v", ipFile, containerId, err)
+					glog.Warningf("Error deleting leaky ip file %s/%s container: %v", ipFile, containerId, err)
 				} else {
 					if err == nil {
 						glog.Infof("Deleted leaky ip file %s container %s", ipFile, containerId)

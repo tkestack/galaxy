@@ -55,7 +55,7 @@ func (dev *device) MonitorMisses() {
 func (dev *device) processNeighMsg(msg syscall.NetlinkMessage) {
 	neigh, err := netlink.NeighDeserialize(msg.Data)
 	if err != nil {
-		log.Error("Failed to deserialize netlink ndmsg: %v", err)
+		log.Errorf("Failed to deserialize netlink ndmsg: %v", err)
 		return
 	}
 	log.V(1).Infof("receiving neigh msg %#v, neigh %#v", msg, neigh)

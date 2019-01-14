@@ -66,7 +66,7 @@ func cleanupZhiYunIP(conf *api.Conf, dockerCli *docker.DockerInterface) error {
 					continue
 				}
 				if err := os.Remove(ipFile); err != nil && !os.IsNotExist(err) {
-					glog.Warningf("Error deleting leaky ip file %s container: %v", ipFile, containerId, err)
+					glog.Warningf("Error deleting leaky ip file %s/%s container: %v", ipFile, containerId, err)
 				} else {
 					if err == nil {
 						glog.Infof("Deleted leaky ip file %s container %s", ipFile, containerId)

@@ -59,7 +59,7 @@ func (h *PortMappingHandler) CloseHostports(podFullName string) {
 	if ports, ok := h.podPortMap[podFullName]; ok {
 		for port, closer := range ports {
 			if err := closer.Close(); err != nil {
-				glog.Errorf("Cannot clean up hostport %d for pod %s: %v", port, podFullName, err)
+				glog.Errorf("Cannot clean up hostport %v for pod %s: %v", port, podFullName, err)
 			}
 		}
 		delete(h.podPortMap, podFullName)
