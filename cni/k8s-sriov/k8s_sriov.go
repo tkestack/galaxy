@@ -122,7 +122,7 @@ func setupVF(conf *NetConf, result *t020.Result, podifName string, vlan int, net
 	}
 
 	if vfTotal <= 0 {
-		return fmt.Errorf("no virtual function in the device %q: %v", ifName)
+		return fmt.Errorf("no virtual function in the device %q", ifName)
 	}
 
 	vfNums, err := getSriovNumVfs(ifName, kindNumVfs)
@@ -247,7 +247,7 @@ func releaseVF(podifName string, netns ns.NetNS) error {
 
 	// move VF device to init netns
 	if err = netlink.LinkSetNsFd(vfDev, int(initns.Fd())); err != nil {
-		return fmt.Errorf("failed to move vf device to init netns: %v", ifName, err)
+		return fmt.Errorf("failed to move vf device %s to init netns: %v", ifName, err)
 	}
 
 	return nil
