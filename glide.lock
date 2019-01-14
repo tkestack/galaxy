@@ -1,5 +1,5 @@
-hash: 0c068cac3465868065811a34c8aa4f632d27374a83aaed9507f41b344c1b8bed
-updated: 2018-03-30T19:05:49.017333+08:00
+hash: 139352f5815f9d8cb222069c9b9830810e00bb0a6d3387e2516bf082a12af636
+updated: 2019-01-14T15:50:44.056219+08:00
 imports:
 - name: git.code.oa.com/gaia/tapp-controller
   version: 9a7ae8cd85dd18303582bd5ca61f0ac33b60a3cc
@@ -85,7 +85,7 @@ imports:
 - name: github.com/go-sql-driver/mysql
   version: ae5a66df4d33ba404d639bd0fc9189cd5ee79bcf
 - name: github.com/godbus/dbus
-  version: c7fdd8b5cd55e87b4e1f4e372cdb1db61dd6c66f
+  version: 2e8d661d7ae1370037ffeb14517df4e9bb7b5c56
 - name: github.com/gogo/protobuf
   version: c0656edd0d9eab7c66d1eb0c568f9039345796f7
   subpackages:
@@ -105,6 +105,8 @@ imports:
   version: 7d79101e329e5a3adf994758c578dab82b90c017
 - name: github.com/google/gofuzz
   version: 44d81051d367757e1c7c6a5a86423ece9afcf63c
+- name: github.com/google/uuid
+  version: dec09d789f3dba190787f8b4454c7d3c936fed9e
 - name: github.com/googleapis/gnostic
   version: 0c5108395e2debce0d731cf0287ddf7242066aba
   subpackages:
@@ -128,7 +130,7 @@ imports:
   subpackages:
   - dialects/mysql
 - name: github.com/jinzhu/inflection
-  version: 1c35d901db3da928c72a72d8458480cc9ade058f
+  version: 04140366298a54a039076d798123ffa108fff46c
 - name: github.com/json-iterator/go
   version: 36b14963da70d11297d313183d7e6388c8510e1e
 - name: github.com/juju/ratelimit
@@ -140,19 +142,19 @@ imports:
   - jlexer
   - jwriter
 - name: github.com/Microsoft/go-winio
-  version: 8f9387ea7efabb228a981b9c381142be7667967f
+  version: 6c8aa416ae893afe5671c38161833ff14ae6d6c0
 - name: github.com/moul/http2curl
-  version: 9ac6cf4d929b2fa8fd2d2e6dec5bb0feb4f4911d
+  version: faeffb3553568c6ecaa9c103c09dea941ca9c570
 - name: github.com/opencontainers/runc
-  version: 5653ced544b1fa9d9623f12aaf9601bf1aefc013
+  version: bbb17efcb4c0ab986407812a31ba333a7450064c
   subpackages:
   - libcontainer/user
 - name: github.com/parnurzeal/gorequest
-  version: a578a48e8d6ca8b01a3b18314c43c6716bb5f5a3
+  version: 9433d8c3b4c5f3bbeca487a6a410008eab3ce5ee
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
-  version: c605e284fe17294bda444b34710735b29d1a9d90
+  version: ffb6e22f01932bf7ac35e0bad9be11f01d1c8685
 - name: github.com/PuerkitoBio/purell
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
@@ -404,4 +406,8 @@ imports:
   version: aedf551cdb8b0119df3a19c65fde413a13b34997
   subpackages:
   - exec
-testImports: []
+testImports:
+- name: github.com/onsi/ginkgo
+  version: 2e1be8f7d90e9d3e3e58b0ce470f2f14d075406f
+- name: github.com/onsi/gomega
+  version: 65fb64232476ad9046e57c26cd0bff3d3a8dc6cd
