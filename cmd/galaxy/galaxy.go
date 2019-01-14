@@ -3,8 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
-
 	"github.com/golang/glog"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/galaxy"
@@ -18,11 +16,6 @@ var (
 
 func main() {
 	defer glog.Flush()
-	flag.CommandLine.Usage = func() {
-		flag.Usage()
-		fmt.Fprintf(os.Stderr, "Note: \n")
-		fmt.Fprintf(os.Stderr, galaxy.Note)
-	}
 	flag.Parse()
 	if *flagVersion {
 		fmt.Println(ldflags.Footprint())
