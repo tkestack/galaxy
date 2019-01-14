@@ -1,3 +1,5 @@
+[![Build Status](https://api.travis-ci.com/gaiastackorg/galaxy.svg?branch=master)](https://travis-ci.com/gaiastackorg/galaxy)
+
 # Build
 
 hack/dockerbuild.sh(mac) or hack/build.sh(linux)
