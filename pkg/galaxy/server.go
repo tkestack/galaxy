@@ -16,8 +16,6 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	k8sutil "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/utils"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/firewall"
-
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/emicklei/go-restful"
@@ -33,7 +31,6 @@ var (
 	flagNetworkConf          = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
 	flagBridgeNFCallIptables = flag.Bool("bridge-nf-call-iptables", true, "ensure bridge-nf-call-iptables is set/unset")
 	flagIPForward            = flag.Bool("ip-forward", true, "ensure ip-forward is set/unset")
-	flagEbtableRules         = flag.Bool("ebtable-rules", false, "whether galaxy should ensure ebtable-rules")
 	flagApiServer            = flag.String("api-servers", "", "The address of apiserver")
 	flagKubeConf             = flag.String("kubeconf", "", "kube configure file")
 )
@@ -173,9 +170,6 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 }
 
 func (g *Galaxy) setupIPtables() error {
-	if *flagEbtableRules {
-		firewall.SetupEbtables(g.quitChan)
-	}
 	// filter all running pods on node
 	pods, err := g.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
 	if err != nil {
