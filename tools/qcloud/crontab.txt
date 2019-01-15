@@ -1,2 +1,0 @@
-*/5 * * * * /usr/sbin/iptables-restore -T filter < /usr/local/rami_iptables/iptables-filter >/dev/null 2>&1
-*/5 * * * * /usr/sbin/ebtables-restore < /usr/local/rami_iptables/ebtables-filter >/dev/null 2>&1

@@ -50,14 +50,6 @@ EOF
     docker cp ${NAME}:/root/rpmbuild/RPMS/x86_64/${RPMNAME} bin/
 }
 
-function upload() {
-    RPMNAME=${NAME}-${VERSION}-${GITCOMMITNUM}.tl2.x86_64.rpm
-    RPMFILE=${CURDIR}/bin/${RPMNAME}
-    size=$(ls -l ${RPMFILE} | awk '{print $5}')
-    curl -v 'http://gaia.repo.oa.com/upload_file?filesize='${size}'&filename='${RPMNAME}'&dirtype=1' -T ${RPMFILE}
-    curl -v 'http://gaia.repo.oa.com/update_repo?dirtype=1'
-}
-
 trap "cleanup" EXIT SIGINT SIGTERM
 function cleanup () {
     rm -rf bin/${NAME}-${VERSION}
@@ -76,10 +68,5 @@ BINARY=${BINARY:-"galaxy galaxy-ipam"}
 for NAME in ${BINARY}; do
     tar_code
     build_rpm
-    # we have enable nounset, if DEBUG is un defined, we have to use bash parameter expansion(http://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_02)
-    # to avoid unbound variable error
-    if [ -z ${DEBUG+x} ]; then
-        upload
-    fi
     cleanup
 done

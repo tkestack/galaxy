@@ -6,20 +6,18 @@ hack/dockerbuild.sh(mac) or hack/build.sh(linux)
 
 # Development
 
-Galaxy uses [glide](https://github.com/Masterminds/glide)/[glide-vc](https://github.com/sgotti/glide-vc) to manager vendors
+Galaxy uses [glide](https://github.com/Masterminds/glide) to manager vendors
 
 Install glide/glide-vc
 
 ```
 curl https://glide.sh/get | sh
-go get github.com/sgotti/glide-vc
 ```
 
 Add/Update vendor
 
 ```
 hack/updatevendor.sh
-
 ```
 
 # Test
@@ -147,5 +145,3 @@ hack/build-rpm.sh
 # Document
 
 - [Design](doc/design.md)
-- [Floating IP申请](doc/ip.md)
-- [Floating IP配置](doc/configip.md)
