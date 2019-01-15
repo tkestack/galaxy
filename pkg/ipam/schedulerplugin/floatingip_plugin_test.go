@@ -17,12 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-var (
-	node_unlabeld, node_hasNoIP, node_10_49_27_3, node_10_173_13_4 = "node1", "node2", "node3", "node4"
-	appID                                                          = "12345xxx"
-	submitter                                                      = "rami"
-	expectContainsAppID                                            = `"AppID":"` + appID + `"`
-	expectContainsSubmmiter                                        = `"Submitter":"` + submitter + `"`
+const (
+	nodeUnlabeld, nodeHasNoIP, node3, node4 = "node1", "node2", "node3", "node4"
 )
 
 func TestFilter(t *testing.T) {
@@ -58,32 +54,32 @@ func TestFilter(t *testing.T) {
 	nodes := []corev1.Node{
 		// no floating ip label node
 		{
-			ObjectMeta: v1.ObjectMeta{Name: node_unlabeld},
+			ObjectMeta: v1.ObjectMeta{Name: nodeUnlabeld},
 			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.49.27.2"}}},
 		},
 		// no floating ip configured for this node
 		{
-			ObjectMeta: v1.ObjectMeta{Name: node_hasNoIP, Labels: nodeLabel},
+			ObjectMeta: v1.ObjectMeta{Name: nodeHasNoIP, Labels: nodeLabel},
 			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.48.27.2"}}},
 		},
 		// good node
 		{
-			ObjectMeta: v1.ObjectMeta{Name: node_10_49_27_3, Labels: nodeLabel},
+			ObjectMeta: v1.ObjectMeta{Name: node3, Labels: nodeLabel},
 			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.49.27.3"}}},
 		},
 		// good node
 		{
-			ObjectMeta: v1.ObjectMeta{Name: node_10_173_13_4, Labels: nodeLabel},
+			ObjectMeta: v1.ObjectMeta{Name: node4, Labels: nodeLabel},
 			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.173.13.4"}}},
 		},
 	}
 	_, subnet1, _ := net.ParseCIDR("10.49.27.0/24")
 	_, subnet2, _ := net.ParseCIDR("10.48.27.0/24")
 	_, subnet3, _ := net.ParseCIDR("10.173.13.0/24")
-	fipPlugin.nodeSubnet[node_unlabeld] = subnet1
-	fipPlugin.nodeSubnet[node_hasNoIP] = subnet2
-	fipPlugin.nodeSubnet[node_10_49_27_3] = subnet1
-	fipPlugin.nodeSubnet[node_10_173_13_4] = subnet3
+	fipPlugin.nodeSubnet[nodeUnlabeld] = subnet1
+	fipPlugin.nodeSubnet[nodeHasNoIP] = subnet2
+	fipPlugin.nodeSubnet[node3] = subnet1
+	fipPlugin.nodeSubnet[node4] = subnet3
 	// cleans all allocates first
 	if err := fipPlugin.ipam.ReleaseByPrefix(""); err != nil {
 		t.Fatal(err)
@@ -93,7 +89,7 @@ func TestFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFiltered(filtered, node_unlabeld, node_hasNoIP, node_10_49_27_3, node_10_173_13_4); err != nil {
+	if err := checkFiltered(filtered, nodeUnlabeld, nodeHasNoIP, node3, node4); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkFailed(failed); err != nil {
@@ -103,10 +99,10 @@ func TestFilter(t *testing.T) {
 	if filtered, failed, err = fipPlugin.Filter(createPod("pod1", "ns1", objectLabel), nodes); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFiltered(filtered, node_10_49_27_3, node_10_173_13_4); err != nil {
+	if err := checkFiltered(filtered, node3, node4); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFailed(failed, node_unlabeld, node_hasNoIP); err != nil {
+	if err := checkFailed(failed, nodeUnlabeld, nodeHasNoIP); err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,14 +120,14 @@ func TestFilter(t *testing.T) {
 	if filtered, failed, err = fipPlugin.Filter(pod, nodes); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFiltered(filtered, node_10_173_13_4); err != nil {
+	if err := checkFiltered(filtered, node4); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFailed(failed, node_unlabeld, node_hasNoIP, node_10_49_27_3); err != nil {
+	if err := checkFailed(failed, nodeUnlabeld, nodeHasNoIP, node3); err != nil {
 		t.Fatal(err)
 	}
 	// check pod allocated the previous ip and policy should be updated to AppDeleteOrScaleDown
-	pod.Spec.NodeName = node_10_173_13_4
+	pod.Spec.NodeName = node4
 	ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(pod), pod.Spec.NodeName, pod)
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +135,7 @@ func TestFilter(t *testing.T) {
 	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrContains(expectContainsAppID, expectContainsSubmmiter)); err != nil {
+	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrNotEmpty()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -147,10 +143,10 @@ func TestFilter(t *testing.T) {
 	if filtered, failed, err = fipPlugin.Filter(createPod("pod2-1", "ns1", immutableLabel), nodes); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFiltered(filtered, node_10_49_27_3, node_10_173_13_4); err != nil {
+	if err := checkFiltered(filtered, node3, node4); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFailed(failed, node_unlabeld, node_hasNoIP); err != nil {
+	if err := checkFailed(failed, nodeUnlabeld, nodeHasNoIP); err != nil {
 		t.Fatal(err)
 	}
 	// forget the pod1, the ip should be reserved, because pod1 has immutable label attached
@@ -166,7 +162,7 @@ func TestFilter(t *testing.T) {
 	}
 	// allocates all ips to pods of a new  tapp
 	newPod := createPod("temp", "ns1", immutableLabel)
-	newPod.Spec.NodeName = node_10_173_13_4
+	newPod.Spec.NodeName = node4
 	ipInfoSet := sets.NewString()
 	for i := 0; ; i++ {
 		newPod.Name = fmt.Sprintf("temp-%d", i)
@@ -196,7 +192,7 @@ func TestFilter(t *testing.T) {
 	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrContains(expectContainsAppID, expectContainsSubmmiter)); err != nil {
+	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrNotEmpty()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -215,6 +211,10 @@ func expectAttrEmpty() expectAttr {
 	return expectAttr{empty: true}
 }
 
+func expectAttrNotEmpty() expectAttr {
+	return expectAttr{empty: false}
+}
+
 func checkPolicyAndAttr(ipam floatingip.IPAM, key string, expectPolicy database.ReleasePolicy, expectAttr expectAttr) error {
 	fip, err := ipam.First(key)
 	if err != nil {
@@ -226,6 +226,9 @@ func checkPolicyAndAttr(ipam floatingip.IPAM, key string, expectPolicy database.
 	}
 	if expectAttr.empty && fip.FIP.Attr != "" {
 		return fmt.Errorf("expect attr empty, real attr %q", fip.FIP.Attr)
+	}
+	if !expectAttr.empty && fip.FIP.Attr == "" {
+		return fmt.Errorf("expect attr not empty, real attr empty")
 	}
 	for i := range expectAttr.contains {
 		if !strings.Contains(fip.FIP.Attr, expectAttr.contains[i]) {
@@ -266,14 +269,7 @@ func checkFailed(realFailed schedulerapi.FailedNodesMap, failed ...string) error
 }
 
 func createPod(name, namespace string, labels map[string]string) *corev1.Pod {
-	return &corev1.Pod{
-		ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels, Annotations: map[string]string{private.AnnotationKeyAppID: appID}},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{Env: []corev1.EnvVar{{Name: private.EnvKeySubmitter, Value: submitter}}},
-			},
-		},
-	}
+	return &corev1.Pod{ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels}}
 }
 
 func TestResolveAppPodName(t *testing.T) {

@@ -582,32 +582,10 @@ func parseReleasePolicy(labels map[string]string) database.ReleasePolicy {
 }
 
 func getAttr(pod *corev1.Pod) string {
-	var submitter string
-	for i := range pod.Spec.Containers {
-		for _, env := range pod.Spec.Containers[i].Env {
-			if env.Name == private.EnvKeySubmitter {
-				submitter = env.Value
-				break
-			}
-		}
-		if submitter != "" {
-			break
-		}
-	}
-	var appID string
-	if pod.Annotations != nil {
-		appID = pod.Annotations[private.AnnotationKeyAppID]
-	}
 	t := time.Now().Unix()
 	obj := struct {
-		Submitter string
-		Time      int64
-		AppID     string
-	}{
-		Submitter: submitter,
-		Time:      t,
-		AppID:     appID,
-	}
+		Time int64
+	}{Time: t}
 	attr, err := json.Marshal(obj)
 	if err != nil {
 		glog.Warningf("failed to marshal attr %+v: %v", obj, err)

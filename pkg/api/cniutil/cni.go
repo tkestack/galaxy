@@ -122,22 +122,6 @@ func ParseCNIArgs(args string) (map[string]string, error) {
 	return kvMap, nil
 }
 
-func DelegateCmd(netconf map[string]interface{}, add bool) (types.Result, error) {
-	netconfBytes, err := json.Marshal(netconf)
-	if err != nil {
-		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
-	}
-
-	if add {
-		result, err := invoke.DelegateAdd(netconf["type"].(string), netconfBytes)
-		if err != nil {
-			return nil, err
-		}
-		return result, nil
-	}
-	return nil, invoke.DelegateDel(netconf["type"].(string), netconfBytes)
-}
-
 func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs) (types.Result, error) {
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
