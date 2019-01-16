@@ -14,6 +14,7 @@ create_go_path_tree
   export GOPATH=${LOCAL_GOPATH}
   export GOOS=linux
   cd ${LOCAL_GOPATH}/src/${PKG}/
-  go test -v $(glide novendor | grep -v '/go/' | grep -v '/e2e/')
+  go test -coverpkg $PKG/pkg/... -coverprofile=coverage.txt -covermode=atomic -v $(glide novendor | grep -v '/go/' | grep -v '/e2e/')
+  go tool cover -func=coverage.txt
   ginkgo -v e2e/k8s-vlan -- --logtostderr --v=4
 )
