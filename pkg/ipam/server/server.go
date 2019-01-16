@@ -11,7 +11,6 @@ import (
 	tappInformers "git.code.oa.com/gaia/tapp-controller/pkg/client/informers/externalversions"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
-	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/election"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server/options"
 	"github.com/emicklei/go-restful"
@@ -19,12 +18,14 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
 
 type JsonConf struct {
 	SchedulePluginConf schedulerplugin.Conf `json:"schedule_plugin"`
-	ElectionConf       election.Config      `json:"election"`
 }
 
 type Server struct {
@@ -85,20 +86,6 @@ func (s *Server) Start() error {
 	if err := s.init(); err != nil {
 		return fmt.Errorf("init server: %v", err)
 	}
-	if s.EnableHA {
-		s.JsonConf.ElectionConf.Bind = s.Bind
-		s.JsonConf.ElectionConf.Port = int32(s.Port)
-		lcc, err := election.NewConfig(s.JsonConf.ElectionConf, s.client)
-		if err != nil {
-			return err
-		}
-		election.RunOrDie(lcc, func(<-chan struct{}) {
-			if err := s.Run(); err != nil {
-				glog.Fatal(err)
-			}
-		})
-		return nil
-	}
 	return s.Run()
 }
 
@@ -131,6 +118,36 @@ func (s *Server) initk8sClient() {
 	s.tappClient, err = versioned.NewForConfig(cfg)
 	if err != nil {
 		glog.Fatalf("Error building example clientset: %v", err)
+	}
+	if s.LeaderElection.LeaderElect {
+		leaderElectionClient := kubernetes.NewForConfigOrDie(restclient.AddUserAgent(cfg, "leader-election"))
+		rl, err := resourcelock.New(s.LeaderElection.ResourceLock,
+			"kube-system",
+			"galaxy-ipam",
+			leaderElectionClient.CoreV1(),
+			resourcelock.ResourceLockConfig{
+				Identity:      fmt.Sprintf("%s:%d", s.Bind, s.Port),
+				EventRecorder: nil,
+			})
+		if err != nil {
+			glog.Fatalf("error creating lock: %v", err)
+		}
+		leaderelection.RunOrDie(leaderelection.LeaderElectionConfig{
+			Lock:          rl,
+			LeaseDuration: s.LeaderElection.LeaseDuration.Duration,
+			RenewDeadline: s.LeaderElection.RenewDeadline.Duration,
+			RetryPeriod:   s.LeaderElection.RetryPeriod.Duration,
+			Callbacks: leaderelection.LeaderCallbacks{
+				OnStartedLeading: func(<-chan struct{}) {
+					if err := s.Run(); err != nil {
+						glog.Fatal(err)
+					}
+				},
+				OnStoppedLeading: func() {
+					glog.Fatalf("leaderelection lost")
+				},
+			},
+		})
 	}
 }
 
