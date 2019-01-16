@@ -1,5 +1,5 @@
-hash: 139352f5815f9d8cb222069c9b9830810e00bb0a6d3387e2516bf082a12af636
-updated: 2019-01-14T18:34:37.608787+08:00
+hash: 4be807fde6d3102b66d7bb37e4c8a1afc6ecfd6c4cdfe36964eff70ac0886135
+updated: 2019-01-16T17:38:34.323345+08:00
 imports:
 - name: git.code.oa.com/gaia/tapp-controller
   version: 9a7ae8cd85dd18303582bd5ca61f0ac33b60a3cc
@@ -93,6 +93,10 @@ imports:
   - sortkeys
 - name: github.com/golang/glog
   version: 44145f04b68cf362d9c4df2182967c2275eaefed
+- name: github.com/golang/groupcache
+  version: 02826c3e79038b59d737d3b1c0a1d937f71a4433
+  subpackages:
+  - lru
 - name: github.com/golang/protobuf
   version: 1643683e1b54a9e88ad26d98f81400c8c9d9f4f9
   subpackages:
@@ -278,15 +282,18 @@ imports:
   - pkg/util/framer
   - pkg/util/intstr
   - pkg/util/json
+  - pkg/util/mergepatch
   - pkg/util/net
   - pkg/util/runtime
   - pkg/util/sets
+  - pkg/util/strategicpatch
   - pkg/util/validation
   - pkg/util/validation/field
   - pkg/util/wait
   - pkg/util/yaml
   - pkg/version
   - pkg/watch
+  - third_party/forked/golang/json
   - third_party/forked/golang/reflect
 - name: k8s.io/client-go
   version: 9389c055a838d4f208b699b3c7c51b70f2368861
@@ -396,8 +403,11 @@ imports:
   - tools/clientcmd/api
   - tools/clientcmd/api/latest
   - tools/clientcmd/api/v1
+  - tools/leaderelection
+  - tools/leaderelection/resourcelock
   - tools/metrics
   - tools/pager
+  - tools/record
   - tools/reference
   - transport
   - util/buffer
@@ -409,6 +419,7 @@ imports:
   version: 39a7bf85c140f972372c2a0d1ee40adbf0c8bfe1
   subpackages:
   - pkg/common
+  - pkg/util/proto
 - name: k8s.io/utils
   version: aedf551cdb8b0119df3a19c65fde413a13b34997
   subpackages:
