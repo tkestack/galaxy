@@ -5,7 +5,6 @@ import (
 	"net"
 
 	"github.com/vishvananda/netlink"
-
 )
 
 // CreateBridgeDevice create a new bridge interface/

@@ -8,12 +8,12 @@ import (
 
 // ServerRunOptions contains the options while running a server
 type ServerRunOptions struct {
-	Profiling bool
-	Bind      string
-	Port      int
-	Master    string
-	KubeConf  string
-	EnableHA  bool
+	Profiling      bool
+	Bind           string
+	Port           int
+	Master         string
+	KubeConf       string
+	LeaderElection LeaderElectionConfiguration
 }
 
 var (
@@ -25,12 +25,14 @@ func init() {
 }
 
 func NewServerRunOptions() *ServerRunOptions {
-	return &ServerRunOptions{
-		Profiling: true,
-		Bind:      "0.0.0.0",
-		Port:      9040,
-		EnableHA:  true,
+	opt := &ServerRunOptions{
+		Profiling:      true,
+		Bind:           "0.0.0.0",
+		Port:           9040,
+		LeaderElection: DefaultLeaderElectionConfiguration(),
 	}
+	opt.LeaderElection.LeaderElect = true
+	return opt
 }
 
 // AddFlags add flags for a specific ASServer to the specified FlagSet
@@ -40,5 +42,5 @@ func (s *ServerRunOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&s.Port, "port", s.Port, "The port on which to serve")
 	fs.StringVar(&s.Master, "master", s.Master, "The address and port of the Kubernetes API server")
 	fs.StringVar(&s.KubeConf, "kubeconfig", s.KubeConf, "The kube config file location of APISwitch, used to support TLS")
-	fs.BoolVar(&s.EnableHA, "ha", s.EnableHA, "If enable high availability, multiple instances of galaxy-ipams try to create a Kubernetes endpoint with expire time in annotation as an leader lock")
+	BindFlags(&s.LeaderElection, fs)
 }
