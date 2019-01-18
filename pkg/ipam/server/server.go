@@ -15,28 +15,35 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server/options"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/client-go/tools/record"
 )
 
 type JsonConf struct {
 	SchedulePluginConf schedulerplugin.Conf `json:"schedule_plugin"`
 }
 
+const COMPONENT_NAME = "galaxy-ipam"
+
 type Server struct {
 	JsonConf
 	*options.ServerRunOptions
-	client              *kubernetes.Clientset
-	tappClient          *versioned.Clientset
-	plugin              *schedulerplugin.FloatingIPPlugin
-	informerFactory     informers.SharedInformerFactory
-	tappInformerFactory tappInformers.SharedInformerFactory
-	stopChan            chan struct{}
+	client               *kubernetes.Clientset
+	tappClient           *versioned.Clientset
+	plugin               *schedulerplugin.FloatingIPPlugin
+	informerFactory      informers.SharedInformerFactory
+	tappInformerFactory  tappInformers.SharedInformerFactory
+	stopChan             chan struct{}
+	leaderElectionConfig *leaderelection.LeaderElectionConfig
 }
 
 func NewServer() *Server {
@@ -64,15 +71,18 @@ func (s *Server) init() error {
 	podInformer := s.informerFactory.Core().V1().Pods()
 	statefulsetInformer := s.informerFactory.Apps().V1().StatefulSets()
 	tappInformer := s.tappInformerFactory.Tappcontroller().V1alpha1().TApps()
+	deploymentInformer := s.informerFactory.Apps().V1().Deployments()
 	pluginArgs := &schedulerplugin.PluginFactoryArgs{
 		PodLister:         podInformer.Lister(),
 		TAppLister:        tappInformer.Lister(),
 		StatefulSetLister: statefulsetInformer.Lister(),
+		DeploymentLister:  deploymentInformer.Lister(),
 		Client:            s.client,
 		TAppClient:        s.tappClient,
 		PodHasSynced:      podInformer.Informer().HasSynced,
 		TAppHasSynced:     tappInformer.Informer().HasSynced,
 		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
+		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 	}
 	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
 	if err != nil {
@@ -85,6 +95,10 @@ func (s *Server) init() error {
 func (s *Server) Start() error {
 	if err := s.init(); err != nil {
 		return fmt.Errorf("init server: %v", err)
+	}
+	if s.LeaderElection.LeaderElect && s.leaderElectionConfig != nil {
+		leaderelection.RunOrDie(*s.leaderElectionConfig)
+		return nil
 	}
 	return s.Run()
 }
@@ -119,20 +133,24 @@ func (s *Server) initk8sClient() {
 	if err != nil {
 		glog.Fatalf("Error building example clientset: %v", err)
 	}
+	recorder, err := newRecoder(cfg)
+	if err != nil {
+		glog.Fatalf("failed init event recorder: %v", err)
+	}
 	if s.LeaderElection.LeaderElect {
 		leaderElectionClient := kubernetes.NewForConfigOrDie(restclient.AddUserAgent(cfg, "leader-election"))
 		rl, err := resourcelock.New(s.LeaderElection.ResourceLock,
 			"kube-system",
-			"galaxy-ipam",
+			COMPONENT_NAME,
 			leaderElectionClient.CoreV1(),
 			resourcelock.ResourceLockConfig{
 				Identity:      fmt.Sprintf("%s:%d", s.Bind, s.Port),
-				EventRecorder: nil,
+				EventRecorder: recorder,
 			})
 		if err != nil {
 			glog.Fatalf("error creating lock: %v", err)
 		}
-		leaderelection.RunOrDie(leaderelection.LeaderElectionConfig{
+		s.leaderElectionConfig = &leaderelection.LeaderElectionConfig{
 			Lock:          rl,
 			LeaseDuration: s.LeaderElection.LeaseDuration.Duration,
 			RenewDeadline: s.LeaderElection.RenewDeadline.Duration,
@@ -147,8 +165,21 @@ func (s *Server) initk8sClient() {
 					glog.Fatalf("leaderelection lost")
 				},
 			},
-		})
+		}
 	}
+}
+
+func newRecoder(kubeCfg *restclient.Config) (record.EventRecorder, error) {
+	glog.V(4).Info("Creating event broadcaster")
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(glog.Infof)
+	kubeClient, err := kubernetes.NewForConfig(kubeCfg)
+	if err != nil {
+		return nil, err
+		glog.Fatalf("Error building kubernetes clientset: %s", err.Error())
+	}
+	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
+	return eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: COMPONENT_NAME}), nil
 }
 
 func (s *Server) startServer() {

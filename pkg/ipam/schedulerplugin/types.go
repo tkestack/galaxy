@@ -14,7 +14,9 @@ type PluginFactoryArgs struct {
 	PodLister         corev1lister.PodLister
 	TAppLister        v1alpha1.TAppLister
 	StatefulSetLister appv1.StatefulSetLister
+	DeploymentLister  appv1.DeploymentLister
 	PodHasSynced      func() bool
 	TAppHasSynced     func() bool
 	StatefulSetSynced func() bool
+	DeploymentSynced  func() bool
 }

@@ -16,6 +16,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"github.com/golang/glog"
+	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +30,7 @@ const (
 	deletedAndParentAppNotExistPod = "deletedAndParentAppNotExistPod"
 	deletedAndKilledTappPod        = "deletedAndKilledTappPod"
 	deletedAndScaledDownSSPod      = "deletedAndScaledDownSSPod"
+	deletedAndScaledDownDpPod      = "deletedAndScaledDownDpPod"
 	evictedPod                     = "evictedPod"
 	deletedAndLabelMissMatchPod    = "deletedAndLabelMissMatchPod"
 )
@@ -57,6 +59,8 @@ type FloatingIPPlugin struct {
 	conf                         *Conf
 	unreleased                   chan *corev1.Pod
 	hasSecondIPConf              atomic.Value
+	getDeployment                func(name, namespace string) (*appv1.Deployment, error)
+	dpLock                       sync.Mutex
 }
 
 func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin, error) {
@@ -90,6 +94,9 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 	}
 	plugin.hasSecondIPConf.Store(false)
 	plugin.initSelector()
+	plugin.getDeployment = func(name, namespace string) (*appv1.Deployment, error) {
+		return plugin.DeploymentLister.Deployments(namespace).Get(name)
+	}
 	return plugin, nil
 }
 
@@ -198,17 +205,35 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 	}
 	filteredNodes := []corev1.Node{}
 	key := keyInDB(pod)
-	subnets, err := getAvailableSubnet(p.ipam, key)
+	dp := p.podBelongToDeployment(pod)
+	if dp != "" {
+		key = keyForDeploymentPod(pod, dp)
+	}
+	policy := parseReleasePolicy(pod.GetLabels())
+	var err error
+	var deployment *appv1.Deployment
+	if dp != "" {
+		deployment, err = p.getDeployment(dp, pod.Namespace)
+		if err != nil {
+			return filteredNodes, failedNodesMap, err
+		}
+	}
+	subnets, reserve, err := getAvailableSubnet(p.ipam, key, deployment)
 	if err != nil {
 		return filteredNodes, failedNodesMap, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
-	subsetSet := sets.NewString(subnets...)
+	subnetSet := sets.NewString(subnets...)
 	if p.enabledSecondIP(pod) {
-		secondSubnets, err := getAvailableSubnet(p.secondIPAM, key)
+		secondSubnets, reserve2, err := getAvailableSubnet(p.secondIPAM, key, deployment)
 		if err != nil {
 			return filteredNodes, failedNodesMap, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 		}
-		subsetSet = subsetSet.Intersection(sets.NewString(secondSubnets...))
+		subnetSet = subnetSet.Intersection(sets.NewString(secondSubnets...))
+		reserve = reserve || reserve2
+	}
+	if reserve && subnetSet.Len() > 0 {
+		reserveSubnet := subnetSet.List()[0]
+		subnetSet = sets.NewString(reserveSubnet)
 	}
 	for i := range nodes {
 		nodeName := nodes[i].Name
@@ -221,7 +246,7 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 			failedNodesMap[nodes[i].Name] = err.Error()
 			continue
 		}
-		if subsetSet.Has(subnet.String()) {
+		if subnetSet.Has(subnet.String()) {
 			filteredNodes = append(filteredNodes, nodes[i])
 		} else {
 			failedNodesMap[nodeName] = "FloatingIPPlugin:NoFIPLeft"
@@ -234,10 +259,24 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 		}
 		glog.V(4).Infof("filtered nodes %v failed nodes %v", nodeNames, failedNodesMap)
 	}
+	if reserve && subnetSet.Len() > 0 {
+		reserveSubnet := subnetSet.List()[0]
+		prefixKey := deploymentPrefix(dp, pod.Namespace)
+		attr := getAttr(pod)
+		if err := p.ipam.AllocateInSubnetWithKey(prefixKey, key, reserveSubnet, policy, attr); err != nil {
+			return filteredNodes, failedNodesMap, err
+		}
+		if p.enabledSecondIP(pod) {
+			if err := p.secondIPAM.AllocateInSubnetWithKey(prefixKey, key, reserveSubnet, policy, attr); err != nil {
+				return filteredNodes, failedNodesMap, err
+			}
+		}
+	}
+
 	return filteredNodes, failedNodesMap, nil
 }
 
-func getAvailableSubnet(ipam floatingip.IPAM, key string) (subnets []string, err error) {
+func getAvailableSubnet(ipam floatingip.IPAM, key string, dp *appv1.Deployment) (subnets []string, reserve bool, err error) {
 	if subnets, err = ipam.QueryRoutableSubnetByKey(key); err != nil {
 		err = fmt.Errorf("failed to query by key %s: %v", key, err)
 		return
@@ -245,6 +284,32 @@ func getAvailableSubnet(ipam floatingip.IPAM, key string) (subnets []string, err
 	if len(subnets) != 0 {
 		glog.V(3).Infof("[%s] %s already have an allocated floating ip in subnets %v, it may have been deleted or evicted", ipam.Name(), key, subnets)
 	} else {
+		if dp != nil && parseReleasePolicy(dp.Spec.Template.GetLabels()) != database.PodDelete { // get label from pod?
+			prefixKey := deploymentPrefix(dp.Name, dp.Namespace)
+			var ips []database.FloatingIP
+			ips, err = ipam.ByPrefix(prefixKey)
+			if err != nil {
+				err = fmt.Errorf("failed query prefix %s: %s", prefixKey, err)
+				return
+			}
+			replicas := int(*dp.Spec.Replicas)
+			usedCount := 0
+			unusedSubnetSet := sets.NewString()
+			for _, ip := range ips {
+				if ip.Key != prefixKey {
+					usedCount++
+				} else {
+					unusedSubnetSet.Insert(ip.Subnet)
+				}
+			}
+			if usedCount >= replicas {
+				glog.Warningf("deployment %s has allocate %d ips, but we only want %d, wait to release", dp.Name, usedCount, replicas)
+				return nil, false, nil
+			}
+			if unusedSubnetSet.Len() > 0 {
+				return unusedSubnetSet.List(), true, nil
+			}
+		}
 		if subnets, err = ipam.QueryRoutableSubnetByKey(""); err != nil {
 			err = fmt.Errorf("failed to query allocatable subnet: %v", err)
 			return
@@ -296,6 +361,19 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 	return &ipInfo.IPInfo, nil
 }
 
+// podBelongToDeployment return deployment name if pod is generated by deployment
+func (p *FloatingIPPlugin) podBelongToDeployment(pod *corev1.Pod) string {
+	if len(pod.OwnerReferences) == 1 && pod.OwnerReferences[0].Kind == "ReplicaSet" {
+		// assume pod belong to deployment for convenient, name format: dpname-rsid-podid
+		parts := strings.Split(pod.Name, "-")
+		if len(parts) < 3 {
+			return ""
+		}
+		return strings.Join(parts[:len(parts)-2], "-")
+	}
+	return ""
+}
+
 func (p *FloatingIPPlugin) releaseIP(key string, reason string, pod *corev1.Pod) error {
 	if err := releaseIP(p.ipam, key, reason); err != nil {
 		return fmt.Errorf("[%s] %v", p.ipam.Name(), err)
@@ -343,6 +421,9 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 		// we will config extender resources which ensures pod which doesn't want floatingip won't be sent to plugin
 		// see https://github.com/kubernetes/kubernetes/pull/60332
 		return fmt.Errorf("pod which doesn't want floatingip have been sent to plugin")
+	}
+	if dp := p.podBelongToDeployment(pod); dp != "" {
+		key = keyForDeploymentPod(pod, dp)
 	}
 	ipInfo, err := p.allocateIP(p.ipam, key, args.Node, pod)
 	if err != nil {
@@ -406,15 +487,37 @@ func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
 	if !p.wantedObject(&pod.ObjectMeta) {
 		return nil
 	}
+	glog.Warningf("pod %s deleted, handle", pod.Name)
 	p.unreleased <- pod
 	return nil
 }
 
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
+	glog.Infof("handle unbind pod %s", pod.Name)
 	key := keyInDB(pod)
+	dp := p.podBelongToDeployment(pod)
+	if dp != "" {
+		key = keyForDeploymentPod(pod, dp)
+		p.dpLock.Lock()
+		defer p.dpLock.Unlock()
+	}
 
 	switch pod.GetLabels()[private.LabelKeyFloatingIP] {
 	case private.LabelValueNeverRelease:
+		if dp := p.podBelongToDeployment(pod); dp != "" {
+			key := keyForDeploymentPod(pod, dp)
+			keyPrefix := deploymentPrefix(dp, pod.Namespace)
+			err := p.ipam.UpdateKey(key, keyPrefix)
+			if err != nil {
+				glog.Errorf("failed put back pod(%s) ip to deployment %s: %v", pod.Name, dp, err)
+			}
+			if p.enabledSecondIP(pod) {
+				err = p.secondIPAM.UpdateKey(key, keyPrefix)
+				if err != nil {
+					glog.Errorf("failed put back pod(%s) ip to deployment %s: %v", pod.Name, dp, err)
+				}
+			}
+		}
 		glog.V(3).Infof("reserved %s for pod %s (never release)", pod.Annotations[private.AnnotationKeyIPInfo], key)
 		return nil
 	case private.LabelValueImmutable:
@@ -422,7 +525,14 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	default:
 		return p.releaseIP(key, deletedAndIPMutablePod, pod)
 	}
-	statefulSet, err := p.StatefulSetLister.GetPodStatefulSets(pod)
+	var statefulSet []*appv1.StatefulSet
+	var err error
+	// for test
+	if p.StatefulSetLister != nil {
+		statefulSet, err = p.StatefulSetLister.GetPodStatefulSets(pod)
+	} else {
+		err = fmt.Errorf("StatefulSetLister not support")
+	}
 	if err == nil {
 		// it's a statefulset pod
 		if len(statefulSet) > 1 {
@@ -436,6 +546,53 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		if ss.Spec.Replicas != nil && *ss.Spec.Replicas < int32(index)+1 {
 			return p.releaseIP(key, deletedAndScaledDownSSPod, pod)
 		}
+	} else if dp != "" {
+		// release if scale down, or reserve if should be
+		deploy, err := p.getDeployment(dp, pod.Namespace)
+		replicas := 0
+		if err != nil {
+			if !metaErrs.IsNotFound(err) {
+				return err
+			}
+		} else {
+			replicas = int(*deploy.Spec.Replicas)
+		}
+		prefixKey := deploymentPrefix(dp, pod.Namespace)
+		fips, err := p.ipam.ByPrefix(prefixKey)
+		if err != nil {
+			return err
+		}
+		if len(fips) > replicas {
+			err = p.ipam.Release([]string{key})
+			if err != nil {
+				return err
+			}
+		} else {
+			err = p.ipam.UpdateKey(key, prefixKey)
+			if err != nil {
+				glog.Errorf("failed reserve ip from pod %s to deploy %s: %v", pod.Name, deploy.Name, err)
+				return err
+			}
+		}
+		if p.enabledSecondIP(pod) {
+			fips, err := p.secondIPAM.ByPrefix(prefixKey)
+			if err != nil {
+				return err
+			}
+			if len(fips) > replicas {
+				err = p.secondIPAM.Release([]string{key})
+				if err != nil {
+					return err
+				}
+			} else {
+				err = p.secondIPAM.UpdateKey(key, prefixKey)
+				if err != nil {
+					glog.Errorf("failed reserve ip from pod %s to deploy %s: %v", pod.Name, deploy.Name, err)
+					return err
+				}
+			}
+		}
+		return nil
 	} else {
 		tapps, err := p.TAppLister.GetPodTApps(pod)
 		if err != nil {
