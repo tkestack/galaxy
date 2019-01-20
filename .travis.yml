@@ -14,6 +14,9 @@ go_import_path: git.code.oa.com/gaiastack/galaxy
 
 install: true
 
+env:
+  - CODECOV_TOKEN=f29f8f5a-9a4c-44ad-bfc9-85f24e7c2d61
+
 before_script:
   - go get -u github.com/Masterminds/glide
   - go get -u github.com/onsi/ginkgo/ginkgo
@@ -25,3 +28,5 @@ script:
   - hack/verify.sh
   - hack/build.sh
   - sudo -E env "PATH=$PATH" hack/test.sh
+after_success:
+  - bash <(curl -s https://codecov.io/bash) uuid-repo-token
