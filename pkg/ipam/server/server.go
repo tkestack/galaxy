@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"git.code.oa.com/gaia/tapp-controller/pkg/client/clientset/versioned"
-	tappInformers "git.code.oa.com/gaia/tapp-controller/pkg/client/informers/externalversions"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin"
@@ -38,10 +36,8 @@ type Server struct {
 	JsonConf
 	*options.ServerRunOptions
 	client               *kubernetes.Clientset
-	tappClient           *versioned.Clientset
 	plugin               *schedulerplugin.FloatingIPPlugin
 	informerFactory      informers.SharedInformerFactory
-	tappInformerFactory  tappInformers.SharedInformerFactory
 	stopChan             chan struct{}
 	leaderElectionConfig *leaderelection.LeaderElectionConfig
 }
@@ -67,20 +63,15 @@ func (s *Server) init() error {
 	s.initk8sClient()
 
 	s.informerFactory = informers.NewFilteredSharedInformerFactory(s.client, time.Minute, v1.NamespaceAll, nil)
-	s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)
 	podInformer := s.informerFactory.Core().V1().Pods()
 	statefulsetInformer := s.informerFactory.Apps().V1().StatefulSets()
-	tappInformer := s.tappInformerFactory.Tappcontroller().V1alpha1().TApps()
 	deploymentInformer := s.informerFactory.Apps().V1().Deployments()
 	pluginArgs := &schedulerplugin.PluginFactoryArgs{
 		PodLister:         podInformer.Lister(),
-		TAppLister:        tappInformer.Lister(),
 		StatefulSetLister: statefulsetInformer.Lister(),
 		DeploymentLister:  deploymentInformer.Lister(),
 		Client:            s.client,
-		TAppClient:        s.tappClient,
 		PodHasSynced:      podInformer.Informer().HasSynced,
-		TAppHasSynced:     tappInformer.Informer().HasSynced,
 		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
 		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 	}
@@ -109,7 +100,6 @@ func (s *Server) Run() error {
 	}
 	s.plugin.Run(s.stopChan)
 	go s.informerFactory.Start(s.stopChan)
-	go s.tappInformerFactory.Start(s.stopChan)
 	s.startServer()
 	return nil
 }
@@ -129,7 +119,6 @@ func (s *Server) initk8sClient() {
 	}
 	glog.Infof("connected to apiserver %v", cfg)
 
-	s.tappClient, err = versioned.NewForConfig(cfg)
 	if err != nil {
 		glog.Fatalf("Error building example clientset: %v", err)
 	}

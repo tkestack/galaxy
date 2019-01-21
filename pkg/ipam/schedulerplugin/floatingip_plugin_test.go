@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
@@ -32,8 +31,7 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	fipPlugin, err := NewFloatingIPPlugin(conf, &PluginFactoryArgs{
-		PodHasSynced:  func() bool { return false },
-		TAppHasSynced: func() bool { return false },
+		PodHasSynced: func() bool { return false },
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "Failed to open") {
@@ -51,7 +49,6 @@ func TestFilter(t *testing.T) {
 	immutableLabel := make(map[string]string)
 	immutableLabel[private.LabelKeyFloatingIP] = private.LabelValueImmutable
 	immutableLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
-	immutableLabel[tappv1.TAppInstanceKey] = ""
 	nodes := []corev1.Node{
 		// no floating ip label node
 		{
@@ -161,7 +158,7 @@ func TestFilter(t *testing.T) {
 			t.Fatal(ipInfo)
 		}
 	}
-	// allocates all ips to pods of a new  tapp
+	// allocates all ips to pods of a new  statefulset
 	newPod := createPod("temp", "ns1", immutableLabel)
 	newPod.Spec.NodeName = node4
 	ipInfoSet := sets.NewString()
@@ -257,7 +254,6 @@ func TestFilter(t *testing.T) {
 	neverLabel := make(map[string]string)
 	neverLabel[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
 	neverLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
-	neverLabel[tappv1.TAppInstanceKey] = ""
 	deployLabel = neverLabel
 	pod.Labels[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
 	deadPod.Labels[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease

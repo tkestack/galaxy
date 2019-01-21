@@ -349,34 +349,6 @@ type VolumeSource struct {
 	// StorageOS represents a StorageOS volume attached and mounted on Kubernetes nodes.
 	// +optional
 	StorageOS *StorageOSVolumeSource `json:"storageos,omitempty" protobuf:"bytes,27,opt,name=storageos"`
-	// LocalDisk represents a local disk request for a pod.
-	// +optional
-	LocalDisk *LocalDiskSource `json:"localDisk,omitempty" protobuf:"bytes,28,opt,name=localDisk"`
-	// TCECloudBlockStorage represents a TCE CBS mount on the host and bind mount to the pod.
-	// +optional
-	TCECloudBlockStorage *TCECloudBlockStorageVolumeSource `json:"tceCloudBlockStorage,omitempty" protobuf:"bytes,29,opt,name=tceCloudBlockStorage"`
-}
-
-// Represents local disk claim for a pod
-type LocalDiskSource struct {
-	// Requested local disk size
-	DiskSize resource.Quantity `json:"diskSize,omitempty" protobuf:"bytes,1,opt,name=diskSize"`
-	// TODO: Add labels to select local disk, e.g. kind=SSD.
-}
-
-// Represents CBS in TCE.
-type TCECloudBlockStorageVolumeSource struct {
-	// Unique id of the cbs resource. Used to identify the disk in tce.
-	VolumeID string `json:"volumeID" protobuf:"bytes,1,opt,name=volumeID"`
-	// IDC name that the CBS resource belongs to.
-	IDCName string `json:"idcName" protobuf:"bytes,2,opt,name=idcName"`
-	// Filesystem type to mount.
-	// Must be a filesystem type supported by the host operating system.
-	// Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "xfs" if unspecified.
-	FSType string `json:"fsType,omitempty" protobuf:"bytes,3,opt,name=portal"`
-	// Defaults to false (read/write). ReadOnly here will force
-	// the ReadOnly setting in VolumeMounts.
-	ReadOnly bool `json:"readOnly,omitempty" protobuf:"varint,4,opt,name=readOnly"`
 }
 
 // PersistentVolumeClaimVolumeSource references the user's PVC in the same namespace.
@@ -3858,20 +3830,6 @@ type NodeStatus struct {
 	// List of volumes that are attached to the node.
 	// +optional
 	VolumesAttached []AttachedVolume `json:"volumesAttached,omitempty" protobuf:"bytes,10,rep,name=volumesAttached"`
-	// List of local disks that are allocated on the node.
-	// +optional
-	LocalDisks []LocalDisk `json:"localDisks,omitempty" protobuf:"bytes,11,rep,name=localDisks"`
-}
-
-type LocalDisk struct {
-	// Local directory
-	LocalDir string `json:"localDir,omitempty" protobuf:"bytes,1,opt,name=localDir"`
-	// Total capacity in bytes
-	Capacity int64 `json:"capacity,omitempty" protobuf:"varint,2,opt,name=capacity"`
-	// Allocatable capacity (in bytes) represents the disk capacity that are available for scheduling
-	Allocatable int64 `json:"allocatable,omitempty" protobuf:"varint,3,opt,name=allocatable"`
-	// TODO: Add labels for local disk, e.g. kind=SSD. They will be helpful for scheduling.
-	// Labels map[string]string
 }
 
 type UniqueVolumeName string
@@ -4020,14 +3978,6 @@ const (
 	ResourceEphemeralStorage ResourceName = "ephemeral-storage"
 	// NVIDIA GPU, in devices. Alpha, might change: although fractional and allowing values >1, only one whole device per node is assigned.
 	ResourceNvidiaGPU ResourceName = "alpha.kubernetes.io/nvidia-gpu"
-	// NVIDIA GPU memory, in bytes (e,g. 5Gi = 5BiB = 500 * 1024 * 1024 * 1024)
-	ResourceNvidiaMemory ResourceName = "alpha.kubernetes.io/nvidia-memory"
-	// Ingress, in bits (500G = 500 * 1000 * 1000 * 1000)
-	ResourceIngress ResourceName = "ingress"
-	// Egress, in bits (500G = 500 * 1000 * 1000 * 1000)
-	ResourceEgress ResourceName = "egress"
-	// LocalDisk size, in bytes
-	ResourceLocalDisk ResourceName = "localdisk"
 )
 
 const (
@@ -4727,16 +4677,6 @@ const (
 	ResourceLimitsMemory ResourceName = "limits.memory"
 	// Local ephemeral storage limit, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 	ResourceLimitsEphemeralStorage ResourceName = "limits.ephemeral-storage"
-	// LocalDisk request, in bytes
-	ResourceRequestsLocalDisk ResourceName = "requests.localdisk"
-	// Ingress, in bits (500G = 500 * 1000 * 1000 * 1000)
-	ResourceRequestsIngress ResourceName = "requests.ingress"
-	// Egress, in bits (500G = 500 * 1000 * 1000 * 1000)
-	ResourceRequestsEgress ResourceName = "requests.egress"
-	// NVIDIA GPU limit, in device.
-	ResourceLimitsNvidiaGPU ResourceName = "limits.alpha.kubernetes.io/nvidia-gpu"
-	// NVIDIA Memory limit, in bytes. (e,g. 5Gi = 5BiB = 500 * 1024 * 1024 * 1024)
-	ResourceLimitsNvidiaMemory ResourceName = "limits.alpha.kubernetes.io/nvidia-memory"
 )
 
 // The following identify resource prefix for Kubernetes object types

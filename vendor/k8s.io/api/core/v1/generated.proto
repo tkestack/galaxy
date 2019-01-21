@@ -1643,23 +1643,6 @@ message LoadBalancerStatus {
   repeated LoadBalancerIngress ingress = 1;
 }
 
-message LocalDisk {
-  // Local directory
-  optional string localDir = 1;
-
-  // Total capacity in bytes
-  optional int64 capacity = 2;
-
-  // Allocatable capacity (in bytes) represents the disk capacity that are available for scheduling
-  optional int64 allocatable = 3;
-}
-
-// Represents local disk claim for a pod
-message LocalDiskSource {
-  // Requested local disk size
-  optional k8s.io.apimachinery.pkg.api.resource.Quantity diskSize = 1;
-}
-
 // LocalObjectReference contains enough information to let you locate the
 // referenced object inside the same namespace.
 message LocalObjectReference {
@@ -1975,10 +1958,6 @@ message NodeStatus {
   // List of volumes that are attached to the node.
   // +optional
   repeated AttachedVolume volumesAttached = 10;
-
-  // List of local disks that are allocated on the node.
-  // +optional
-  repeated LocalDisk localDisks = 11;
 }
 
 // NodeSystemInfo is a set of ids/uuids to uniquely identify the node.
@@ -4301,24 +4280,6 @@ message Sysctl {
   optional string value = 2;
 }
 
-// Represents CBS in TCE.
-message TCECloudBlockStorageVolumeSource {
-  // Unique id of the cbs resource. Used to identify the disk in tce.
-  optional string volumeID = 1;
-
-  // IDC name that the CBS resource belongs to.
-  optional string idcName = 2;
-
-  // Filesystem type to mount.
-  // Must be a filesystem type supported by the host operating system.
-  // Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "xfs" if unspecified.
-  optional string portal = 3;
-
-  // Defaults to false (read/write). ReadOnly here will force
-  // the ReadOnly setting in VolumeMounts.
-  optional bool readOnly = 4;
-}
-
 // TCPSocketAction describes an action based on opening a socket
 message TCPSocketAction {
   // Number or name of the port to access on the container.
@@ -4577,14 +4538,6 @@ message VolumeSource {
   // StorageOS represents a StorageOS volume attached and mounted on Kubernetes nodes.
   // +optional
   optional StorageOSVolumeSource storageos = 27;
-
-  // LocalDisk represents a local disk request for a pod.
-  // +optional
-  optional LocalDiskSource localDisk = 28;
-
-  // TCECloudBlockStorage represents a TCE CBS mount on the host and bind mount to the pod.
-  // +optional
-  optional TCECloudBlockStorageVolumeSource tceCloudBlockStorage = 29;
 }
 
 // Represents a vSphere volume resource.

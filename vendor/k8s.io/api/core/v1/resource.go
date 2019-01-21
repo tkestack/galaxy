@@ -61,31 +61,3 @@ func (self *ResourceList) StorageEphemeral() *resource.Quantity {
 	}
 	return &resource.Quantity{}
 }
-
-func (self *ResourceList) NvidiaMemory() *resource.Quantity {
-	if val, ok := (*self)[ResourceNvidiaMemory]; ok {
-		return &val
-	}
-	return &resource.Quantity{}
-}
-
-func (self *ResourceList) LocalDisk() *resource.Quantity {
-	if val, ok := (*self)[ResourceLocalDisk]; ok {
-		return &val
-	}
-	return &resource.Quantity{}
-}
-
-func (self *ResourceList) Egress() *resource.Quantity {
-	if val, ok := (*self)[ResourceEgress]; ok {
-		return &val
-	}
-	return &resource.Quantity{}
-}
-
-func (self *ResourceList) Ingress() *resource.Quantity {
-	if val, ok := (*self)[ResourceIngress]; ok {
-		return &val
-	}
-	return &resource.Quantity{}
-}

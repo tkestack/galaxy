@@ -96,34 +96,6 @@ spec:
             memory: 30Mi
             cpu: 100m
 ```
-TApp
-
-```
-apiVersion: gaia/v1alpha1
-kind: TApp
-metadata:
-  name: ramitapp
-  labels:
-    app: ramitapp
-spec:
-  replicas: 2
-  template:
-    metadata:
-      labels:
-        app: ramitapp
-        network: FLOATINGIP
-        galaxy.io/secondip: "true"
-        galaxy.io/floatingip: immutable
-    spec:
-      containers:
-      - name: hello
-        image: docker.oa.com:8080/public/2048:onion
-        resources:
-          requests:
-            galaxy.io/floatingip: 1
-            memory: 20M
-            cpu: 200m
-```
 
 Add the following field in pod spec to create floating ip pod
 
@@ -135,8 +107,8 @@ Besides the following is optional.
 labels | meaning
 -------|--------
 galaxy.io/secondip: true | Pod wants two floatingips, the second floatingip will be the default route in container.
-galaxy.io/floatingip: immutable | Release a deleted pod's ip only if the App is deleted or scales down. If pod is evicted, its floating ip is preserved. Supports only TApp.
-galaxy.io/floatingip: never | Never release ip from this Pod. Supports only TApp.
+galaxy.io/floatingip: immutable | Release a deleted pod's ip only if the App is deleted or scales down. If pod is evicted, its floating ip is preserved. Supports only StatefulSet/Deployment.
+galaxy.io/floatingip: never | Never release ip from this Pod. Supports only StatefulSet/Deployment.
 
 # Release
 

@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
@@ -28,7 +27,6 @@ import (
 const (
 	deletedAndIPMutablePod         = "deletedAndIPMutablePod"
 	deletedAndParentAppNotExistPod = "deletedAndParentAppNotExistPod"
-	deletedAndKilledTappPod        = "deletedAndKilledTappPod"
 	deletedAndScaledDownSSPod      = "deletedAndScaledDownSSPod"
 	deletedAndScaledDownDpPod      = "deletedAndScaledDownDpPod"
 	evictedPod                     = "evictedPod"
@@ -139,7 +137,6 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 			}
 		}
 		p.syncPodIPsIntoDB()
-		p.syncTAppRequestResource()
 	}, time.Duration(p.conf.ResyncInterval)*time.Minute, stop)
 	go p.loop(stop)
 }
@@ -473,7 +470,7 @@ func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
 		return nil
 	}
 	if !evicted(oldPod) && evicted(newPod) {
-		// Deployments will leave evicted pods, while TApps don't
+		// Deployments will leave evicted pods
 		// If it's a evicted one, release its ip
 		p.unreleased <- newPod
 	}
@@ -594,21 +591,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		}
 		return nil
 	} else {
-		tapps, err := p.TAppLister.GetPodTApps(pod)
-		if err != nil {
-			return p.releaseIP(key, deletedAndParentAppNotExistPod, pod)
-		}
-		if len(tapps) > 1 {
-			glog.Warningf("multiple tapp found for pod %s", key)
-		}
-		tapp := tapps[0]
-		for i, status := range tapp.Spec.Statuses {
-			if !tappInstanceKilled(status) || i != pod.Labels[tappv1.TAppInstanceKey] {
-				continue
-			}
-			// build the key namespace_tappname-id
-			return p.releaseIP(key, deletedAndKilledTappPod, pod)
-		}
+		return p.releaseIP(key, deletedAndParentAppNotExistPod, pod)
 	}
 	if pod.Annotations != nil {
 		glog.V(3).Infof("reserved %s for pod %s", pod.Annotations[private.AnnotationKeyIPInfo], key)
@@ -634,11 +617,6 @@ func getNodeIP(node *corev1.Node) net.IP {
 		}
 	}
 	return nil
-}
-
-func tappInstanceKilled(status tappv1.InstanceStatus) bool {
-	// TODO v1 INSTANCE_KILLED = "killed" but in types INSTANCE_KILLED = "Killed"
-	return strings.ToLower(string(status)) == strings.ToLower(string(tappv1.INSTANCE_KILLED))
 }
 
 func (p *FloatingIPPlugin) loop(stop chan struct{}) {
