@@ -2,6 +2,7 @@ package gc
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
@@ -59,6 +61,12 @@ func (gc *flannelGC) Run() {
 			glog.Errorf("Error executing cleanup gc_dirs %v", err)
 		}
 	}, *flagFlannelGCInterval, gc.quit)
+
+	go wait.Until(func() {
+		if err := gc.cleanupVeth(); err != nil {
+			glog.Errorf("failed cleanup links: %v", err)
+		}
+	}, *flagFlannelGCInterval*3, gc.quit)
 }
 
 func (gc *flannelGC) cleanupIP() error {
@@ -134,6 +142,45 @@ func (gc *flannelGC) cleanupGCDirs() error {
 				if c.State != nil && (c.State.Status == "exited" || c.State.Status == "dead") {
 					glog.Infof("container %s(%s) exited %s", c.ID, c.Name, c.State.Status)
 					gc.removeLeakyStateFile(file)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (gc *flannelGC) cleanupVeth() error {
+	links, err := netlink.LinkList()
+	if err != nil {
+		err = fmt.Errorf("failed list links: %v", err)
+		return err
+	}
+	for _, link := range links {
+		if !strings.HasPrefix(link.Attrs().Name, "v-h") {
+			continue
+		}
+		if link.Type() != "veth" {
+			continue
+		}
+		parts := strings.Split(link.Attrs().Name[3:], "-")
+		cid := ""
+		if len(parts) == 1 || len(parts) == 2 {
+			cid = parts[0]
+		} else {
+			continue
+		}
+		if c, err := gc.dockerCli.InspectContainer(cid); err != nil {
+			if _, ok := err.(docker.ContainerNotFoundError); ok {
+				glog.Infof("container %s not found, should remove link %s", cid, link.Attrs().Name)
+				if err = netlink.LinkDel(link); err != nil {
+					glog.Warningf("failed remove link %s: %v; try next time", link.Attrs().Name, err)
+				}
+			}
+		} else {
+			if c.State != nil && (c.State.Status == "exited" || c.State.Status == "dead") {
+				glog.Infof("container %s(%s) exited %s, should remove link %s", c.ID, c.Name, c.State.Status, link.Attrs().Name)
+				if err = netlink.LinkDel(link); err != nil {
+					glog.Warningf("failed remove link %s: %v; try next time", link.Attrs().Name, err)
 				}
 			}
 		}
