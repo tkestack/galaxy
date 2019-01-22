@@ -213,6 +213,10 @@ func cmdDel(args *skel.CmdArgs) error {
 		return err
 	}
 
+	if err := utils.DeleteHostVeth(args.ContainerID); err != nil {
+		return err
+	}
+
 	if err := ipam.ExecDel(conf.IPAM.Type, args.StdinData); err != nil {
 		return err
 	}
