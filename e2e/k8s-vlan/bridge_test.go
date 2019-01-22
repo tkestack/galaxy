@@ -79,6 +79,14 @@ var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {
 			Routes: []helper.Route{{Route: netlink.Route{Gw: net.ParseIP("192.168.0.65")}, LinkName: "eth0"}},
 		}).Verify()
 		Expect(err).Should(BeNil(), "%v", err)
+
+		// test DEL command
+		err = helper.ExecCNI(cni, netConf, &invoke.Args{
+			Command:     "DEL",
+			ContainerID: containerId,
+			NetNS:       path.Join(helper.NetNS_PATH, containerId),
+		})
+		Expect(err).Should(BeNil(), "%v", err)
 	})
 
 	It("pure switch", func() {

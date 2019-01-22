@@ -16,5 +16,7 @@ create_go_path_tree
   cd ${LOCAL_GOPATH}/src/${PKG}/
   go test -coverpkg $PKG/pkg/... -coverprofile=coverage.txt -covermode=atomic -v $(glide novendor | grep -v '/go/' | grep -v '/e2e/')
   go tool cover -func=coverage.txt
-  ginkgo -v e2e/k8s-vlan -- --logtostderr --v=4
+  for i in e2e/k8s-vlan e2e/veth; do
+    ginkgo -v $i -- --logtostderr --v=4
+  done
 )
