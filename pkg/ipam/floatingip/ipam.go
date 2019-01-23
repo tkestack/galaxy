@@ -19,27 +19,20 @@ var (
 
 type IPAM interface {
 	ConfigurePool([]*FloatingIP) error
-	Config() []*FloatingIP
-	Allocate([]string, ...database.ActionFunc) ([]net.IP, error)
 	AllocateSpecificIP(string, net.IP, database.ReleasePolicy, string) error
 	AllocateInSubnet(string, *net.IPNet, database.ReleasePolicy, string) (net.IP, error)
+	AllocateInSubnetWithKey(oldK, newK, subnet string, policy database.ReleasePolicy, attr string) error
+	UpdateKey(oldK, newK string) error
 	UpdatePolicy(string, net.IP, database.ReleasePolicy, string) error
 	Release([]string) error
 	ReleaseByPrefix(string) error
-	QueryFirst(string) (*IPInfo, error) // returns nil,nil if key is not found
-	First(string) (*FloatingIPInfo, error)
-	QueryByIP(net.IP) (string, error)
-	QueryByPrefix(string) (map[string]string, error) //ip to key
+	First(string) (*FloatingIPInfo, error) // returns nil,nil if key is not found
+	ByIP(net.IP) (database.FloatingIP, error)
 	ByPrefix(string) ([]database.FloatingIP, error)
 	RoutableSubnet(net.IP) *net.IPNet
 	QueryRoutableSubnetByKey(key string) ([]string, error)
-	Store() *database.DBRecorder //for test
 	Shutdown()
 	Name() string
-	UpdateKey(oldK, newK string) error
-	AllocateInSubnetWithKey(oldK, newK, subnet string, policy database.ReleasePolicy, attr string) error
-
-	ApplyFloatingIPs([]FloatingIP) []*FloatingIP
 }
 
 type FloatingIPInfo struct {
@@ -147,9 +140,9 @@ func (i *ipam) ConfigurePool(floatingIPs []*FloatingIP) error {
 	return nil
 }
 
-// Allocate allocate len(keys) ips, it guarantees to allocate everything
+// allocate allocate len(keys) ips, it guarantees to allocate everything
 // or nothing.
-func (i *ipam) Allocate(keys []string, ops ...database.ActionFunc) (allocated []net.IP, err error) {
+func (i *ipam) allocate(keys []string) (allocated []net.IP, err error) {
 	var fips []database.FloatingIP
 	for {
 		if err = i.findAvailable(len(keys), &fips); err != nil {
@@ -164,7 +157,6 @@ func (i *ipam) Allocate(keys []string, ops ...database.ActionFunc) (allocated []
 			fips[j].Key = keys[j]
 			updateOps = append(updateOps, allocateOp(&fips[j], i.TableName))
 		}
-		updateOps = append(updateOps, ops...)
 		if err = i.store.Transaction(updateOps...); err != nil {
 			if err == ErrNotUpdated {
 				// Loop if a floating ip has been allocated by the others
@@ -190,7 +182,7 @@ func (i *ipam) ReleaseByPrefix(keyPrefix string) error {
 	return i.releaseByPrefix(keyPrefix)
 }
 
-func (i *ipam) QueryFirst(key string) (*IPInfo, error) {
+func (i *ipam) first(key string) (*IPInfo, error) {
 	fipInfo, err := i.First(key)
 	if err != nil || fipInfo == nil {
 		return nil, err
@@ -262,11 +254,7 @@ func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy da
 	return
 }
 
-func (i *ipam) Store() *database.DBRecorder {
-	return i.store
-}
-
-func (i *ipam) ApplyFloatingIPs(fips []FloatingIP) []*FloatingIP {
+func (i *ipam) applyFloatingIPs(fips []FloatingIP) []*FloatingIP {
 	res := make(map[string]*FloatingIP, len(i.FloatingIPs))
 	for j := range i.FloatingIPs {
 		ofip := i.FloatingIPs[j]
@@ -312,10 +300,6 @@ func (i *ipam) toFIPSubnet(routableSubnet *net.IPNet) *net.IPNet {
 	return nil
 }
 
-func (i *ipam) Config() []*FloatingIP {
-	return i.FloatingIPs
-}
-
 func (i *ipam) QueryByPrefix(prefix string) (map[string]string, error) {
 	fips, err := i.ByPrefix(prefix)
 	if err != nil {
@@ -354,9 +338,8 @@ func (i *ipam) QueryRoutableSubnetByKey(key string) ([]string, error) {
 	return i.queryByKeyGroupBySubnet(key)
 }
 
-func (i *ipam) QueryByIP(ip net.IP) (string, error) {
-	fip, err := i.findKeyOfIP(nets.IPToInt(ip))
-	return fip.Key, err
+func (i *ipam) ByIP(ip net.IP) (database.FloatingIP, error) {
+	return i.findByIP(nets.IPToInt(ip))
 }
 
 func (i *ipam) AllocateSpecificIP(key string, ip net.IP, policy database.ReleasePolicy, attr string) error {

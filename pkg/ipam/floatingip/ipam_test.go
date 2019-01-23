@@ -1,4 +1,4 @@
-package floatingip_test
+package floatingip
 
 import (
 	"encoding/json"
@@ -10,15 +10,14 @@ import (
 
 	"github.com/jinzhu/gorm"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 )
 
-func Start(t *testing.T) floatingip.IPAM {
+func Start(t *testing.T) *ipam {
 	return CreateIPAMWithTableName(t, database.DefaultFloatingipTableName)
 }
 
-func CreateIPAMWithTableName(t *testing.T, tableName string) floatingip.IPAM {
+func CreateIPAMWithTableName(t *testing.T, tableName string) *ipam {
 	var err error
 	db, err := database.NewTestDB()
 	if err != nil {
@@ -28,12 +27,12 @@ func CreateIPAMWithTableName(t *testing.T, tableName string) floatingip.IPAM {
 		t.Fatal(err)
 	}
 	var conf struct {
-		Floatingips []*floatingip.FloatingIP `json:"floatingips"`
+		Floatingips []*FloatingIP `json:"floatingips"`
 	}
 	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
 		t.Fatal(err)
 	}
-	i := floatingip.NewIPAMWithTableName(db, tableName)
+	i := NewIPAMWithTableName(db, tableName)
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		return tx.Exec(fmt.Sprintf("TRUNCATE %s;", tableName)).Error
 	}); err != nil {
@@ -43,10 +42,10 @@ func CreateIPAMWithTableName(t *testing.T, tableName string) floatingip.IPAM {
 		t.Fatal(err)
 	}
 	// There should be 14 ips
-	if m, err := i.QueryByPrefix(""); err != nil || len(m) != 14 {
+	if m, err := i.ByPrefix(""); err != nil || len(m) != 14 {
 		t.Fatalf("map %v, err %v", m, err)
 	}
-	return i
+	return i.(*ipam)
 }
 
 func TestAllocateRelease(t *testing.T) {
@@ -56,14 +55,14 @@ func TestAllocateRelease(t *testing.T) {
 	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
-	ips, err := ipam.Allocate([]string{"pod1-1", "pod1-2", "pod1-3"})
+	ips, err := ipam.allocate([]string{"pod1-1", "pod1-2", "pod1-3"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if fmt.Sprintf("%v", ips) != "[10.49.27.205 10.49.27.216 10.49.27.217]" {
 		t.Fatal(ips)
 	}
-	ipInfo, err := ipam.QueryFirst("pod1-1")
+	ipInfo, err := ipam.first("pod1-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +75,7 @@ func TestAllocateRelease(t *testing.T) {
 	if ipInfo.Vlan != 2 {
 		t.Fatal(ipInfo.Vlan)
 	}
-	ipInfo, err = ipam.QueryFirst("pod1-4")
+	ipInfo, err = ipam.first("pod1-4")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +85,7 @@ func TestAllocateRelease(t *testing.T) {
 	if err := ipam.Release([]string{"pod1-2"}); err != nil {
 		t.Fatal(err)
 	}
-	ips, err = ipam.Allocate([]string{"pod1-2", "pod1-4", "pod2-1"})
+	ips, err = ipam.allocate([]string{"pod1-2", "pod1-4", "pod2-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +93,7 @@ func TestAllocateRelease(t *testing.T) {
 		t.Fatal(ips)
 	}
 	var fips []database.FloatingIP
-	if err := ipam.Store().Transaction(func(tx *gorm.DB) error {
+	if err := ipam.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Limit(100).Where("`key` = \"\"").Find(&fips).Error
 	}); err != nil {
 		t.Fatal(err)
@@ -105,7 +104,7 @@ func TestAllocateRelease(t *testing.T) {
 	if err := ipam.ReleaseByPrefix("pod1-"); err != nil {
 		t.Fatal(err)
 	}
-	if err := ipam.Store().Transaction(func(tx *gorm.DB) error {
+	if err := ipam.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Where("`key` != \"\"").Find(&fips).Error
 	}); err != nil {
 		t.Fatal(err)
@@ -122,7 +121,7 @@ func TestApplyFloatingIPs(t *testing.T) {
 	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
-	fips := []floatingip.FloatingIP{}
+	fips := []FloatingIP{}
 	fipStr := `[{
       "routableSubnet": "10.49.27.0/24",
       "ips": ["10.49.27.206", "10.49.27.215~10.49.27.219"],
@@ -151,7 +150,7 @@ func TestApplyFloatingIPs(t *testing.T) {
 	if err := json.Unmarshal([]byte(fipStr), &fips); err != nil {
 		t.Fatal(err)
 	}
-	conf := ipam.ApplyFloatingIPs(fips)
+	conf := ipam.applyFloatingIPs(fips)
 	if len(conf) != 5 {
 		t.Fatal(conf)
 	}
@@ -173,7 +172,7 @@ func TestRaceCondition(t *testing.T) {
 	defer func() {
 		<-database.ForceSequential
 	}()
-	var ipams []floatingip.IPAM
+	var ipams []*ipam
 	for i := 0; i < 7; i++ {
 		ipam := Start(t)
 		defer ipam.Shutdown()
@@ -188,7 +187,7 @@ func TestRaceCondition(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			keys := []string{fmt.Sprintf("pod%d", j*2), fmt.Sprintf("pod%d", j*2+1)}
-			allocated, err := ipam.Allocate(keys)
+			allocated, err := ipam.allocate(keys)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -223,7 +222,7 @@ func TestEmptyFloatingIPConf(t *testing.T) {
 		}
 		t.Fatal(err)
 	}
-	i := floatingip.NewIPAM(db)
+	i := NewIPAM(db)
 	defer i.Shutdown()
 	if err := i.ConfigurePool(nil); err != nil {
 		t.Fatal(err)
@@ -241,7 +240,7 @@ func TestAllocateIPInSubnet(t *testing.T) {
 	if _, err := ipam.AllocateInSubnet("pod1-1", routableSubnet, database.PodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
-	ipInfo, err := ipam.QueryFirst("pod1-1")
+	ipInfo, err := ipam.first("pod1-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +249,7 @@ func TestAllocateIPInSubnet(t *testing.T) {
 	}
 	//test can't find available ip
 	_, routableSubnet, _ = net.ParseCIDR("10.173.14.0/24")
-	if _, err := ipam.AllocateInSubnet("pod1-1", routableSubnet, database.PodDelete, ""); err == nil || err != floatingip.ErrNoFIPForSubnet {
+	if _, err := ipam.AllocateInSubnet("pod1-1", routableSubnet, database.PodDelete, ""); err == nil || err != ErrNoFIPForSubnet {
 		t.Fatalf("should fail because of ErrNoFIPForSubnet: %v", err)
 	}
 }
@@ -298,7 +297,7 @@ func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
 		t.Fatal(subnets)
 	}
 	// drain ips of 10.49.27.0/24
-	if ips, err := ipam.Allocate([]string{"p1", "p2", "p3", "p4"}); err != nil || len(ips) != 4 {
+	if ips, err := ipam.allocate([]string{"p1", "p2", "p3", "p4"}); err != nil || len(ips) != 4 {
 		t.Fatalf("ips %v err %v", ips, err)
 	}
 	subnets, err = ipam.QueryRoutableSubnetByKey("p1")
@@ -344,12 +343,12 @@ func TestAllocateSpecificIP(t *testing.T) {
 	if err := ipam.AllocateSpecificIP("pod1", ip, database.PodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
-	key, err := ipam.QueryByIP(ip)
-	if err != nil || key != "pod1" {
-		t.Fatalf("key %s, err %v", key, err)
+	fip, err := ipam.ByIP(ip)
+	if err != nil || fip.Key != "pod1" {
+		t.Fatalf("key %s, err %v", fip.Key, err)
 	}
 	// check if an allocated ip can be allocated again, should return an ErrNotUpdated error
-	if err := ipam.AllocateSpecificIP("pod2", ip, database.PodDelete, ""); err == nil || err != floatingip.ErrNotUpdated {
+	if err := ipam.AllocateSpecificIP("pod2", ip, database.PodDelete, ""); err == nil || err != ErrNotUpdated {
 		t.Fatal(err)
 	}
 }
@@ -367,11 +366,11 @@ func TestMultipleIPAM(t *testing.T) {
 		t.Logf("testing expectKey %s, ip %s", expectKey, ip.String())
 		t.Logf("secondIPAM...")
 		// check secondIPAM query result is not empty
-		key, err := secondIPAM.QueryByIP(ip)
-		if err != nil || key != expectKey {
-			t.Fatalf("key %s, err %v", key, err)
+		secondFip, err := secondIPAM.ByIP(ip)
+		if err != nil || secondFip.Key != expectKey {
+			t.Fatalf("key %s, err %v", secondFip.Key, err)
 		}
-		ipInfo, err := secondIPAM.QueryFirst(expectKey)
+		ipInfo, err := secondIPAM.first(expectKey)
 		if err != nil || ipInfo.IP.IP.String() != ip.String() {
 			t.Fatalf("ipInfo %v, err %v", ipInfo, err)
 		}
@@ -388,11 +387,11 @@ func TestMultipleIPAM(t *testing.T) {
 		}
 		// check ipam query result is empty
 		t.Logf("ipam...")
-		key, err = ipam.QueryByIP(ip)
-		if err != nil || key != "" {
-			t.Fatalf("key %s, err %v", key, err)
+		secondFip, err = ipam.ByIP(ip)
+		if err != nil || secondFip.Key != "" {
+			t.Fatalf("key %s, err %v", secondFip.Key, err)
 		}
-		ipInfo, err = ipam.QueryFirst(expectKey)
+		ipInfo, err = ipam.first(expectKey)
 		if err != nil || ipInfo != nil {
 			t.Fatalf("ipInfo %v, err %v", ipInfo, err)
 		}
@@ -425,13 +424,114 @@ func TestMultipleIPAM(t *testing.T) {
 	if err := secondIPAM.Release([]string{"pod1"}); err != nil {
 		t.Fatal(err)
 	}
-	if ipInfo, err := secondIPAM.QueryFirst("pod1"); err != nil || ipInfo != nil {
+	if ipInfo, err := secondIPAM.first("pod1"); err != nil || ipInfo != nil {
 		t.Fatalf("ipInfo %v, err %v", ipInfo, err)
 	}
 	if err := secondIPAM.ReleaseByPrefix("pod2"); err != nil {
 		t.Fatal(err)
 	}
-	if ipInfo, err := secondIPAM.QueryFirst("pod2"); err != nil || ipInfo != nil {
+	if ipInfo, err := secondIPAM.first("pod2"); err != nil || ipInfo != nil {
 		t.Fatalf("ipInfo %v, err %v", ipInfo, err)
+	}
+}
+
+func TestGetRoutableSubnet(t *testing.T) {
+	var fips []*FloatingIP
+	if err := json.Unmarshal([]byte(`[{"routableSubnet":"10.239.228.0/22","ips":["10.239.238.3~10.239.238.6","10.239.238.11","10.239.238.26~10.239.238.61","10.239.238.115~10.239.238.116","10.239.238.164","10.239.238.166","10.239.238.207","10.239.238.226","10.239.238.236"],"subnet":"10.239.236.0/22","gateway":"10.239.236.1","vlan":13}]`), &fips); err != nil {
+		t.Fatal(err)
+	}
+	ipam := &ipam{FloatingIPs: fips}
+	ipnet := ipam.RoutableSubnet(net.ParseIP("10.239.229.142"))
+	if ipnet == nil {
+		t.Fatal()
+	}
+	ipnet = ipam.RoutableSubnet(net.ParseIP("10.239.230.32"))
+	if ipnet == nil {
+		t.Fatal()
+	}
+}
+
+func TestAllocateInSubnet(t *testing.T) {
+	database.ForceSequential <- true
+	defer func() {
+		<-database.ForceSequential
+	}()
+	ipam := Start(t)
+	defer ipam.Shutdown()
+	ipnet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
+	allocatedIP, err := ipam.AllocateInSubnet("pod1", ipnet, database.PodDelete, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allocatedIP.String() != "10.180.154.7" {
+		t.Fatal(allocatedIP.String())
+	}
+
+	ipnet = &net.IPNet{IP: net.ParseIP("10.173.13.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
+	allocatedIP, err = ipam.AllocateInSubnet("pod2", ipnet, database.PodDelete, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allocatedIP.String() != "10.173.13.2" {
+		t.Fatal(allocatedIP.String())
+	}
+
+	// test AllocateInSubnetWithKey
+	if err = ipam.AllocateInSubnetWithKey("pod2", "pod3", ipnet.String(), database.PodDelete, ""); err != nil {
+		t.Fatal(err)
+	}
+	ipInfo, err := ipam.First("pod2")
+	if err != nil || ipInfo != nil {
+		t.Errorf("err %v ipInfo %v", err, ipInfo)
+	}
+
+	ipInfo, err = ipam.First("pod3")
+	if err != nil || ipInfo.IPInfo.IP == nil || ipInfo.IPInfo.IP.String() != "10.173.13.2/24" {
+		t.Errorf("err %v ipInfo %v", err, ipInfo)
+	}
+}
+
+func TestUpdateKeyUpdatePolicy(t *testing.T) {
+	database.ForceSequential <- true
+	defer func() {
+		<-database.ForceSequential
+	}()
+	ipam := Start(t)
+	defer ipam.Shutdown()
+
+	ipnet := &net.IPNet{IP: net.ParseIP("10.173.13.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
+	allocatedIP, err := ipam.AllocateInSubnet("pod2", ipnet, database.PodDelete, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allocatedIP.String() != "10.173.13.2" {
+		t.Error(allocatedIP.String())
+	}
+	if err := ipam.UpdateKey("pod2", "pod3"); err != nil {
+		t.Fatal(err)
+	}
+
+	ipInfo, err := ipam.First("pod2")
+	if err != nil || ipInfo != nil {
+		t.Errorf("err %v ipInfo %v", err, ipInfo)
+	}
+
+	ipInfo, err = ipam.First("pod3")
+	if err != nil || ipInfo.IPInfo.IP == nil {
+		t.Fatalf("err %v ipInfo %v", err, ipInfo)
+	}
+	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: IP:179113218 Key:pod3 Subnet:10.173.13.0/24 Policy:0 Attr:}}" {
+		t.Error(fmt.Sprintf("%+v", ipInfo))
+	}
+
+	if err := ipam.UpdatePolicy("pod3", ipInfo.IPInfo.IP.IP, database.Never, "111"); err != nil {
+		t.Fatal(err)
+	}
+	ipInfo, err = ipam.First("pod3")
+	if err != nil || ipInfo.IPInfo.IP == nil {
+		t.Fatalf("err %v ipInfo %v", err, ipInfo)
+	}
+	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: IP:179113218 Key:pod3 Subnet:10.173.13.0/24 Policy:2 Attr:111}}" {
+		t.Error(fmt.Sprintf("%+v", ipInfo))
 	}
 }
