@@ -26,6 +26,10 @@ func (p *FloatingIPPlugin) storeReady() bool {
 		glog.V(3).Infof("the pod store has not been synced yet")
 		return false
 	}
+	if !p.StatefulSetSynced() {
+		glog.V(3).Infof("the statefulset store has not been synced yet")
+		return false
+	}
 	if !p.DeploymentSynced() {
 		glog.V(3).Infof("the deployment store has not been synced yet")
 		return false
@@ -111,14 +115,14 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		// we can't get labels of not exist pod, so get them from it's ss or deployment
 		ss, ok := ssMap[appFullName]
 		if ok && !strings.HasPrefix(podFullName, "_deployment_") {
-			if !p.wantedObject(&ss.ObjectMeta) {
+			if !p.wantedObject(&ss.Spec.Template.ObjectMeta) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, podFullName, deletedAndLabelMissMatchPod); err != nil {
 					glog.Warningf("[%s] %v", ipam.Name(), err)
 				}
 				continue
 			}
-			if ss.GetLabels()[private.LabelKeyFloatingIP] != private.LabelValueImmutable {
+			if ss.Spec.Template.GetLabels()[private.LabelKeyFloatingIP] != private.LabelValueImmutable {
 				// 2. deleted pods whose parent statefulset exist but is not ip immutable
 				if err := releaseIP(ipam, podFullName, deletedAndIPMutablePod); err != nil {
 					glog.Warningf("[%s] %v", ipam.Name(), err)
@@ -140,14 +144,14 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		}
 		dp, ok := dpMap[appFullName]
 		if ok && strings.HasPrefix(podFullName, "_deployment_") {
-			if !p.wantedObject(&dp.ObjectMeta) {
+			if !p.wantedObject(&dp.Spec.Template.ObjectMeta) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, podFullName, deletedAndLabelMissMatchPod); err != nil {
 					glog.Warningf("[%s] %v", ipam.Name(), err)
 				}
 				continue
 			}
-			policy := dp.GetLabels()[private.LabelKeyFloatingIP]
+			policy := dp.Spec.Template.GetLabels()[private.LabelKeyFloatingIP]
 			if policy != private.LabelValueImmutable && policy != private.LabelValueNeverRelease {
 				// 2. deleted pods whose parent deployment exist but is not ip immutable
 				if err := releaseIP(ipam, podFullName, deletedAndIPMutablePod); err != nil {
