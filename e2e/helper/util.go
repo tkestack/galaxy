@@ -163,3 +163,7 @@ func Ping(ip string) ([]byte, error) {
 func Curl(ip, port string) ([]byte, error) {
 	return Command("curl", "--connect-timeout", "5", fmt.Sprintf("%s:%s", ip, port)).CombinedOutput()
 }
+
+func CleanupCNIData(networkName string) error {
+	return os.RemoveAll(path.Join("/var/lib/cni/networks/", networkName))
+}

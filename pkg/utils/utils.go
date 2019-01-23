@@ -151,6 +151,20 @@ func DeleteVeth(netnsPath, ifName string) error {
 	})
 }
 
+// DeleteHostVeth deletes veth device in the host network namespace
+func DeleteHostVeth(containerId string) error {
+	hostIfName := HostVethName(containerId, "")
+	link, err := netlink.LinkByName(hostIfName)
+	if err != nil {
+		// return nil if we can't find host veth device
+		return nil
+	}
+	if err := netlink.LinkDel(link); err != nil {
+		return fmt.Errorf("failed to delete host device %q: %v", hostIfName, err)
+	}
+	return nil
+}
+
 // DeleteAllVeth deletes all veth device inside the container
 func DeleteAllVeth(netnsPath string) error {
 	netns, err := ns.GetNS(netnsPath)
