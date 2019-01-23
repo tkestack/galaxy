@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
+	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -31,8 +31,7 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	fipPlugin, err := NewFloatingIPPlugin(conf, &PluginFactoryArgs{
-		PodHasSynced:  func() bool { return false },
-		TAppHasSynced: func() bool { return false },
+		PodHasSynced: func() bool { return false },
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "Failed to open") {
@@ -50,7 +49,6 @@ func TestFilter(t *testing.T) {
 	immutableLabel := make(map[string]string)
 	immutableLabel[private.LabelKeyFloatingIP] = private.LabelValueImmutable
 	immutableLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
-	immutableLabel[tappv1.TAppInstanceKey] = ""
 	nodes := []corev1.Node{
 		// no floating ip label node
 		{
@@ -160,7 +158,7 @@ func TestFilter(t *testing.T) {
 			t.Fatal(ipInfo)
 		}
 	}
-	// allocates all ips to pods of a new  tapp
+	// allocates all ips to pods of a new  statefulset
 	newPod := createPod("temp", "ns1", immutableLabel)
 	newPod.Spec.NodeName = node4
 	ipInfoSet := sets.NewString()
@@ -194,6 +192,87 @@ func TestFilter(t *testing.T) {
 	}
 	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrNotEmpty()); err != nil {
 		t.Fatal(err)
+	}
+
+	// pre-allocate ip in filter for deployment pod
+	deadPod := createPod("dp-aaa-bbb", "ns1", immutableLabel)
+	pod = createPod("dp-xxx-yyy", "ns1", immutableLabel)
+	pod.OwnerReferences = append(pod.OwnerReferences, v1.OwnerReference{
+		Kind: "ReplicaSet",
+	})
+	deadPod.OwnerReferences = append(deadPod.OwnerReferences, v1.OwnerReference{
+		Kind: "ReplicaSet",
+	})
+	var replicas int32 = 1
+	deployLabel := immutableLabel
+	fipPlugin.getDeployment = func(name, namespace string) (*appv1.Deployment, error) {
+		return &appv1.Deployment{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+				Labels:    deployLabel,
+			},
+			Spec: appv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: pod.ObjectMeta,
+				},
+				Replicas: &replicas,
+			},
+		}, nil
+	}
+	if err := fipPlugin.ipam.ReleaseByPrefix(""); err != nil {
+		t.Fatal(err)
+	}
+	fip, err := fipPlugin.allocateIP(fipPlugin.ipam, keyForDeploymentPod(deadPod, "dp"), node3, deadPod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filteredNodes, _, err := fipPlugin.Filter(pod, nodes); err != nil {
+		t.Fatal(err)
+	} else if len(filteredNodes) != 0 {
+		t.Fatalf("shoult has no node for deployment, wait for release, but got %v", filteredNodes)
+	}
+	//if err = reserveDeploymentIP(fipPlugin.ipam, keyForDeploymentPod(deadPod, "dp"), deploymentPrefix("dp", "ns1")); err != nil {
+	//	t.Fatal(err)
+	//}
+	// because replicas = 1, ip will be reserved
+	if err := fipPlugin.unbind(deadPod); err != nil {
+		t.Fatal(err)
+	}
+	if _, failedNodes, err := fipPlugin.Filter(pod, nodes); err != nil {
+		t.Fatal(err)
+	} else if err = checkFailed(failedNodes, nodeUnlabeld, nodeHasNoIP, node4); err != nil {
+		t.Fatal(err)
+	}
+	fip2, err := fipPlugin.ipam.First(keyForDeploymentPod(pod, "dp"))
+	if err != nil {
+		t.Fatal(err)
+	} else if fip.IP.String() != fip2.IPInfo.IP.String() {
+		t.Fatalf("allocate another ip, expect reserved one")
+	}
+
+	neverLabel := make(map[string]string)
+	neverLabel[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
+	neverLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
+	deployLabel = neverLabel
+	pod.Labels[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
+	deadPod.Labels[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
+	// when replicas = 0 and never release policy, ip will be reserved
+	replicas = 0
+	if err := fipPlugin.unbind(pod); err != nil {
+		t.Fatal(err)
+	}
+	replicas = 1
+	if _, failedNodes, err := fipPlugin.Filter(deadPod, nodes); err != nil {
+		t.Fatal(err)
+	} else if err = checkFailed(failedNodes, nodeUnlabeld, nodeHasNoIP, node4); err != nil {
+		t.Fatal(err)
+	}
+	fip3, err := fipPlugin.ipam.First(keyForDeploymentPod(deadPod, "dp"))
+	if err != nil {
+		t.Fatal(err)
+	} else if fip.IP.String() != fip3.IPInfo.IP.String() {
+		t.Fatalf("allocate another ip, expect reserved one")
 	}
 }
 
@@ -273,9 +352,22 @@ func createPod(name, namespace string, labels map[string]string) *corev1.Pod {
 }
 
 func TestResolveAppPodName(t *testing.T) {
-	tests := map[string][]string{"default_fip-0": {"default", "fip", "0"}, "kube-system_fip-bj-111": {"kube-system", "fip-bj", "111"}}
+	tests := map[string][]string{"default_fip-0": {"default", "fip", "0"}, "kube-system_fip-bj-111": {"kube-system", "fip-bj", "111"}, "_deployment_default_dp1_dp1-rs1-pod1": {"", "", ""}}
 	for k, v := range tests {
 		appname, podId, namespace := resolveAppPodName(k)
+		if namespace != v[0] {
+			t.Fatal(namespace)
+		}
+		if appname != v[1] {
+			t.Fatal(appname)
+		}
+		if podId != v[2] {
+			t.Fatal(podId)
+		}
+	}
+	tests = map[string][]string{"_deployment_default_dp1_dp1-rs1-pod1": {"default", "dp1", "dp1-rs1-pod1"}}
+	for k, v := range tests {
+		appname, podId, namespace := resolveDpAppPodName(k)
 		if namespace != v[0] {
 			t.Fatal(namespace)
 		}

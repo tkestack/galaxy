@@ -19,6 +19,9 @@ import:
   version: ff4f55a206334ef123e4f79bbf348980da81ca46
 - package: github.com/golang/glog
   version: 44145f04b68cf362d9c4df2182967c2275eaefed
+- package: github.com/Sirupsen/logrus
+  version: 778f2e774c725116edbc3d039dc0dfc1cc62aae8
+  repo: https://github.com/sirupsen/logrus.git
 - package: github.com/vishvananda/netlink
   version: da7420cab5e209195f5f7387fccd4c7f48758d30
   subpackages:
@@ -29,8 +32,7 @@ import:
   repo: https://github.com/kubernetes/client-go.git
   version: kubernetes-1.9.3
 - package: k8s.io/api
-  repo: http://git.code.oa.com/gaiastack/api.git
-  version: b66853cd14eca559977c60c0a6b91d47b32edfc1
+  version: release-1.9
 - package: k8s.io/apimachinery
   version: 68f9c3a1feb3140df59c67ced62d3a5df8e6c9c2
 - package: k8s.io/kube-openapi
@@ -45,9 +47,6 @@ import:
   version: 076b546753157f758b316e59bcb51e6807c04057
 - package: golang.org/x/text
   version: b19bf474d317b857955b12035d2c5acb57ce8b01
-- package: git.code.oa.com/gaia/tapp-controller
-  repo: http://git.code.oa.com/gaia/tapp-controller.git
-  version: 9a7ae8cd85dd18303582bd5ca61f0ac33b60a3cc
 - package: github.com/go-sql-driver/mysql
   version: ae5a66df4d33ba404d639bd0fc9189cd5ee79bcf
 - package: github.com/jinzhu/gorm

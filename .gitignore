@@ -7,11 +7,6 @@
 /vendor/github.com/docker/distribution/docs
 /vendor/github.com/emicklei/go-restful/examples
 /vendor/github.com/opencontainers/runc/script/
-/vendor/git.code.oa.com/gaia/tapp-controller/hack
-/vendor/git.code.oa.com/gaia/tapp-controller/main.go
-/vendor/git.code.oa.com/gaia/tapp-controller/pkg/signals
-/vendor/git.code.oa.com/gaia/tapp-controller/pkg/tapp
-/vendor/git.code.oa.com/gaia/tapp-controller/pkg/util
 /.DS_Store
 /vendor/**/docs
 /vendor/**/*_test.go

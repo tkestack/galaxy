@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/golang/glog"
-
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
+	"github.com/golang/glog"
+	"github.com/jinzhu/gorm"
 )
 
 var (
@@ -36,6 +36,8 @@ type IPAM interface {
 	Store() *database.DBRecorder //for test
 	Shutdown()
 	Name() string
+	UpdateKey(oldK, newK string) error
+	AllocateInSubnetWithKey(oldK, newK, subnet string, policy database.ReleasePolicy, attr string) error
 
 	ApplyFloatingIPs([]FloatingIP) []*FloatingIP
 }
@@ -363,4 +365,27 @@ func (i *ipam) AllocateSpecificIP(key string, ip net.IP, policy database.Release
 
 func (i *ipam) UpdatePolicy(key string, ip net.IP, policy database.ReleasePolicy, attr string) error {
 	return i.updatePolicy(nets.IPToInt(ip), key, uint16(policy), attr)
+}
+
+func (i *ipam) UpdateKey(oldK, newK string) error {
+	return i.store.Transaction(func(tx *gorm.DB) error {
+		return tx.Table(i.Name()).Where("`key` = ?", oldK).
+			UpdateColumns(map[string]interface{}{
+				"key":  newK,
+				"attr": "",
+			}).Error
+	})
+}
+
+func (i *ipam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy database.ReleasePolicy, attr string) error {
+	return i.store.Transaction(func(tx *gorm.DB) error {
+		ret := tx.Table(i.Name()).Where("`key` = ? AND subnet = ?", oldK, subnet).Limit(1).UpdateColumns(map[string]interface{}{`key`: newK, "policy": policy, "attr": attr})
+		if ret.Error != nil {
+			return ret.Error
+		}
+		if ret.RowsAffected != 1 {
+			return ErrNotUpdated
+		}
+		return nil
+	})
 }

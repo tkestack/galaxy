@@ -3,10 +3,9 @@
 package prop
 
 import (
-	"sync"
-
 	"github.com/godbus/dbus"
 	"github.com/godbus/dbus/introspect"
+	"sync"
 )
 
 // EmitType controls how org.freedesktop.DBus.Properties.PropertiesChanged is
@@ -44,24 +43,24 @@ var IntrospectData = introspect.Interface{
 		{
 			Name: "Get",
 			Args: []introspect.Arg{
-				{Name: "interface", Type: "s", Direction: "in"},
-				{Name: "property", Type: "s", Direction: "in"},
-				{Name: "value", Type: "v", Direction: "out"},
+				{"interface", "s", "in"},
+				{"property", "s", "in"},
+				{"value", "v", "out"},
 			},
 		},
 		{
 			Name: "GetAll",
 			Args: []introspect.Arg{
-				{Name: "interface", Type: "s", Direction: "in"},
-				{Name: "props", Type: "a{sv}", Direction: "out"},
+				{"interface", "s", "in"},
+				{"props", "a{sv}", "out"},
 			},
 		},
 		{
 			Name: "Set",
 			Args: []introspect.Arg{
-				{Name: "interface", Type: "s", Direction: "in"},
-				{Name: "property", Type: "s", Direction: "in"},
-				{Name: "value", Type: "v", Direction: "in"},
+				{"interface", "s", "in"},
+				{"property", "s", "in"},
+				{"value", "v", "in"},
 			},
 		},
 	},
@@ -69,9 +68,9 @@ var IntrospectData = introspect.Interface{
 		{
 			Name: "PropertiesChanged",
 			Args: []introspect.Arg{
-				{Name: "interface", Type: "s", Direction: "out"},
-				{Name: "changed_properties", Type: "a{sv}", Direction: "out"},
-				{Name: "invalidates_properties", Type: "as", Direction: "out"},
+				{"interface", "s", "out"},
+				{"changed_properties", "a{sv}", "out"},
+				{"invalidates_properties", "as", "out"},
 			},
 		},
 	},
@@ -141,30 +140,14 @@ type Properties struct {
 	path dbus.ObjectPath
 }
 
-// New falls back to Export, but it returns nil if properties export fails,
-// swallowing the error, shouldn't be used.
-//
-// Deprecated: use Export instead.
-func New(conn *dbus.Conn, path dbus.ObjectPath, props map[string]map[string]*Prop) *Properties {
-	p, err := Export(conn, path, props)
-	if err != nil {
-		return nil
-	}
-	return p
-}
-
-// Export returns a new Properties structure that manages the given properties.
+// New returns a new Properties structure that manages the given properties.
 // The key for the first-level map of props is the name of the interface; the
 // second-level key is the name of the property. The returned structure will be
 // exported as org.freedesktop.DBus.Properties on path.
-func Export(
-	conn *dbus.Conn, path dbus.ObjectPath, props map[string]map[string]*Prop,
-) (*Properties, error) {
+func New(conn *dbus.Conn, path dbus.ObjectPath, props map[string]map[string]*Prop) *Properties {
 	p := &Properties{m: props, conn: conn, path: path}
-	if err := conn.Export(p, path, "org.freedesktop.DBus.Properties"); err != nil {
-		return nil, err
-	}
-	return p, nil
+	conn.Export(p, path, "org.freedesktop.DBus.Properties")
+	return p
 }
 
 // Get implements org.freedesktop.DBus.Properties.Get.
@@ -226,17 +209,17 @@ func (p *Properties) Introspection(iface string) []introspect.Property {
 
 // set sets the given property and emits PropertyChanged if appropiate. p.mut
 // must already be locked.
-func (p *Properties) set(iface, property string, v interface{}) error {
+func (p *Properties) set(iface, property string, v interface{}) {
 	prop := p.m[iface][property]
 	prop.Value = v
 	switch prop.Emit {
 	case EmitFalse:
-		return nil // do nothing
+		// do nothing
 	case EmitInvalidates:
-		return p.conn.Emit(p.path, "org.freedesktop.DBus.Properties.PropertiesChanged",
+		p.conn.Emit(p.path, "org.freedesktop.DBus.Properties.PropertiesChanged",
 			iface, map[string]dbus.Variant{}, []string{property})
 	case EmitTrue:
-		return p.conn.Emit(p.path, "org.freedesktop.DBus.Properties.PropertiesChanged",
+		p.conn.Emit(p.path, "org.freedesktop.DBus.Properties.PropertiesChanged",
 			iface, map[string]dbus.Variant{property: dbus.MakeVariant(v)},
 			[]string{})
 	default:
@@ -268,9 +251,7 @@ func (p *Properties) Set(iface, property string, newv dbus.Variant) *dbus.Error 
 			return err
 		}
 	}
-	if err := p.set(iface, property, newv.Value()); err != nil {
-		return dbus.MakeFailedError(err)
-	}
+	p.set(iface, property, newv.Value())
 	return nil
 }
 
@@ -278,8 +259,6 @@ func (p *Properties) Set(iface, property string, newv dbus.Variant) *dbus.Error 
 // the property name are invalid.
 func (p *Properties) SetMust(iface, property string, v interface{}) {
 	p.mut.Lock()
-	defer p.mut.Unlock() // unlock in case of panic
-	if err := p.set(iface, property, v); err != nil {
-		panic(err)
-	}
+	p.set(iface, property, v)
+	p.mut.Unlock()
 }
