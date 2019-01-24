@@ -254,7 +254,7 @@ func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy da
 	return
 }
 
-func (i *ipam) applyFloatingIPs(fips []FloatingIP) []*FloatingIP {
+func (i *ipam) applyFloatingIPs(fips []*FloatingIP) []*FloatingIP {
 	res := make(map[string]*FloatingIP, len(i.FloatingIPs))
 	for j := range i.FloatingIPs {
 		ofip := i.FloatingIPs[j]
@@ -280,7 +280,7 @@ func (i *ipam) applyFloatingIPs(fips []FloatingIP) []*FloatingIP {
 				}
 			}
 		} else {
-			res[fip.RoutableSubnet.String()] = &fips[j]
+			res[fip.RoutableSubnet.String()] = fips[j]
 		}
 	}
 

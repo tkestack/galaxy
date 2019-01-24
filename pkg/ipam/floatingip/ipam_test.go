@@ -121,7 +121,7 @@ func TestApplyFloatingIPs(t *testing.T) {
 	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
-	fips := []FloatingIP{}
+	fips := []*FloatingIP{}
 	fipStr := `[{
       "routableSubnet": "10.49.27.0/24",
       "ips": ["10.49.27.206", "10.49.27.215~10.49.27.219"],
@@ -181,20 +181,20 @@ func TestRaceCondition(t *testing.T) {
 	lock := sync.Mutex{}
 	wg := sync.WaitGroup{}
 	var ips []net.IP
-	for i, ipam := range ipams {
+	for i, m := range ipams {
 		wg.Add(1)
 		j := i
-		go func() {
+		go func(m *ipam) {
 			defer wg.Done()
 			keys := []string{fmt.Sprintf("pod%d", j*2), fmt.Sprintf("pod%d", j*2+1)}
-			allocated, err := ipam.allocate(keys)
+			allocated, err := m.allocate(keys)
 			if err != nil {
 				t.Fatal(err)
 			}
 			lock.Lock()
 			defer lock.Unlock()
 			ips = append(ips, allocated...)
-		}()
+		}(m)
 	}
 	wg.Wait()
 	if len(ips) != 14 {

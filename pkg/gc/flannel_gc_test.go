@@ -3,10 +3,11 @@ package gc
 import (
 	"testing"
 
+	"strings"
+
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 	"github.com/vishvananda/netlink"
-	"strings"
 )
 
 func TestCleanupVeth(t *testing.T) {
