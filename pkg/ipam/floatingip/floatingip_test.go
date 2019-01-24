@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	ipNet = &net.IPNet{net.IPv4(10, 173, 14, 0), net.IPv4Mask(255, 255, 255, 0)}
+	ipNet = &net.IPNet{IP: net.IPv4(10, 173, 14, 0), Mask: net.IPv4Mask(255, 255, 255, 0)}
 	ip    = net.IPv4(10, 173, 14, 1)
 )
 

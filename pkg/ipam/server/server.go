@@ -164,7 +164,6 @@ func newRecoder(kubeCfg *restclient.Config) (record.EventRecorder, error) {
 	eventBroadcaster.StartLogging(glog.Infof)
 	kubeClient, err := kubernetes.NewForConfig(kubeCfg)
 	if err != nil {
-		return nil, err
 		glog.Fatalf("Error building kubernetes clientset: %s", err.Error())
 	}
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})

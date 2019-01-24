@@ -87,7 +87,7 @@ func TestParseIPRange(t *testing.T) {
 }
 
 func TestIPNet(t *testing.T) {
-	ipNet := IPNet(net.IPNet{net.IPv4(192, 168, 0, 1), net.IPv4Mask(255, 255, 0, 0)})
+	ipNet := IPNet(net.IPNet{IP: net.IPv4(192, 168, 0, 1), Mask: net.IPv4Mask(255, 255, 0, 0)})
 	data, err := json.Marshal(&ipNet)
 	if err != nil {
 		t.Fatalf("data %s %v", string(data), err)
