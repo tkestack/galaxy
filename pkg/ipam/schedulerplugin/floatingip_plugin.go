@@ -389,7 +389,7 @@ func (p *FloatingIPPlugin) releaseIP(key string, reason string, pod *corev1.Pod)
 }
 
 func releaseIP(ipam floatingip.IPAM, key string, reason string) error {
-	ipInfo, err := ipam.QueryFirst(key)
+	ipInfo, err := ipam.First(key)
 	if err != nil {
 		return fmt.Errorf("failed to query floating ip of %s: %v", key, err)
 	}
@@ -400,7 +400,7 @@ func releaseIP(ipam floatingip.IPAM, key string, reason string) error {
 	if err := ipam.Release([]string{key}); err != nil {
 		return fmt.Errorf("failed to release floating ip of %s because of %s: %v", key, reason, err)
 	}
-	glog.Infof("[%s] released floating ip %s from %s because of %s", ipam.Name(), ipInfo.IP.String(), key, reason)
+	glog.Infof("[%s] released floating ip %s from %s because of %s", ipam.Name(), ipInfo.IPInfo.IP.String(), key, reason)
 	return nil
 }
 

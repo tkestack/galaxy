@@ -151,10 +151,10 @@ func TestFilter(t *testing.T) {
 	if err := fipPlugin.DeletePod(pod); err != nil {
 		t.Fatal(err)
 	}
-	if ipInfo, err := fipPlugin.ipam.QueryFirst(keyInDB(pod)); err != nil || ipInfo == nil {
+	if ipInfo, err := fipPlugin.ipam.First(keyInDB(pod)); err != nil || ipInfo == nil {
 		t.Fatal(err, ipInfo)
 	} else {
-		if ipInfo.IP.String() != "10.173.13.2/24" {
+		if ipInfo.IPInfo.IP.String() != "10.173.13.2/24" {
 			t.Fatal(ipInfo)
 		}
 	}

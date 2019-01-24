@@ -47,4 +47,4 @@ done
 
 # build galaxy
 echo "Building galaxy"
-go build -o bin/galaxy -v $PKG/cmd/galaxy
+go build -o bin/galaxy $flags $PKG/cmd/galaxy

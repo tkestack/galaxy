@@ -131,7 +131,7 @@ func (i *ipam) deleteUnScoped(ips []uint32) (int, error) {
 	})
 }
 
-func (i *ipam) findKeyOfIP(ip uint32) (database.FloatingIP, error) {
+func (i *ipam) findByIP(ip uint32) (database.FloatingIP, error) {
 	var fip database.FloatingIP
 	return fip, i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(i.TableName).Where(fmt.Sprintf("ip=%d", ip)).First(&fip).Error

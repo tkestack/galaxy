@@ -346,10 +346,11 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 }
 
 func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, pod *corev1.Pod) error {
-	storedKey, err := ipam.QueryByIP(ip)
+	fip, err := ipam.ByIP(ip)
 	if err != nil {
 		return err
 	}
+	storedKey := fip.Key
 	if storedKey != "" {
 		if storedKey != key {
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
@@ -363,14 +364,14 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, p
 	return nil
 }
 
+// syncPodAnnotation syncs pod's IPInfo annotation if the pod losts it
 func (p *FloatingIPPlugin) syncPodAnnotation(pod *corev1.Pod) error {
 	key := keyInDB(pod)
 	if dp := p.podBelongToDeployment(pod); dp != "" {
 		key = keyForDeploymentPod(pod, dp)
 	}
-	// create ipInfo annotation for gaiastack 2.6 pod
 	if pod.Annotations == nil || pod.Annotations[private.AnnotationKeyIPInfo] == "" {
-		ipInfo, err := p.ipam.QueryFirst(key)
+		ipInfo, err := p.ipam.First(key)
 		if err != nil {
 			return fmt.Errorf("failed to query ipInfo of %s", key)
 		}
@@ -392,7 +393,7 @@ func (p *FloatingIPPlugin) syncPodAnnotation(pod *corev1.Pod) error {
 				glog.Warningf("failed to update pod %s: %v", key, err)
 				return false, nil
 			}
-			glog.V(3).Infof("updated annotation %s=%s for old pod %s (created by gaiastack 2.6)", private.AnnotationKeyIPInfo, m[private.AnnotationKeyIPInfo], key)
+			glog.V(3).Infof("updated annotation %s=%s for pod %s", private.AnnotationKeyIPInfo, m[private.AnnotationKeyIPInfo], key)
 			return true, nil
 		}); err != nil {
 			// If fails to update, depending on resync to update
@@ -402,7 +403,7 @@ func (p *FloatingIPPlugin) syncPodAnnotation(pod *corev1.Pod) error {
 	return nil
 }
 
-// labelSubnet labels node which have floatingip configuration with labels network=floatingip
+// labelNodes labels node which have floatingip configuration with labels network=floatingip
 // TODO After we finally remove all old pods created by previous gaiastack which has network=floatingip node selector
 // we can remove all network=floatingip label from galaxy code
 func (p *FloatingIPPlugin) labelNodes() {
