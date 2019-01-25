@@ -47,7 +47,7 @@ func (g *Galaxy) startServer() error {
 		return fmt.Errorf("failed to listen on pod info socket: %v", err)
 	}
 	if err := os.Chmod(private.GalaxySocketPath, 0600); err != nil {
-		l.Close()
+		_ = l.Close()
 		return fmt.Errorf("failed to set pod info socket mode: %v", err)
 	}
 
@@ -69,7 +69,7 @@ func (g *Galaxy) cni(r *restful.Request, w *restful.Response) {
 		http.Error(w, fmt.Sprintf("err read body %v", err), http.StatusBadRequest)
 		return
 	}
-	defer r.Request.Body.Close()
+	defer r.Request.Body.Close() // nolint: errcheck
 	req, err := galaxyapi.CniRequestToPodRequest(data)
 	if err != nil {
 		glog.Warningf("bad request %v", err)
@@ -131,7 +131,7 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 			err = g.cleanupPortMapping(req)
 		}
 	} else {
-		err = fmt.Errorf("unkown command %s", req.Command)
+		err = fmt.Errorf("unknown command %s", req.Command)
 	}
 	return
 }

@@ -69,7 +69,7 @@ func loadFlannelSubnetEnv(fn string) (*subnetEnv, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer f.Close() // nolint: errcheck
 
 	se := &subnetEnv{}
 
@@ -123,7 +123,7 @@ func saveScratchNetConf(containerID string, netconf []byte) error {
 
 func consumeScratchNetConf(containerID string) ([]byte, error) {
 	path := filepath.Join(stateDir, containerID)
-	defer os.Remove(path)
+	defer os.Remove(path) // nolint: errcheck
 
 	return ioutil.ReadFile(path)
 }

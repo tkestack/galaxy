@@ -54,6 +54,7 @@ func grabIptablesLocks(lockfilePath string) (iptablesLocker, error) {
 	var success bool
 
 	l := &locker{}
+	// nolint: errcheck
 	defer func(l *locker) {
 		// Clean up immediately on failure
 		if !success {

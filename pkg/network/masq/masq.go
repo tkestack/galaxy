@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
-
 	"github.com/golang/glog"
 )
 
@@ -13,7 +12,9 @@ var masqChain = utiliptables.Chain("IP-MASQ-AGENT")
 
 func EnsureIPMasq(iptablesCli utiliptables.Interface) func() {
 	return func() {
-		iptablesCli.EnsureChain(utiliptables.TableNAT, masqChain)
+		if _, err := iptablesCli.EnsureChain(utiliptables.TableNAT, masqChain); err != nil {
+			glog.Errorf("failed ensure chain %v in nat table: %v", masqChain, err)
+		}
 		comment := "ip-masq-agent: ensure nat POSTROUTING directs all non-LOCAL destination traffic to our custom IP-MASQ-AGENT chain"
 		if _, err := iptablesCli.EnsureRule(utiliptables.Append, utiliptables.TableNAT, utiliptables.ChainPostrouting,
 			"-m", "comment", "--comment", comment,

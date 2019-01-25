@@ -532,6 +532,7 @@ func (runner *runner) checkRuleUsingCheck(args []string) (bool, error) {
 
 type operation string
 
+// nolint: deadcode,varcheck,staticcheck
 const (
 	opCreateChain operation = "-N"
 	opFlushChain  operation = "-F"

@@ -4,11 +4,10 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/golang/glog"
-
 	"git.code.oa.com/gaiastack/galaxy/pkg/galaxy"
 	"git.code.oa.com/gaiastack/galaxy/pkg/signal"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ldflags"
+	"github.com/golang/glog"
 )
 
 var (

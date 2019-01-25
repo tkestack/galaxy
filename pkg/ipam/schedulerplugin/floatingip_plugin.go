@@ -29,7 +29,6 @@ const (
 	deletedAndParentAppNotExistPod = "deletedAndParentAppNotExistPod"
 	deletedAndScaledDownSSPod      = "deletedAndScaledDownSSPod"
 	deletedAndScaledDownDpPod      = "deletedAndScaledDownDpPod"
-	evictedPod                     = "evictedPod"
 	deletedAndLabelMissMatchPod    = "deletedAndLabelMissMatchPod"
 )
 
@@ -93,7 +92,9 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		db:                db,
 	}
 	plugin.hasSecondIPConf.Store(false)
-	plugin.initSelector()
+	if err := plugin.initSelector(); err != nil {
+		glog.Fatal(err)
+	}
 	plugin.getDeployment = func(name, namespace string) (*appv1.Deployment, error) {
 		return plugin.DeploymentLister.Deployments(namespace).Get(name)
 	}

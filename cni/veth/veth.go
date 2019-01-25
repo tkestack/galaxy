@@ -7,8 +7,6 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/vishvananda/netlink"
-
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -16,6 +14,7 @@ import (
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/containernetworking/plugins/pkg/ipam"
 	"github.com/containernetworking/plugins/pkg/ns"
+	"github.com/vishvananda/netlink"
 )
 
 func init() {
@@ -94,6 +93,7 @@ func connectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, conf *Ve
 	if err != nil {
 		return err
 	}
+	// nolint: errcheck
 	defer func() {
 		if err != nil {
 			if host != nil {
@@ -114,7 +114,7 @@ func connectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, conf *Ve
 	if err != nil {
 		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
 	}
-	defer netns.Close()
+	defer netns.Close() // nolint: errcheck
 	// move sbox veth device to ns
 	if err = netlink.LinkSetNsFd(sbox, int(netns.Fd())); err != nil {
 		return fmt.Errorf("failed to move sbox device %q to netns: %v", sbox.Attrs().Name, err)

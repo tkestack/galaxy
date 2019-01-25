@@ -24,6 +24,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
+const MapStringStringType = "mapStringString"
+
 // WordSepNormalizeFunc changes all flags that contain "_" separators
 func WordSepNormalizeFunc(f *pflag.FlagSet, name string) pflag.NormalizedName {
 	if strings.Contains(name, "_") {

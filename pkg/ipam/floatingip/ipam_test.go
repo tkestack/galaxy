@@ -189,7 +189,7 @@ func TestRaceCondition(t *testing.T) {
 			keys := []string{fmt.Sprintf("pod%d", j*2), fmt.Sprintf("pod%d", j*2+1)}
 			allocated, err := m.allocate(keys)
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 			lock.Lock()
 			defer lock.Unlock()
@@ -520,7 +520,7 @@ func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	if err != nil || ipInfo.IPInfo.IP == nil {
 		t.Fatalf("err %v ipInfo %v", err, ipInfo)
 	}
-	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: IP:179113218 Key:pod3 Subnet:10.173.13.0/24 Policy:0 Attr:}}" {
+	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: Key:pod3 Subnet:10.173.13.0/24 Attr: IP:179113218 Policy:0}}" {
 		t.Error(fmt.Sprintf("%+v", ipInfo))
 	}
 
@@ -531,7 +531,7 @@ func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	if err != nil || ipInfo.IPInfo.IP == nil {
 		t.Fatalf("err %v ipInfo %v", err, ipInfo)
 	}
-	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: IP:179113218 Key:pod3 Subnet:10.173.13.0/24 Policy:2 Attr:111}}" {
+	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: Key:pod3 Subnet:10.173.13.0/24 Attr:111 IP:179113218 Policy:2}}" {
 		t.Error(fmt.Sprintf("%+v", ipInfo))
 	}
 }

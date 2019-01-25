@@ -10,11 +10,15 @@ import (
 	"strings"
 	"time"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"github.com/golang/glog"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/util/wait"
+)
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
+const (
+	ContainerExited = "exited"
+	ContainerDead   = "dead"
 )
 
 var (
@@ -106,7 +110,7 @@ func (gc *flannelGC) cleanupIP() error {
 				glog.Warningf("Error inspect container %s: %v", containerId, err)
 			}
 		} else {
-			if c.State != nil && (c.State.Status == "exited" || c.State.Status == "dead") {
+			if c.State != nil && (c.State.Status == ContainerExited || c.State.Status == ContainerDead) {
 				glog.Infof("container %s(%s) exited %s", c.ID, c.Name, c.State.Status)
 				removeLeakyIPFile(ipFile, containerId)
 			}
@@ -139,7 +143,7 @@ func (gc *flannelGC) cleanupGCDirs() error {
 					glog.Warningf("Error inspect container %s: %v", fi.Name(), err)
 				}
 			} else {
-				if c.State != nil && (c.State.Status == "exited" || c.State.Status == "dead") {
+				if c.State != nil && (c.State.Status == ContainerExited || c.State.Status == ContainerDead) {
 					glog.Infof("container %s(%s) exited %s", c.ID, c.Name, c.State.Status)
 					gc.removeLeakyStateFile(file)
 				}
@@ -177,7 +181,7 @@ func (gc *flannelGC) cleanupVeth() error {
 				}
 			}
 		} else {
-			if c.State != nil && (c.State.Status == "exited" || c.State.Status == "dead") {
+			if c.State != nil && (c.State.Status == ContainerExited || c.State.Status == ContainerDead) {
 				glog.Infof("container %s(%s) exited %s, should remove link %s", c.ID, c.Name, c.State.Status, link.Attrs().Name)
 				if err = netlink.LinkDel(link); err != nil {
 					glog.Warningf("failed remove link %s: %v; try next time", link.Attrs().Name, err)

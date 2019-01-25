@@ -69,14 +69,14 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return fmt.Errorf("failed to open netns %q: %v", netns, err)
 	}
-	defer netns.Close()
+	defer netns.Close() // nolint: errcheck
 
 	if err := setupVF(conf, result020, args.IfName, int(vlanIds[0]), netns); err != nil {
 		return err
 	}
 	//send Gratuitous ARP to let switch knows IP floats onto this node
 	//ignore errors as we can't print logs and we do this as best as we can
-	utils.SendGratuitousARP(args.IfName, result020.IP4.IP.IP.String(), args.Netns)
+	_ = utils.SendGratuitousARP(args.IfName, result020.IP4.IP.IP.String(), args.Netns)
 	result020.DNS = conf.DNS
 	return result020.Print()
 }
@@ -86,7 +86,7 @@ func cmdDel(args *skel.CmdArgs) error {
 	if err != nil {
 		return fmt.Errorf("failed to open netns %q: %v", netns, err)
 	}
-	defer netns.Close()
+	defer netns.Close() // nolint: errcheck
 
 	if err = releaseVF(args.IfName, netns); err != nil {
 		return err
@@ -168,7 +168,7 @@ func setupVF(conf *NetConf, result *t020.Result, podifName string, vlan int, net
 
 	// VF NIC name
 	if len(infos) != 1 {
-		return fmt.Errorf("no virutal network resources avaiable for the %q", conf.Device)
+		return fmt.Errorf("no virtual network resources available for the %q", conf.Device)
 	}
 	vfName := infos[0].Name()
 
@@ -206,7 +206,9 @@ func setupVF(conf *NetConf, result *t020.Result, podifName string, vlan int, net
 			if err == nil {
 				selectedCPU := fmt.Sprintf("%d", hiNum%cpus)
 				irqFile := fmt.Sprintf("/proc/irq/%d/smp_affinity_list", hiNum)
-				ioutil.WriteFile(irqFile, []byte(selectedCPU), 0644)
+				if err = ioutil.WriteFile(irqFile, []byte(selectedCPU), 0644); err != nil {
+					return fmt.Errorf("failed set irq smp affinity: %v", err)
+				}
 			}
 		}
 	}

@@ -3,11 +3,10 @@ package floatingip
 import (
 	"fmt"
 
-	"github.com/golang/glog"
-	"github.com/jinzhu/gorm"
-
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
+	"github.com/golang/glog"
+	"github.com/jinzhu/gorm"
 )
 
 var (

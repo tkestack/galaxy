@@ -43,6 +43,7 @@ func setArg(expect string, file string, quit <-chan struct{}) {
 	}, interval, quit)
 }
 
+// nolint: deadcode
 func remountSysfs() error {
 	if err := syscall.Mount("", "/", "none", syscall.MS_SLAVE|syscall.MS_REC, ""); err != nil {
 		return err

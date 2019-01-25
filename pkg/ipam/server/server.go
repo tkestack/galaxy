@@ -192,7 +192,7 @@ func (s *Server) filter(request *restful.Request, response *restful.Response) {
 	args := new(schedulerapi.ExtenderArgs)
 	if err := request.ReadEntity(&args); err != nil {
 		glog.Error(err)
-		response.WriteError(http.StatusInternalServerError, err)
+		_ = response.WriteError(http.StatusInternalServerError, err)
 		return
 	}
 	glog.V(4).Infof("POST filter %v", *args)
@@ -202,7 +202,7 @@ func (s *Server) filter(request *restful.Request, response *restful.Response) {
 	if err != nil {
 		errStr = err.Error()
 	}
-	response.WriteEntity(schedulerapi.ExtenderFilterResult{
+	_ = response.WriteEntity(schedulerapi.ExtenderFilterResult{
 		Nodes:       args.Nodes,
 		FailedNodes: failedNodesMap,
 		Error:       errStr,
@@ -213,7 +213,7 @@ func (s *Server) priority(request *restful.Request, response *restful.Response) 
 	args := new(schedulerapi.ExtenderArgs)
 	if err := request.ReadEntity(&args); err != nil {
 		glog.Error(err)
-		response.WriteError(http.StatusInternalServerError, err)
+		_ = response.WriteError(http.StatusInternalServerError, err)
 		return
 	}
 	glog.V(4).Infof("POST priority %v", *args)
@@ -221,14 +221,14 @@ func (s *Server) priority(request *restful.Request, response *restful.Response) 
 	if err != nil {
 		glog.Warningf("prioritize err: %v", err)
 	}
-	response.WriteEntity(*hostPriorityList)
+	_ = response.WriteEntity(*hostPriorityList)
 }
 
 func (s *Server) bind(request *restful.Request, response *restful.Response) {
 	args := new(schedulerapi.ExtenderBindingArgs)
 	if err := request.ReadEntity(&args); err != nil {
 		glog.Error(err)
-		response.WriteError(http.StatusInternalServerError, err)
+		_ = response.WriteError(http.StatusInternalServerError, err)
 		return
 	}
 	glog.V(4).Infof("POST bind %v", *args)
@@ -238,10 +238,10 @@ func (s *Server) bind(request *restful.Request, response *restful.Response) {
 		glog.Warningf("bind err: %v", err)
 		result.Error = err.Error()
 	}
-	response.WriteEntity(result)
+	_ = response.WriteEntity(result)
 }
 
 func (s *Server) healthy(request *restful.Request, response *restful.Response) {
 	response.WriteHeader(http.StatusOK)
-	response.Write([]byte("ok"))
+	_, _ = response.Write([]byte("ok"))
 }
