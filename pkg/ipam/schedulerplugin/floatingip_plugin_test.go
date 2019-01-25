@@ -4,21 +4,36 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
+	"github.com/jinzhu/gorm"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes/fake"
+	fakeV1 "k8s.io/client-go/kubernetes/typed/core/v1/fake"
 )
 
 const (
 	nodeUnlabeld, nodeHasNoIP, node3, node4 = "node1", "node2", "node3", "node4"
+)
+
+var (
+	objectLabel    = map[string]string{private.LabelKeyNetworkType: private.LabelValueNetworkTypeFloatingIP}
+	secondIPLabel  = map[string]string{private.LabelKeyNetworkType: private.LabelValueNetworkTypeFloatingIP, private.LabelKeyEnableSecondIP: private.LabelValueEnabled}
+	immutableLabel = map[string]string{private.LabelKeyNetworkType: private.LabelValueNetworkTypeFloatingIP, private.LabelKeyFloatingIP: private.LabelValueImmutable}
+	nodeLabel      = map[string]string{private.LabelKeyNetworkType: private.NodeLabelValueNetworkTypeFloatingIP}
 )
 
 func TestFilter(t *testing.T) {
@@ -30,46 +45,13 @@ func TestFilter(t *testing.T) {
 	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
 		t.Fatal(err)
 	}
-	fipPlugin, err := NewFloatingIPPlugin(conf, &PluginFactoryArgs{
-		PodHasSynced: func() bool { return false },
-	})
-	if err != nil {
-		if strings.Contains(err.Error(), "Failed to open") {
-			t.Skipf("skip testing db due to %q", err.Error())
-		}
-		t.Fatal(err)
-	}
-	if err = fipPlugin.Init(); err != nil {
-		t.Fatal(err)
-	}
-	nodeLabel := make(map[string]string)
-	nodeLabel[private.LabelKeyNetworkType] = private.NodeLabelValueNetworkTypeFloatingIP
-	objectLabel := make(map[string]string)
-	objectLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
-	immutableLabel := make(map[string]string)
-	immutableLabel[private.LabelKeyFloatingIP] = private.LabelValueImmutable
-	immutableLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
+	fipPlugin, stopChan := newPlugin(t, conf)
+	defer func() { stopChan <- struct{}{} }()
 	nodes := []corev1.Node{
-		// no floating ip label node
-		{
-			ObjectMeta: v1.ObjectMeta{Name: nodeUnlabeld},
-			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.49.27.2"}}},
-		},
-		// no floating ip configured for this node
-		{
-			ObjectMeta: v1.ObjectMeta{Name: nodeHasNoIP, Labels: nodeLabel},
-			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.48.27.2"}}},
-		},
-		// good node
-		{
-			ObjectMeta: v1.ObjectMeta{Name: node3, Labels: nodeLabel},
-			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.49.27.3"}}},
-		},
-		// good node
-		{
-			ObjectMeta: v1.ObjectMeta{Name: node4, Labels: nodeLabel},
-			Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.173.13.4"}}},
-		},
+		createNode(nodeUnlabeld, nil, "10.49.27.2"),      // no floating ip label node
+		createNode(nodeHasNoIP, nodeLabel, "10.49.27.2"), // no floating ip configured for this node
+		createNode(node3, nodeLabel, "10.49.27.3"),       // good node
+		createNode(node4, nodeLabel, "10.173.13.4"),      // good node
 	}
 	_, subnet1, _ := net.ParseCIDR("10.49.27.0/24")
 	_, subnet2, _ := net.ParseCIDR("10.48.27.0/24")
@@ -351,6 +333,13 @@ func createPod(name, namespace string, labels map[string]string) *corev1.Pod {
 	return &corev1.Pod{ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels}}
 }
 
+func createNode(name string, labels map[string]string, address string) corev1.Node {
+	return corev1.Node{
+		ObjectMeta: v1.ObjectMeta{Name: name, Labels: labels},
+		Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: address}}},
+	}
+}
+
 func TestResolveAppPodName(t *testing.T) {
 	tests := map[string][]string{"default_fip-0": {"default", "fip", "0"}, "kube-system_fip-bj-111": {"kube-system", "fip-bj", "111"}, "_deployment_default_dp1_dp1-rs1-pod1": {"", "", ""}}
 	for k, v := range tests {
@@ -377,5 +366,138 @@ func TestResolveAppPodName(t *testing.T) {
 		if podId != v[2] {
 			t.Fatal(podId)
 		}
+	}
+}
+
+func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFactoryArgs, chan struct{}) {
+	client := fake.NewSimpleClientset(objs...)
+	informerFactory := informers.NewFilteredSharedInformerFactory(client, time.Minute, v1.NamespaceAll, nil)
+	podInformer := informerFactory.Core().V1().Pods()
+	statefulsetInformer := informerFactory.Apps().V1().StatefulSets()
+	deploymentInformer := informerFactory.Apps().V1().Deployments()
+	stopChan := make(chan struct{})
+	go func() {
+		informerFactory.Start(stopChan)
+	}()
+	pluginArgs := &PluginFactoryArgs{
+		PodLister:         podInformer.Lister(),
+		StatefulSetLister: statefulsetInformer.Lister(),
+		DeploymentLister:  deploymentInformer.Lister(),
+		Client:            client,
+		PodHasSynced:      podInformer.Informer().HasSynced,
+		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
+		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
+	}
+	if err := wait.PollImmediate(time.Millisecond*100, 20*time.Second, func() (done bool, err error) {
+		return pluginArgs.PodHasSynced(), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return pluginArgs, stopChan
+}
+
+func newPlugin(t *testing.T, conf Conf, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}) {
+	pluginArgs, stopChan := createPluginFactoryArgs(t, objs...)
+	fipPlugin, err := NewFloatingIPPlugin(conf, pluginArgs)
+	if err != nil {
+		if strings.Contains(err.Error(), "Failed to open") {
+			t.Skipf("skip testing db due to %q", err.Error())
+		}
+		t.Fatal(err)
+	}
+	if err := fipPlugin.db.Transaction(func(tx *gorm.DB) error {
+		return tx.Exec(fmt.Sprintf("TRUNCATE %s;", database.DefaultFloatingipTableName)).Error
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err = fipPlugin.Init(); err != nil {
+		t.Fatal(err)
+	}
+	return fipPlugin, stopChan
+}
+
+func TestLoadConfigMap(t *testing.T) {
+	pod1 := createPod("pod1", "demo", objectLabel)
+	pod2 := createPod("pod1", "demo", secondIPLabel) // want second ips
+	cm := &corev1.ConfigMap{
+		ObjectMeta: v1.ObjectMeta{Name: "testConf", Namespace: "demo"},
+		Data: map[string]string{
+			"key": `[{"routableSubnet":"10.49.27.0/24","ips":["10.49.27.216~10.49.27.218"],"subnet":"10.49.27.0/24","gateway":"10.49.27.1","vlan":2}]`,
+		},
+	}
+	var conf Conf
+	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
+		t.Fatal(err)
+	}
+	conf.FloatingIPs = nil
+	conf.ConfigMapName = cm.Name
+	conf.ConfigMapNamespace = cm.Namespace
+	conf.FloatingIPKey = "key"
+	fipPlugin, stopChan := newPlugin(t, conf, cm)
+	defer func() { stopChan <- struct{}{} }()
+	if fipPlugin.lastIPConf != cm.Data["key"] {
+		t.Errorf(fipPlugin.lastIPConf)
+	}
+	if fipPlugin.enabledSecondIP(pod1) || fipPlugin.enabledSecondIP(pod2) {
+		t.Error("plugin has no second ip configs")
+	}
+
+	// test secondips
+	cm.Data["secondKey"] = `[{"routableSubnet":"10.173.13.0/24","ips":["10.173.13.15"],"subnet":"10.173.13.0/24","gateway":"10.173.13.1"}]`
+	conf.SecondFloatingIPKey = "secondKey"
+	fipPlugin, stopChan2 := newPlugin(t, conf, cm)
+	defer func() { stopChan2 <- struct{}{} }()
+	if fipPlugin.lastIPConf != cm.Data["key"] {
+		t.Errorf(fipPlugin.lastIPConf)
+	}
+	if fipPlugin.lastSecondIPConf != cm.Data["secondKey"] {
+		t.Errorf(fipPlugin.lastIPConf)
+	}
+	if fipPlugin.enabledSecondIP(pod1) || !fipPlugin.enabledSecondIP(pod2) {
+		t.Error("pod1 doesn't want second ip, but pod2 does")
+	}
+}
+
+func TestBind(t *testing.T) {
+	database.ForceSequential <- true
+	defer func() {
+		<-database.ForceSequential
+	}()
+	node := createNode("node1", nil, "10.49.27.2")
+	pod1 := createPod("pod1", "demo", objectLabel)
+	var conf Conf
+	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
+		t.Fatal(err)
+	}
+	fipPlugin, stopChan := newPlugin(t, conf, pod1, &node)
+	defer func() { stopChan <- struct{}{} }()
+	if err := fipPlugin.Bind(&schedulerapi.ExtenderBindingArgs{
+		PodName:      pod1.Name,
+		PodNamespace: pod1.Namespace,
+		Node:         node.Name,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fakePods := fipPlugin.PluginFactoryArgs.Client.CoreV1().Pods(pod1.Namespace).(*fakeV1.FakePods)
+
+	actualBinding, err := fakePods.GetBinding(pod1.GetName())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+		return
+	}
+	expect := &corev1.Binding{
+		ObjectMeta: v1.ObjectMeta{
+			Namespace: pod1.Namespace, Name: pod1.Name,
+			Annotations: map[string]string{
+				private.AnnotationKeyIPInfo: `{"ip":"10.49.27.205/24","vlan":2,"gateway":"10.49.27.1","routable_subnet":"10.49.27.0/24"}`}},
+		Target: corev1.ObjectReference{
+			Kind: "Node",
+			Name: node.Name,
+		},
+	}
+	if !reflect.DeepEqual(expect, actualBinding) {
+		t.Errorf("Binding did not match expectation")
+		t.Logf("Expected: %v", expect)
+		t.Logf("Actual:   %v", actualBinding)
 	}
 }

@@ -59,6 +59,7 @@ type FloatingIPPlugin struct {
 	hasSecondIPConf              atomic.Value
 	getDeployment                func(name, namespace string) (*appv1.Deployment, error)
 	dpLock                       sync.Mutex
+	db                           *database.DBRecorder //for testing
 }
 
 func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin, error) {
@@ -89,6 +90,7 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		PluginFactoryArgs: args,
 		conf:              &conf,
 		unreleased:        make(chan *corev1.Pod, 10),
+		db:                db,
 	}
 	plugin.hasSecondIPConf.Store(false)
 	plugin.initSelector()
@@ -159,7 +161,6 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 	cm, err := p.Client.CoreV1().ConfigMaps(p.conf.ConfigMapNamespace).Get(p.conf.ConfigMapName, v1.GetOptions{})
 	if err != nil {
 		return false, fmt.Errorf("failed to get floatingip configmap %s_%s: %v", p.conf.ConfigMapName, p.conf.ConfigMapNamespace, err)
-
 	}
 	val, ok := cm.Data[p.conf.FloatingIPKey]
 	if !ok {
@@ -169,6 +170,9 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 		return false, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
 	secondVal, ok := cm.Data[p.conf.SecondFloatingIPKey]
+	if !ok {
+		return true, nil
+	}
 	if err = ensureIPAMConf(p.secondIPAM, &p.lastSecondIPConf, secondVal); err != nil {
 		return false, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 	}
@@ -340,6 +344,9 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 		}
 	} else {
 		subnet, err := p.queryNodeSubnet(nodeName)
+		if err != nil {
+			return nil, err
+		}
 		_, err = ipam.AllocateInSubnet(key, subnet, policy, attr)
 		if err != nil {
 			// return this error directly, invokers depend on the error type if it is ErrNoEnoughIP

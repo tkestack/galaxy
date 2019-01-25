@@ -7,7 +7,7 @@ import (
 )
 
 type PluginFactoryArgs struct {
-	Client            *kubernetes.Clientset
+	Client            kubernetes.Interface
 	PodLister         corev1lister.PodLister
 	StatefulSetLister appv1.StatefulSetLister
 	DeploymentLister  appv1.DeploymentLister
