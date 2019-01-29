@@ -20,7 +20,7 @@ func (h *PortMappingHandler) OpenHostports(podFullName string, randomPortMapping
 		}
 		hp := hostport{
 			port:     k8sPorts[i].HostPort,
-			protocol: strings.ToLower(string(k8sPorts[i].Protocol)),
+			protocol: strings.ToLower(k8sPorts[i].Protocol),
 		}
 		// we bind to :0 if portmapping == true && hostport == 0 which asks kernel to allocate an unused port from its ip_local_port_range
 		socket, err := openLocalPort(&hp)

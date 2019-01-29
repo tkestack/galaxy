@@ -60,7 +60,7 @@ func (dev *device) processNeighMsg(msg syscall.NetlinkMessage) {
 	}
 	log.V(1).Infof("receiving neigh msg %#v, neigh %#v", msg, neigh)
 
-	if int(neigh.LinkIndex) != dev.l.Attrs().Index {
+	if neigh.LinkIndex != dev.l.Attrs().Index {
 		log.Infof("ignore neigh msg from kernel %#v: not equal device id %d", neigh, dev.l.Attrs().Index)
 		return
 	}

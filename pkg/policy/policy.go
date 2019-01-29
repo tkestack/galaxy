@@ -118,7 +118,7 @@ func (p *PolicyManager) startPodInformerFactory() {
 		p.namespaceLister = namespaceInformer.Lister()
 		go p.podInformerFactory.Start(p.quitChan)
 		// wait for syncing pods
-		wait.PollInfinite(time.Second, func() (done bool, err error) {
+		_ = wait.PollInfinite(time.Second, func() (done bool, err error) {
 			return p.podCachedInformer.HasSynced() && namespaceCachedInformer.HasSynced(), nil
 		})
 	})
@@ -503,7 +503,7 @@ func (p *PolicyManager) syncRules(polices []policy) error {
 			}
 		}
 	}
-
+	// nolint: errcheck
 	defer func() {
 		// clean up stale ipsets after iptables referencing these ipsets are deleted
 		for _, name := range ipsets {
@@ -520,7 +520,7 @@ func (p *PolicyManager) syncRules(polices []policy) error {
 	iptablesSaveRaw := bytes.NewBuffer(nil)
 	// Get iptables-save output so we can check for existing chains and rules.
 	// This will be a map of chain name to chain with rules as stored in iptables-save/iptables-restore
-	existingChains := make(map[utiliptables.Chain]string)
+	existingChains := make(map[utiliptables.Chain]string) // nolint: staticcheck
 	if err := p.iptableHandle.SaveInto(utiliptables.TableFilter, iptablesSaveRaw); err != nil {
 		return fmt.Errorf("Failed to execute iptables-save, syncing all rules: %v", err)
 	} else { // otherwise parse the output

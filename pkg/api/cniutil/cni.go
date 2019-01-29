@@ -245,7 +245,7 @@ func SaveNetworkInfo(containerID string, info NetworkInfo) error {
 func ConsumeNetworkInfo(containerID string) (NetworkInfo, error) {
 	m := make(map[string]map[string]string)
 	path := filepath.Join(stateDir, containerID)
-	defer os.Remove(path)
+	defer os.Remove(path) // nolint: errcheck
 
 	data, err := ioutil.ReadFile(path)
 	if err != nil {

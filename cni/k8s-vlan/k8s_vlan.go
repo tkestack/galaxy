@@ -77,7 +77,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		if err := utils.MacVlanConnectsHostWithContainer(result020s[0], args, d.DeviceIndex); err != nil {
 			return err
 		}
-		utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
+		_ = utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
 	} else if d.IPVlanMode() {
 		if err := d.MaybeCreateVlanDevice(vlanIds[0]); err != nil {
 			return err
@@ -85,7 +85,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		if err := utils.IPVlanConnectsHostWithContainer(result020s[0], args, d.DeviceIndex); err != nil {
 			return err
 		}
-		utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
+		_ = utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
 	} else {
 		ifName := args.IfName
 		ifIndex := 0
@@ -109,14 +109,14 @@ func cmdAdd(args *skel.CmdArgs) error {
 			if err := utils.VethConnectsHostWithContainer(result020, args, bridgeName, suffix); err != nil {
 				return err
 			}
-			utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
+			_ = utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
 		}
 		args.IfName = ifName
 	}
 	//send Gratuitous ARP to let switch knows IP floats onto this node
 	//ignore errors as we can't print logs and we do this as best as we can
 	if d.PureMode() {
-		utils.SendGratuitousARP(d.Device, result020s[0].IP4.IP.IP.String(), "")
+		_ = utils.SendGratuitousARP(d.Device, result020s[0].IP4.IP.IP.String(), "")
 	}
 	result020s[0].DNS = conf.DNS
 	return result020s[0].Print()

@@ -7,11 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/vishvananda/netlink"
-
 	"git.code.oa.com/gaiastack/galaxy/pkg/network"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/types"
+	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 )
 
@@ -125,7 +124,7 @@ func (d *VlanDriver) Init() error {
 		defer func() {
 			if err != nil {
 				for i := range rs {
-					netlink.RouteAdd(&rs[i])
+					_ = netlink.RouteAdd(&rs[i])
 				}
 			}
 		}()
@@ -133,11 +132,10 @@ func (d *VlanDriver) Init() error {
 			if err = netlink.AddrDel(device, &filteredAddr[i]); err != nil {
 				return fmt.Errorf("Failed to remove v4address from device %s: %v", d.Device, err)
 			}
+			// nolint: errcheck
 			defer func() {
 				if err != nil {
-					if err = netlink.AddrAdd(device, &filteredAddr[i]); err != nil {
-						//glog.Warningf("Failed to rollback v4address to device %s: %v, address %v", device, err, v4Addr[0])
-					}
+					netlink.AddrAdd(device, &filteredAddr[i])
 				}
 			}()
 			filteredAddr[i].Label = ""

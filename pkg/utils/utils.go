@@ -74,7 +74,7 @@ func genMAC(ip net.IP) net.HardwareAddr {
 	hw[1] = 0x42
 	// Fill the remaining 4 bytes based on the input
 	if ip == nil {
-		rand.Read(hw[2:])
+		rand.Read(hw[2:]) // nolint: errcheck
 	} else {
 		copy(hw[2:], ip.To4())
 	}
@@ -130,7 +130,7 @@ func DeleteVeth(netnsPath, ifName string) error {
 		}
 		return fmt.Errorf("failed to open netns %q: %v", netnsPath, err)
 	}
-	defer netns.Close()
+	defer netns.Close() // nolint: errcheck
 
 	return netns.Do(func(_ ns.NetNS) error {
 		// get sbox device
@@ -174,7 +174,7 @@ func DeleteAllVeth(netnsPath string) error {
 		}
 		return fmt.Errorf("failed to open netns %q: %v", netnsPath, err)
 	}
-	defer netns.Close()
+	defer netns.Close() // nolint: errcheck
 
 	return netns.Do(func(_ ns.NetNS) error {
 		links, err := netlink.LinkList()
@@ -188,9 +188,7 @@ func DeleteAllVeth(netnsPath string) error {
 			// shutdown sbox device
 			if err = netlink.LinkSetDown(link); err != nil {
 				err = fmt.Errorf("failed to down sbox device %q: %v", link.Attrs().Name, err)
-			}
-
-			if err = netlink.LinkDel(link); err != nil {
+			} else if err = netlink.LinkDel(link); err != nil {
 				err = fmt.Errorf("failed to delete sbox device %q: %v", link.Attrs().Name, err)
 			}
 		}
@@ -247,6 +245,7 @@ func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, brid
 	if err != nil {
 		return err
 	}
+	// nolint: errcheck
 	defer func() {
 		if err != nil {
 			if host != nil {
@@ -299,7 +298,7 @@ func SendGratuitousARP(dev, ip, nns string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open netns %q: %v", nns, err)
 	}
-	defer netns.Close()
+	defer netns.Close() // nolint: errcheck
 	return netns.Do(func(_ ns.NetNS) error {
 		_, err = command.CombinedOutput()
 		return err
@@ -319,6 +318,7 @@ func MacVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, p
 	if err := netlink.LinkAdd(macVlan); err != nil {
 		return err
 	}
+	// nolint: errcheck
 	defer func() {
 		if err != nil {
 			netlink.LinkDel(macVlan)
@@ -343,6 +343,7 @@ func IPVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, pa
 	if err := netlink.LinkAdd(ipVlan); err != nil {
 		return err
 	}
+	// nolint: errcheck
 	defer func() {
 		if err != nil {
 			netlink.LinkDel(ipVlan)
@@ -368,7 +369,7 @@ func configSboxDevice(result *t020.Result, args *skel.CmdArgs, sbox netlink.Link
 	if err != nil {
 		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
 	}
-	defer netns.Close()
+	defer netns.Close() // nolint: errcheck
 	// move sbox device to ns
 	if err = netlink.LinkSetNsFd(sbox, int(netns.Fd())); err != nil {
 		return fmt.Errorf("failed to move sbox device %q to netns: %v", sbox.Attrs().Name, err)

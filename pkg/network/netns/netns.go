@@ -10,6 +10,7 @@ import (
 	"github.com/vishvananda/netns"
 )
 
+// nolint: errcheck
 func NsInvoke(f func()) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -35,6 +36,7 @@ func NsInvoke(f func()) {
 	netns.Set(origns)
 }
 
+// nolint: errcheck
 func InvokeIn(nsFile string, f func()) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -60,6 +62,7 @@ func InvokeIn(nsFile string, f func()) {
 	netns.Set(origns)
 }
 
+// nolint: errcheck
 func NewContainerForTest() func() {
 	runtime.LockOSThread()
 	originmnt, err := GetMntNS()

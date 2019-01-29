@@ -73,7 +73,7 @@ func (m *LangleSeparatedMapStringString) Set(value string) error {
 
 // Type implements github.com/spf13/pflag.Value
 func (*LangleSeparatedMapStringString) Type() string {
-	return "mapStringString"
+	return MapStringStringType
 }
 
 // Empty implements OmitEmpty

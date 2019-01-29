@@ -10,7 +10,7 @@ import (
 
 func BlockSignalHandler(f func()) {
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	// Block until a signal is received.
 	sig := <-c

@@ -62,7 +62,7 @@ func (p *cniPlugin) doCNI(url string, req *galaxyapi.CNIRequest) ([]byte, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send CNI request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() // nolint: errcheck
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {

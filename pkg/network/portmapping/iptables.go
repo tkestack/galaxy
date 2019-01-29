@@ -47,7 +47,7 @@ func (h *PortMappingHandler) SetupPortMapping(ports []k8s.Port) error {
 	writeLine(natChains, "*nat")
 
 	for _, containerPort := range ports {
-		protocol := strings.ToLower(string(containerPort.Protocol))
+		protocol := strings.ToLower(containerPort.Protocol)
 		hostportChain := hostportChainName(containerPort, containerPort.PodName)
 		// write chain name
 		writeLine(natChains, utiliptables.MakeChainLine(hostportChain))
@@ -111,7 +111,7 @@ func (h *PortMappingHandler) CleanPortMapping(ports []k8s.Port) {
 	writeLine(natChains, "*nat")
 
 	for _, containerPort := range ports {
-		protocol := strings.ToLower(string(containerPort.Protocol))
+		protocol := strings.ToLower(containerPort.Protocol)
 		hostportChain := hostportChainName(containerPort, containerPort.PodName)
 		// write chain name
 		writeLine(natChains, utiliptables.MakeChainLine(hostportChain))
@@ -155,7 +155,7 @@ func (h *PortMappingHandler) SetupPortMappingForAllPods(ports []k8s.Port) error 
 	iptablesSaveRaw := bytes.NewBuffer(nil)
 	// Get iptables-save output so we can check for existing chains and rules.
 	// This will be a map of chain name to chain with rules as stored in iptables-save/iptables-restore
-	existingNATChains := make(map[utiliptables.Chain]string)
+	existingNATChains := make(map[utiliptables.Chain]string) // nolint: staticcheck
 	err := h.Interface.SaveInto(utiliptables.TableNAT, iptablesSaveRaw)
 	if err != nil { // if we failed to get any rules
 		return fmt.Errorf("Failed to execute iptables-save, syncing all rules: %v", err)
@@ -178,7 +178,7 @@ func (h *PortMappingHandler) SetupPortMappingForAllPods(ports []k8s.Port) error 
 	activeNATChains := map[utiliptables.Chain]bool{} // use a map as a set
 
 	for _, containerPort := range ports {
-		protocol := strings.ToLower(string(containerPort.Protocol))
+		protocol := strings.ToLower(containerPort.Protocol)
 		hostportChain := hostportChainName(containerPort, containerPort.PodName)
 		if chain, ok := existingNATChains[hostportChain]; ok {
 			writeLine(natChains, chain)
@@ -254,7 +254,7 @@ func writeLine(buf *bytes.Buffer, words ...string) {
 // this because IPTables Chain Names must be <= 28 chars long, and the longer
 // they are the harder they are to read.
 func hostportChainName(port k8s.Port, podFullName string) utiliptables.Chain {
-	hash := sha256.Sum256([]byte(strconv.Itoa(int(port.HostPort)) + string(port.Protocol) + strconv.Itoa(int(port.ContainerPort)) + podFullName))
+	hash := sha256.Sum256([]byte(strconv.Itoa(int(port.HostPort)) + port.Protocol + strconv.Itoa(int(port.ContainerPort)) + podFullName))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return utiliptables.Chain(kubeHostportChainPrefix + encoded[:16])
 }

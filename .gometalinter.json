@@ -1,0 +1,18 @@
+{
+  "Enable": [
+    "deadcode",
+    "vet",
+    "unconvert",
+    "varcheck",
+    "structcheck",
+    "maligned",
+    "errcheck",
+    "goconst",
+    "ineffassign",
+    "gofmt",
+    "goimports",
+    "misspell",
+    "staticcheck"
+  ],
+  "Deadline": "10m"
+}

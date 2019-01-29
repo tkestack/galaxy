@@ -100,7 +100,7 @@ func getFlannelSubnet(fn string) (*net.IPNet, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer f.Close() // nolint: errcheck
 	s := bufio.NewScanner(f)
 	for s.Scan() {
 		parts := strings.SplitN(s.Text(), "=", 2)
