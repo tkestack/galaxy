@@ -49,17 +49,6 @@ func ParseK8SCNIArgs(args string) (map[string]string, error) {
 	return kvMap, nil
 }
 
-func ParsePorts(portStr string) ([]*Port, error) {
-	if portStr == "" {
-		return nil, nil
-	}
-	var ports []*Port
-	if err := json.Unmarshal([]byte(portStr), &ports); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal ports %s: %v", portStr, err)
-	}
-	return ports, nil
-}
-
 type Port struct {
 	// This must be a valid port number, 0 <= x < 65536.
 	// If HostNetwork is specified, this must match ContainerPort.
