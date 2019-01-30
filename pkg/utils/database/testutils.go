@@ -44,7 +44,7 @@ const (
 }`
 )
 
-var ForceSequential chan bool = make(chan bool, 1)
+var ForceSequential = make(chan bool, 1)
 
 func NewTestDB() (*DBRecorder, error) {
 	var config struct {

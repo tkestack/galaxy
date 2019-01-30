@@ -15,7 +15,7 @@ go_import_path: git.code.oa.com/gaiastack/galaxy
 install: true
 
 env:
-  - CODECOV_TOKEN=f29f8f5a-9a4c-44ad-bfc9-85f24e7c2d61
+  - CODECOV_TOKEN=f29f8f5a-9a4c-44ad-bfc9-85f24e7c2d61 TEST_ENV=linux_root
 
 before_script:
   - go get -u github.com/Masterminds/glide

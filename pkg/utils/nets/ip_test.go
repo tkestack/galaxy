@@ -80,6 +80,13 @@ func TestParseIPRange(t *testing.T) {
 	if ipr.Last.String() != "192.168.1.2" {
 		t.Fatal(ipr.Last.String())
 	}
+	ipr = ParseIPRange("192.168.0.0")
+	if ipr.First.String() != "192.168.0.0" {
+		t.Fatal(ipr.First.String())
+	}
+	if ipr.Last.String() != "192.168.0.0" {
+		t.Fatal(ipr.Last.String())
+	}
 	ipr = ParseIPRange("192.168.0.0~192.168.0.256")
 	if ipr != nil {
 		t.Fatal(ipr)
@@ -136,5 +143,16 @@ func TestLastIPV4(t *testing.T) {
 	}
 	if LastIPV4(ipNet).String() != "10.149.27.127" {
 		t.Fatal()
+	}
+}
+
+func TestFirstAndLastIP(t *testing.T) {
+	_, ipNet, _ := net.ParseCIDR("10.149.27.112/26")
+	first, last := FirstAndLastIP(ipNet)
+	if first != uint32(10*256*256*256+149*256*256+27*256+64) {
+		t.Fatal(first)
+	}
+	if last != uint32(10*256*256*256+149*256*256+27*256+127) {
+		t.Fatal(last)
 	}
 }

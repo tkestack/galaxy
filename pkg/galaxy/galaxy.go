@@ -11,16 +11,12 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/masq"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 	"git.code.oa.com/gaiastack/galaxy/pkg/policy"
-	utildbus "git.code.oa.com/gaiastack/galaxy/pkg/utils/dbus"
-	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
 	"github.com/golang/glog"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	utilexec "k8s.io/utils/exec"
 )
 
 type Galaxy struct {
@@ -69,16 +65,6 @@ func (g *Galaxy) Start() error {
 		return err
 	}
 	go wait.Until(g.pm.Run, 3*time.Minute, g.quitChan)
-	if v1, exist := g.netConf["galaxy-flannel"]; exist {
-		if v2, exist := v1["subnetFile"]; exist {
-			if file, ok := v2.(string); ok && file == "/etc/kubernetes/subnet.env" {
-				// assume we are in vpc(tce/qcloud) mode when subnetFiel = `/etc/kubernetes/subnet.env`
-				glog.Infof("in vpc mode, setup masq")
-				iptablesCli := utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4)
-				go wait.Forever(masq.EnsureIPMasq(iptablesCli), time.Minute)
-			}
-		}
-	}
 	return g.startServer()
 }
 

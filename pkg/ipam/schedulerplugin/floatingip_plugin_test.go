@@ -45,22 +45,14 @@ func TestFilter(t *testing.T) {
 	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
 		t.Fatal(err)
 	}
-	fipPlugin, stopChan := newPlugin(t, conf)
-	defer func() { stopChan <- struct{}{} }()
 	nodes := []corev1.Node{
 		createNode(nodeUnlabeld, nil, "10.49.27.2"),      // no floating ip label node
-		createNode(nodeHasNoIP, nodeLabel, "10.49.27.2"), // no floating ip configured for this node
+		createNode(nodeHasNoIP, nodeLabel, "10.49.28.2"), // no floating ip configured for this node
 		createNode(node3, nodeLabel, "10.49.27.3"),       // good node
 		createNode(node4, nodeLabel, "10.173.13.4"),      // good node
 	}
-	_, subnet1, _ := net.ParseCIDR("10.49.27.0/24")
-	_, subnet2, _ := net.ParseCIDR("10.48.27.0/24")
-	_, subnet3, _ := net.ParseCIDR("10.173.13.0/24")
-	fipPlugin.nodeSubnet[nodeUnlabeld] = subnet1
-	fipPlugin.nodeSubnet[nodeHasNoIP] = subnet2
-	fipPlugin.nodeSubnet[node3] = subnet1
-	fipPlugin.nodeSubnet[node4] = subnet3
-	// cleans all allocates first
+	fipPlugin, stopChan := newPlugin(t, conf, &nodes[0], &nodes[1], &nodes[2], &nodes[3])
+	defer func() { stopChan <- struct{}{} }()
 	if err := fipPlugin.ipam.ReleaseByPrefix(""); err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +156,6 @@ func TestFilter(t *testing.T) {
 			t.Fatal("should not have so many ips")
 		}
 	}
-	t.Log(ipInfoSet)
 	// see if we can allocate the reserved ip
 	if ipInfo, err = fipPlugin.allocateIP(fipPlugin.ipam, keyInDB(pod), pod.Spec.NodeName, pod); err != nil {
 		t.Fatal(err)
@@ -174,6 +165,22 @@ func TestFilter(t *testing.T) {
 	}
 	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrNotEmpty()); err != nil {
 		t.Fatal(err)
+	}
+	pod.Status.PodIP = "10.173.13.2"
+	pod.Status.Phase = corev1.PodRunning
+	if err := fipPlugin.releaseIP(keyInDB(pod), "", pod); err != nil {
+		t.Fatal(err)
+	}
+	if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
+		t.Fatal(err)
+	} else if fip.Key != "" {
+		t.Fatal("failed release ip 10.173.13.2")
+	}
+	fipPlugin.UpdatePod(pod, pod)
+	if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
+		t.Fatal(err)
+	} else if fip.Key != keyInDB(pod) {
+		t.Fatal("failed resync ip 10.173.13.2")
 	}
 
 	// pre-allocate ip in filter for deployment pod
@@ -186,13 +193,11 @@ func TestFilter(t *testing.T) {
 		Kind: "ReplicaSet",
 	})
 	var replicas int32 = 1
-	deployLabel := immutableLabel
 	fipPlugin.getDeployment = func(name, namespace string) (*appv1.Deployment, error) {
 		return &appv1.Deployment{
 			ObjectMeta: v1.ObjectMeta{
 				Name:      name,
 				Namespace: namespace,
-				Labels:    deployLabel,
 			},
 			Spec: appv1.DeploymentSpec{
 				Template: corev1.PodTemplateSpec{
@@ -214,9 +219,6 @@ func TestFilter(t *testing.T) {
 	} else if len(filteredNodes) != 0 {
 		t.Fatalf("shoult has no node for deployment, wait for release, but got %v", filteredNodes)
 	}
-	//if err = reserveDeploymentIP(fipPlugin.ipam, keyForDeploymentPod(deadPod, "dp"), deploymentPrefix("dp", "ns1")); err != nil {
-	//	t.Fatal(err)
-	//}
 	// because replicas = 1, ip will be reserved
 	if err := fipPlugin.unbind(deadPod); err != nil {
 		t.Fatal(err)
@@ -236,7 +238,6 @@ func TestFilter(t *testing.T) {
 	neverLabel := make(map[string]string)
 	neverLabel[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
 	neverLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
-	deployLabel = neverLabel
 	pod.Labels[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
 	deadPod.Labels[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
 	// when replicas = 0 and never release policy, ip will be reserved
