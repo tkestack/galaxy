@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -88,7 +89,7 @@ func (s *Server) Start() error {
 		return fmt.Errorf("init server: %v", err)
 	}
 	if s.LeaderElection.LeaderElect && s.leaderElectionConfig != nil {
-		leaderelection.RunOrDie(*s.leaderElectionConfig)
+		leaderelection.RunOrDie(context.Background(), *s.leaderElectionConfig)
 		return nil
 	}
 	return s.Run()
@@ -145,7 +146,7 @@ func (s *Server) initk8sClient() {
 			RenewDeadline: s.LeaderElection.RenewDeadline.Duration,
 			RetryPeriod:   s.LeaderElection.RetryPeriod.Duration,
 			Callbacks: leaderelection.LeaderCallbacks{
-				OnStartedLeading: func(<-chan struct{}) {
+				OnStartedLeading: func(ctx context.Context) {
 					if err := s.Run(); err != nil {
 						glog.Fatal(err)
 					}
