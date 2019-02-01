@@ -30,15 +30,15 @@ import:
   version: 8ba1072b58e0c2a240eb5f6120165c7776c3e7b8
 - package: k8s.io/client-go
   repo: https://github.com/kubernetes/client-go.git
-  version: kubernetes-1.9.3
+  version: kubernetes-1.13.2
 - package: k8s.io/api
-  version: release-1.9
+  version: kubernetes-1.13.2
 - package: k8s.io/apimachinery
-  version: 68f9c3a1feb3140df59c67ced62d3a5df8e6c9c2
+  version: kubernetes-1.13.2
 - package: k8s.io/kube-openapi
-  version: 39a7bf85c140f972372c2a0d1ee40adbf0c8bfe1
+#  version: 39a7bf85c140f972372c2a0d1ee40adbf0c8bfe1
 - package: k8s.io/utils
-  version: aedf551cdb8b0119df3a19c65fde413a13b34997
+#  version: aedf551cdb8b0119df3a19c65fde413a13b34997
 - package: golang.org/x/net
   version: 1c05540f6879653db88113bc4a2b70aec4bd491f
 - package: golang.org/x/crypto
@@ -54,7 +54,7 @@ import:
 - package: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - package: gopkg.in/yaml.v2
-  version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
+#  version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
 - package: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - package: github.com/google/uuid
