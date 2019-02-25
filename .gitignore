@@ -39,6 +39,7 @@
 /vendor/**/*.toml
 /vendor/**/*.mod
 /vendor/**/*.lock
+/vendor/**/*.proto
 /vendor/**/Dockerfile
 /vendor/**/Vagrantfile
 /vendor/**/.gitignore

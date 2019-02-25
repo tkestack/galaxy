@@ -11,8 +11,7 @@
     "ineffassign",
     "gofmt",
     "goimports",
-    "misspell",
-    "staticcheck"
+    "misspell"
   ],
   "Deadline": "10m"
 }

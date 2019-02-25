@@ -20,7 +20,7 @@ env:
 before_script:
   - go get -u github.com/Masterminds/glide
   - go get -u github.com/onsi/ginkgo/ginkgo
-  - curl -L https://git.io/vp6lP | sh
+  - curl -L https://git.io/vp6lP | sh /dev/stdin -b $GOPATH/bin
   - sudo mysql -e "use mysql; update user set authentication_string=PASSWORD('root') where User='root'; update user set plugin='mysql_native_password';FLUSH PRIVILEGES;"
   - sudo mysql_upgrade -u root -proot
   - sudo service mysql restart
