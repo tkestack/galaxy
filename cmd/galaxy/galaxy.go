@@ -1,30 +1,30 @@
 package main
 
 import (
-	"flag"
-	"fmt"
+	"math/rand"
+	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/galaxy"
 	"git.code.oa.com/gaiastack/galaxy/pkg/signal"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ldflags"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/flag"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ldflags/verflag"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/logs"
 	"github.com/golang/glog"
-)
-
-var (
-	flagVersion = flag.Bool("version", false, "print version")
+	"github.com/spf13/pflag"
 )
 
 func main() {
-	defer glog.Flush()
-	flag.Parse()
-	if *flagVersion {
-		fmt.Println(ldflags.Footprint())
-		return
-	}
+	rand.Seed(time.Now().UTC().UnixNano())
 	galaxy, err := galaxy.NewGalaxy()
 	if err != nil {
 		glog.Fatalf("Error create galaxy: %v", err)
 	}
+	galaxy.AddFlags(pflag.CommandLine)
+	flag.InitFlags()
+	logs.InitLogs()
+	defer logs.FlushLogs()
+
+	verflag.PrintAndExitIfRequested()
 	if err := galaxy.Start(); err != nil {
 		glog.Fatalf("Error start galaxy: %v", err)
 	}

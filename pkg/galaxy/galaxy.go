@@ -8,7 +8,7 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
-	"git.code.oa.com/gaiastack/galaxy/pkg/flags"
+	"git.code.oa.com/gaiastack/galaxy/pkg/galaxy/options"
 	"git.code.oa.com/gaiastack/galaxy/pkg/gc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
@@ -20,13 +20,13 @@ import (
 )
 
 type Galaxy struct {
-	quitChan        chan struct{}
-	dockerCli       *docker.DockerInterface
-	netConf         map[string]map[string]interface{}
-	pmhandler       *portmapping.PortMappingHandler
-	client          *kubernetes.Clientset
-	pm              *policy.PolicyManager
-	underlayCNIIPAM bool // if set, galaxy delegates to a cni ipam to allocate ip for underlay network
+	*options.ServerRunOptions
+	quitChan  chan struct{}
+	dockerCli *docker.DockerInterface
+	netConf   map[string]map[string]interface{}
+	pmhandler *portmapping.PortMappingHandler
+	client    *kubernetes.Clientset
+	pm        *policy.PolicyManager
 }
 
 func NewGalaxy() (*Galaxy, error) {
@@ -35,7 +35,8 @@ func NewGalaxy() (*Galaxy, error) {
 		return nil, err
 	}
 	g := &Galaxy{
-		quitChan: make(chan struct{}),
+		ServerRunOptions: options.NewServerRunOptions(),
+		quitChan:         make(chan struct{}),
 	}
 	g.dockerCli = dockerClient
 	if err := g.parseConfig(); err != nil {
@@ -59,8 +60,8 @@ func (g *Galaxy) Start() error {
 	g.initk8sClient()
 	g.pm = policy.New(g.client, g.quitChan)
 	gc.NewFlannelGC(g.dockerCli, g.quitChan, g.cleanIPtables).Run()
-	kernel.BridgeNFCallIptables(g.quitChan, *flagBridgeNFCallIptables)
-	kernel.IPForward(g.quitChan, *flagIPForward)
+	kernel.BridgeNFCallIptables(g.quitChan, g.BridgeNFCallIptables)
+	kernel.IPForward(g.quitChan, g.IPForward)
 	if err := g.setupIPtables(); err != nil {
 		return err
 	}
@@ -75,18 +76,18 @@ func (g *Galaxy) Stop() error {
 }
 
 func (g *Galaxy) parseConfig() error {
-	if strings.TrimSpace(*flagNetworkConf) == "" {
+	if strings.TrimSpace(g.NetworkConf) == "" {
 		return fmt.Errorf("No network configured")
 	}
 	var networkConf map[string]map[string]interface{}
-	if err := json.Unmarshal([]byte(*flagNetworkConf), &networkConf); err != nil {
-		return fmt.Errorf("Error unmarshal network config %s: %v", *flagNetworkConf, err)
+	if err := json.Unmarshal([]byte(g.NetworkConf), &networkConf); err != nil {
+		return fmt.Errorf("Error unmarshal network config %s: %v", g.NetworkConf, err)
 	}
 	if len(networkConf) == 0 {
 		return fmt.Errorf("No network configured")
 	} else {
 		g.netConf = networkConf
-		glog.Infof("Network config %s", *flagNetworkConf)
+		glog.Infof("Network config %s", g.NetworkConf)
 	}
 	for k, v := range g.netConf {
 		if v == nil {
@@ -96,26 +97,16 @@ func (g *Galaxy) parseConfig() error {
 			g.netConf[k]["type"] = k
 		}
 	}
-	if vlanConfMap, ok := g.netConf[private.NetworkTypeUnderlay.CNIType]; ok {
-		if ipamObj, exist := vlanConfMap["ipam"]; exist {
-			if ipamMap, isMap := ipamObj.(map[string]interface{}); isMap {
-				ipamMap["node_ip"] = flags.GetNodeIP()
-				if _, hasType := ipamMap["type"]; hasType {
-					g.underlayCNIIPAM = true
-				}
-			}
-		}
-	}
 	glog.Infof("normalized network config %v", g.netConf)
 	return nil
 }
 
 func (g *Galaxy) initk8sClient() {
-	if *flagApiServer == "" && *flagKubeConf == "" {
+	if g.Master == "" && g.KubeConf == "" {
 		// galaxy currently not support running in pod, so either flagApiServer or flagKubeConf should be specified
 		glog.Fatal("apiserver address unknown")
 	}
-	clientConfig, err := clientcmd.BuildConfigFromFlags(*flagApiServer, *flagKubeConf)
+	clientConfig, err := clientcmd.BuildConfigFromFlags(g.Master, g.KubeConf)
 	if err != nil {
 		glog.Fatalf("Invalid client config: error(%v)", err)
 	}
@@ -127,5 +118,5 @@ func (g *Galaxy) initk8sClient() {
 	if err != nil {
 		glog.Fatalf("Can not generate client from config: error(%v)", err)
 	}
-	glog.Infof("apiserver address %s, kubeconf %s", *flagApiServer, *flagKubeConf)
+	glog.Infof("apiserver address %s, kubeconf %s", g.Master, g.KubeConf)
 }
