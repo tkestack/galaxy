@@ -2,7 +2,6 @@ package galaxy
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -25,14 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
-)
-
-var (
-	flagNetworkConf          = flag.String("network-conf", `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}}`, "various network configrations")
-	flagBridgeNFCallIptables = flag.Bool("bridge-nf-call-iptables", true, "ensure bridge-nf-call-iptables is set/unset")
-	flagIPForward            = flag.Bool("ip-forward", true, "ensure ip-forward is set/unset")
-	flagApiServer            = flag.String("api-servers", "", "The address of apiserver")
-	flagKubeConf             = flag.String("kubeconf", "", "kube configure file")
 )
 
 func (g *Galaxy) startServer() error {
@@ -153,10 +144,6 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 				req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.IPInfoInArgs, pod.Annotations[private.AnnotationKeyIPInfo])
 				if pod.Annotations[private.AnnotationKeySecondIPInfo] != "" {
 					req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.SecondIPInfoInArgs, pod.Annotations[private.AnnotationKeySecondIPInfo])
-				}
-			} else {
-				if !g.underlayCNIIPAM {
-					return nil, fmt.Errorf("neither ipInfo in pod's annotation nor underlay ipam type from netconf")
 				}
 			}
 			glog.V(4).Infof("pod %s_%s ip %s", pod.Name, pod.Namespace, pod.Annotations[private.AnnotationKeyIPInfo])
