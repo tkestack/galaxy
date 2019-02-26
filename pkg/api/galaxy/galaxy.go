@@ -33,6 +33,8 @@ type PodRequest struct {
 	Result chan *PodResult
 	// Args
 	*skel.CmdArgs
+	// specific CNI plugin args, key: cni type, inner key: args name, value: args value
+	ExtendedCNIArgs map[string]map[string]json.RawMessage
 }
 
 // Result of a PodRequest sent through the PodRequest's Result channel.

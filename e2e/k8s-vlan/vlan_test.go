@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 )
 
 var _ = Describe("galaxy-k8s-vlan vlan test", func() {
@@ -47,7 +48,7 @@ var _ = Describe("galaxy-k8s-vlan vlan test", func() {
 			Command:       "ADD",
 			ContainerID:   containerId,
 			NetNS:         path.Join(helper.NetNS_PATH, containerId),
-			PluginArgsStr: cniutil.BuildCNIArgs(map[string]string{cniutil.IPInfoInArgs: argsStr}),
+			PluginArgsStr: cniutil.BuildCNIArgs(map[string]string{constant.IPInfosKey: argsStr}),
 		})
 		Expect(err).NotTo(HaveOccurred())
 		data, err := json.Marshal(result)
@@ -108,15 +109,13 @@ var _ = Describe("galaxy-k8s-vlan vlan test", func() {
 		Expect(err).NotTo(HaveOccurred())
 		err = helper.SetupDummyDev("dummy0", ifaceCidr)
 		Expect(err).NotTo(HaveOccurred())
-		argsStr, err := helper.IPInfo(containerCidr, 2)
-		Expect(err).NotTo(HaveOccurred())
-		secondIPInfoStr, err := helper.IPInfo(secondCidr, 3)
+		argsStr, err := helper.IPInfos(containerCidr, 2, secondCidr, 3)
 		Expect(err).NotTo(HaveOccurred())
 		result, err := helper.ExecCNIWithResult(cni, netConf, &invoke.Args{
 			Command:       "ADD",
 			ContainerID:   containerId,
 			NetNS:         path.Join(helper.NetNS_PATH, containerId),
-			PluginArgsStr: cniutil.BuildCNIArgs(map[string]string{cniutil.IPInfoInArgs: argsStr, cniutil.SecondIPInfoInArgs: secondIPInfoStr}),
+			PluginArgsStr: cniutil.BuildCNIArgs(map[string]string{constant.IPInfosKey: argsStr}),
 		})
 		Expect(err).NotTo(HaveOccurred())
 		data, err := json.Marshal(result)

@@ -1,13 +1,12 @@
 package schedulerplugin
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
-	"time"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
@@ -15,10 +14,7 @@ import (
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 func (p *FloatingIPPlugin) storeReady() bool {
@@ -308,41 +304,38 @@ func (p *FloatingIPPlugin) syncPodIPsIntoDB() {
 	}
 }
 
-// syncPodIP sync pod ip with db, if the pod has PodIP and the ip is unallocated in db, allocate the ip to the pod
+// syncPodIP sync pod ip with db, if the pod has ipinfos annotation and the ip is unallocated in db, allocate the ip to the pod
 func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 	if pod.Status.Phase != corev1.PodRunning {
 		return nil
 	}
-	ip := net.ParseIP(pod.Status.PodIP)
-	if ip == nil {
-		// A binded Pod's IpInfo annotation is lost, we need to find its ip
-		// It happens if a node crashes causing pods on it to be relaunched during which we are upgrading gaiastack from 2.6 to 2.8
-		if pod.Spec.NodeName != "" {
-			return p.syncPodAnnotation(pod)
-		}
+	if pod.Annotations == nil {
 		return nil
 	}
 	key := keyInDB(pod)
 	if dp := p.podBelongToDeployment(pod); dp != "" {
 		key = keyForDeploymentPod(pod, dp)
 	}
-	if err := p.syncIP(p.ipam, key, ip, pod); err != nil {
+	ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
+	if err != nil {
+		return err
+	}
+	if len(ipInfos) == 0 || ipInfos[0].IP == nil {
+		// should not happen
+		return fmt.Errorf("empty ipinfo for pod %s", key)
+	}
+	if err := p.syncIP(p.ipam, key, ipInfos[0].IP.IP, pod); err != nil {
 		return fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
-	if p.enabledSecondIP(pod) && pod.Annotations != nil {
-		secondIPStr := pod.Annotations[private.AnnotationKeySecondIPInfo]
-		var secondIPInfo floatingip.IPInfo
-		if err := json.Unmarshal([]byte(secondIPStr), &secondIPInfo); err != nil {
-			return fmt.Errorf("failed to unmarshal secondip %s: %v", secondIPStr, err)
+	if p.enabledSecondIP(pod) {
+		if len(ipInfos) == 1 || ipInfos[1].IP == nil {
+			return fmt.Errorf("none second ipinfo for pod %s", key)
 		}
-		if secondIPInfo.IP == nil {
-			return fmt.Errorf("invalid secondip annotation: %s", secondIPStr)
-		}
-		if err := p.syncIP(p.secondIPAM, key, secondIPInfo.IP.IP, pod); err != nil {
+		if err := p.syncIP(p.secondIPAM, key, ipInfos[1].IP.IP, pod); err != nil {
 			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 		}
 	}
-	return p.syncPodAnnotation(pod)
+	return nil
 }
 
 func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, pod *corev1.Pod) error {
@@ -360,45 +353,6 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, p
 			return err
 		}
 		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)
-	}
-	return nil
-}
-
-// syncPodAnnotation syncs pod's IPInfo annotation if the pod losts it
-func (p *FloatingIPPlugin) syncPodAnnotation(pod *corev1.Pod) error {
-	key := keyInDB(pod)
-	if dp := p.podBelongToDeployment(pod); dp != "" {
-		key = keyForDeploymentPod(pod, dp)
-	}
-	if pod.Annotations == nil || pod.Annotations[private.AnnotationKeyIPInfo] == "" {
-		ipInfo, err := p.ipam.First(key)
-		if err != nil {
-			return fmt.Errorf("failed to query ipInfo of %s", key)
-		}
-		data, err := json.Marshal(ipInfo)
-		if err != nil {
-			return fmt.Errorf("failed to marshal ipinfo %v: %v", ipInfo, err)
-		}
-		m := make(map[string]string)
-		m[private.AnnotationKeyIPInfo] = string(data)
-		ret := &unstructured.Unstructured{}
-		ret.SetAnnotations(m)
-		patchData, err := json.Marshal(ret)
-		if err != nil {
-			glog.Error(err)
-		}
-		if err := wait.PollImmediate(time.Millisecond*500, 20*time.Second, func() (bool, error) {
-			_, err := p.Client.CoreV1().Pods(pod.Namespace).Patch(pod.Name, types.MergePatchType, patchData)
-			if err != nil {
-				glog.Warningf("failed to update pod %s: %v", key, err)
-				return false, nil
-			}
-			glog.V(3).Infof("updated annotation %s=%s for pod %s", private.AnnotationKeyIPInfo, m[private.AnnotationKeyIPInfo], key)
-			return true, nil
-		}); err != nil {
-			// If fails to update, depending on resync to update
-			return fmt.Errorf("failed to update pod %s: %v", key, err)
-		}
 	}
 	return nil
 }

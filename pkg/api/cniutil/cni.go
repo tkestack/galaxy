@@ -10,8 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/flannel"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -38,54 +37,6 @@ const (
 	COMMAND_ADD = "ADD"
 	COMMAND_DEL = "DEL"
 )
-
-const (
-	IPInfoInArgs       = "IPInfo"
-	SecondIPInfoInArgs = "SecondIPInfo"
-)
-
-// like net.IPNet but adds JSON marshalling and unmarshalling
-type IPNet net.IPNet
-
-// ParseCIDR takes a string like "10.2.3.1/24" and
-// return IPNet with "10.2.3.1" and /24 mask
-func ParseCIDR(s string) (*net.IPNet, error) {
-	ip, ipn, err := net.ParseCIDR(s)
-	if err != nil {
-		return nil, err
-	}
-
-	ipn.IP = ip
-	return ipn, nil
-}
-
-func (n IPNet) MarshalJSON() ([]byte, error) {
-	return json.Marshal((*net.IPNet)(&n).String())
-}
-
-func (n *IPNet) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-
-	tmp, err := ParseCIDR(s)
-	if err != nil {
-		return err
-	}
-
-	*n = IPNet(*tmp)
-	return nil
-}
-
-func (n *IPNet) UnmarshalText(data []byte) error {
-	ipNet, err := ParseCIDR(string(data))
-	if err != nil {
-		return fmt.Errorf("failed to parse cidr %s", string(data))
-	}
-	*n = IPNet(*ipNet)
-	return nil
-}
 
 type Uint16 uint16
 
@@ -127,25 +78,19 @@ func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs) (types.Resu
 	if err != nil {
 		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
 	}
-
-	if netconf["type"] == private.NetworkTypeOverlay.CNIType {
-		args.StdinData = netconfBytes
-		return flannel.CmdAdd(args)
-	} else {
-		pluginPath, err := invoke.FindInPath(netconf["type"].(string), strings.Split(args.Path, ":"))
-		if err != nil {
-			return nil, err
-		}
-		glog.Infof("delegate add %s args %s conf %s", args.ContainerID, args.Args, string(netconfBytes))
-		return invoke.ExecPluginWithResult(pluginPath, netconfBytes, &invoke.Args{
-			Command:       "ADD",
-			ContainerID:   args.ContainerID,
-			NetNS:         args.Netns,
-			PluginArgsStr: args.Args,
-			IfName:        args.IfName,
-			Path:          args.Path,
-		})
+	pluginPath, err := invoke.FindInPath(netconf["type"].(string), strings.Split(args.Path, ":"))
+	if err != nil {
+		return nil, err
 	}
+	glog.Infof("delegate add %s args %s conf %s", args.ContainerID, args.Args, string(netconfBytes))
+	return invoke.ExecPluginWithResult(pluginPath, netconfBytes, &invoke.Args{
+		Command:       "ADD",
+		ContainerID:   args.ContainerID,
+		NetNS:         args.Netns,
+		PluginArgsStr: args.Args,
+		IfName:        args.IfName,
+		Path:          args.Path,
+	})
 }
 
 func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs) error {
@@ -153,25 +98,19 @@ func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs) error {
 	if err != nil {
 		return fmt.Errorf("error serializing delegate netconf: %v", err)
 	}
-
-	if netconf["type"] == private.NetworkTypeOverlay.CNIType {
-		args.StdinData = netconfBytes
-		return flannel.CmdDel(args)
-	} else {
-		pluginPath, err := invoke.FindInPath(netconf["type"].(string), strings.Split(args.Path, ":"))
-		if err != nil {
-			return err
-		}
-		glog.Infof("delegate del %s args %s conf %s", args.ContainerID, args.Args, string(netconfBytes))
-		return invoke.ExecPluginWithoutResult(pluginPath, netconfBytes, &invoke.Args{
-			Command:       "DEL",
-			ContainerID:   args.ContainerID,
-			NetNS:         args.Netns,
-			PluginArgsStr: args.Args,
-			IfName:        args.IfName,
-			Path:          args.Path,
-		})
+	pluginPath, err := invoke.FindInPath(netconf["type"].(string), strings.Split(args.Path, ":"))
+	if err != nil {
+		return err
 	}
+	glog.Infof("delegate del %s args %s conf %s", args.ContainerID, args.Args, string(netconfBytes))
+	return invoke.ExecPluginWithoutResult(pluginPath, netconfBytes, &invoke.Args{
+		Command:       "DEL",
+		ContainerID:   args.ContainerID,
+		NetNS:         args.Netns,
+		PluginArgsStr: args.Args,
+		IfName:        args.IfName,
+		Path:          args.Path,
+	})
 }
 
 func CmdAdd(containerID string, cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, networkInfo NetworkInfo) (types.Result, error) {
@@ -194,6 +133,7 @@ func CmdAdd(containerID string, cmdArgs *skel.CmdArgs, netConf map[string]map[st
 		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
 		result, err = DelegateAdd(conf, cmdArgs)
 		// configure only one network
+		//TODO configure multiple networks with extra args
 		break
 	}
 	if err != nil {
@@ -257,20 +197,10 @@ func ConsumeNetworkInfo(containerID string) (NetworkInfo, error) {
 	return m, nil
 }
 
-/*
-	{"ip":"10.49.27.205/24","vlan":2,"gateway":"10.49.27.1"}
-*/
-type IPInfo struct {
-	IP             types.IPNet `json:"ip"`
-	Vlan           uint16      `json:"vlan"`
-	Gateway        net.IP      `json:"gateway"`
-	RoutableSubnet types.IPNet `json:"routable_subnet"`
-}
-
-func IPInfoToResult(ipInfo *IPInfo) *t020.Result {
+func IPInfoToResult(ipInfo *constant.IPInfo) *t020.Result {
 	return &t020.Result{
 		IP4: &t020.IPConfig{
-			IP:      net.IPNet(ipInfo.IP),
+			IP:      net.IPNet(*ipInfo.IP),
 			Gateway: ipInfo.Gateway,
 			Routes: []types.Route{{
 				Dst: net.IPNet{

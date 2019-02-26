@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 )
 
 var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {
@@ -43,7 +44,7 @@ var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {
 			Command:       "ADD",
 			ContainerID:   containerId,
 			NetNS:         path.Join(helper.NetNS_PATH, containerId),
-			PluginArgsStr: cniutil.BuildCNIArgs(map[string]string{cniutil.IPInfoInArgs: argsStr}),
+			PluginArgsStr: cniutil.BuildCNIArgs(map[string]string{constant.IPInfosKey: argsStr}),
 		})
 		Expect(err).NotTo(HaveOccurred())
 		data, err := json.Marshal(result)
@@ -106,7 +107,7 @@ var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {
 			Command:       "ADD",
 			ContainerID:   containerId,
 			NetNS:         path.Join(helper.NetNS_PATH, containerId),
-			PluginArgsStr: cniutil.BuildCNIArgs(map[string]string{cniutil.IPInfoInArgs: argsStr}),
+			PluginArgsStr: cniutil.BuildCNIArgs(map[string]string{constant.IPInfosKey: argsStr}),
 		})
 		Expect(err).NotTo(HaveOccurred())
 		data, err := json.Marshal(result)

@@ -11,10 +11,6 @@ import (
 )
 
 func TestDB(t *testing.T) {
-	ForceSequential <- true
-	defer func() {
-		<-ForceSequential
-	}()
 	db, err := NewTestDB()
 	if err != nil {
 		if strings.Contains(err.Error(), "Failed to open") {
