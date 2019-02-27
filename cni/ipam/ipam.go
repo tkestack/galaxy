@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
@@ -24,22 +25,18 @@ func Allocate(ipamType string, args *skel.CmdArgs) ([]uint16, []types.Result, er
 	}
 	var results []types.Result
 	var vlanIDs []uint16
-	if ipInfoStr := kvMap[cniutil.IPInfoInArgs]; ipInfoStr != "" {
+	if ipInfoStr := kvMap[constant.IPInfosKey]; ipInfoStr != "" {
 		// get ipinfo from cni args
-		var ipInfo cniutil.IPInfo
-		if err := json.Unmarshal([]byte(ipInfoStr), &ipInfo); err != nil {
+		var ipInfos []constant.IPInfo
+		if err := json.Unmarshal([]byte(ipInfoStr), &ipInfos); err != nil {
 			return nil, nil, fmt.Errorf("failed to unmarshal ipInfo from args %q: %v", args.Args, err)
 		}
-		results = append(results, cniutil.IPInfoToResult(&ipInfo))
-		vlanIDs = append(vlanIDs, ipInfo.Vlan)
-
-		if ipInfoStr2 := kvMap[cniutil.SecondIPInfoInArgs]; ipInfoStr2 != "" {
-			var ipInfo2 cniutil.IPInfo
-			if err := json.Unmarshal([]byte(ipInfoStr2), &ipInfo2); err != nil {
-				return nil, nil, fmt.Errorf("failed to unmarshal ipInfo from args %q: %v", args.Args, err)
-			}
-			results = append(results, cniutil.IPInfoToResult(&ipInfo2))
-			vlanIDs = append(vlanIDs, ipInfo2.Vlan)
+		if len(ipInfos) == 0 {
+			return nil, nil, fmt.Errorf("empty ipInfos")
+		}
+		for j := range ipInfos {
+			results = append(results, cniutil.IPInfoToResult(&ipInfos[j]))
+			vlanIDs = append(vlanIDs, ipInfos[j].Vlan)
 		}
 		return vlanIDs, results, nil
 	}

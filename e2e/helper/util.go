@@ -120,7 +120,19 @@ func IPInfo(cidr string, vlan uint16) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`{"ip":"%s","vlan":%d,"gateway":"%s","routable_subnet":"%s"}`, cidr, vlan, Gateway(*ipNet), ipNet.String()), nil
+	return fmt.Sprintf(`[{"ip":"%s","vlan":%d,"gateway":"%s","routable_subnet":"%s"}]`, cidr, vlan, Gateway(*ipNet), ipNet.String()), nil
+}
+
+func IPInfos(cidr string, vlan uint16, cidr2 string, vlan2 uint16) (string, error) {
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return "", err
+	}
+	_, ipNet2, err := net.ParseCIDR(cidr2)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`[{"ip":"%s","vlan":%d,"gateway":"%s","routable_subnet":"%s"},{"ip":"%s","vlan":%d,"gateway":"%s","routable_subnet":"%s"}]`, cidr, vlan, Gateway(*ipNet), ipNet.String(), cidr2, vlan2, Gateway(*ipNet2), ipNet2.String()), nil
 }
 
 func Gateway(ipNet net.IPNet) net.IP {

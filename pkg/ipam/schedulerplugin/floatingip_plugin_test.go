@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
@@ -37,10 +38,6 @@ var (
 )
 
 func TestFilter(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	var conf Conf
 	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
 		t.Fatal(err)
@@ -166,8 +163,16 @@ func TestFilter(t *testing.T) {
 	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrNotEmpty()); err != nil {
 		t.Fatal(err)
 	}
-	pod.Status.PodIP = "10.173.13.2"
+	// check sync back into db according to pods annotation TODO move this to a separate test
 	pod.Status.Phase = corev1.PodRunning
+	if pod.Annotations == nil {
+		pod.Annotations = map[string]string{}
+	}
+	str, err := constant.FormatIPInfo([]constant.IPInfo{*ipInfo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod.Annotations[constant.ExtendedCNIArgsAnnotation] = str
 	if err := fipPlugin.releaseIP(keyInDB(pod), "", pod); err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +181,9 @@ func TestFilter(t *testing.T) {
 	} else if fip.Key != "" {
 		t.Fatal("failed release ip 10.173.13.2")
 	}
-	fipPlugin.UpdatePod(pod, pod)
+	if err := fipPlugin.UpdatePod(pod, pod); err != nil {
+		t.Fatal(err)
+	}
 	if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
 		t.Fatal(err)
 	} else if fip.Key != keyInDB(pod) {
@@ -460,10 +467,6 @@ func TestLoadConfigMap(t *testing.T) {
 }
 
 func TestBind(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	node := createNode("node1", nil, "10.49.27.2")
 	pod1 := createPod("pod1", "demo", objectLabel)
 	var conf Conf
@@ -490,7 +493,7 @@ func TestBind(t *testing.T) {
 		ObjectMeta: v1.ObjectMeta{
 			Namespace: pod1.Namespace, Name: pod1.Name,
 			Annotations: map[string]string{
-				private.AnnotationKeyIPInfo: `{"ip":"10.49.27.205/24","vlan":2,"gateway":"10.49.27.1","routable_subnet":"10.49.27.0/24"}`}},
+				constant.ExtendedCNIArgsAnnotation: `{"common":{"ipinfos":[{"ip":"10.49.27.205/24","vlan":2,"gateway":"10.49.27.1","routable_subnet":"10.49.27.0/24"}]}}`}},
 		Target: corev1.ObjectReference{
 			Kind: "Node",
 			Name: node.Name,

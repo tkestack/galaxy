@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
@@ -329,7 +330,7 @@ func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*sc
 	return list, nil
 }
 
-func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string, pod *corev1.Pod) (*floatingip.IPInfo, error) {
+func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string, pod *corev1.Pod) (*constant.IPInfo, error) {
 	var how string
 	ipInfo, err := ipam.First(key)
 	if err != nil {
@@ -434,24 +435,21 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(ipInfo)
-	if err != nil {
-		return fmt.Errorf("failed to marshal ipinfo %v: %v", ipInfo, err)
-	}
-	bindAnnotation := make(map[string]string)
-	bindAnnotation[private.AnnotationKeyIPInfo] = string(data)
+	ipInfos := []constant.IPInfo{*ipInfo}
 	if p.enabledSecondIP(pod) {
 		secondIPInfo, err := p.allocateIP(p.secondIPAM, key, args.Node, pod)
 		// TODO release ip if it's been allocated in this goroutine?
 		if err != nil {
 			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 		}
-		data, err := json.Marshal(secondIPInfo)
-		if err != nil {
-			return fmt.Errorf("failed to marshal ipinfo %v: %v", secondIPInfo, err)
-		}
-		bindAnnotation[private.AnnotationKeySecondIPInfo] = string(data)
+		ipInfos = append(ipInfos, *secondIPInfo)
 	}
+	bindAnnotation := make(map[string]string)
+	data, err := constant.FormatIPInfo(ipInfos)
+	if err != nil {
+		return fmt.Errorf("failed to format ipinfo %v: %v", ipInfos, err)
+	}
+	bindAnnotation[constant.ExtendedCNIArgsAnnotation] = data //TODO don't overlap this annotation
 	if err := wait.PollImmediate(time.Millisecond*500, 20*time.Second, func() (bool, error) {
 		// It's the extender's response to bind pods to nodes since it is a binder
 		if err := p.Client.CoreV1().Pods(args.PodNamespace).Bind(&corev1.Binding{
@@ -464,7 +462,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 			glog.Warningf("failed to bind pod %s: %v", key, err)
 			return false, err
 		}
-		glog.V(3).Infof("bind pod %s to %s with ip %v", key, args.Node, bindAnnotation[private.AnnotationKeyIPInfo])
+		glog.V(3).Infof("bind pod %s to %s with ip %v", key, args.Node, bindAnnotation[constant.ExtendedCNIArgsAnnotation])
 		return true, nil
 	}); err != nil {
 		// If fails to update, depending on resync to update
@@ -523,7 +521,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 				}
 			}
 		}
-		glog.V(3).Infof("reserved %s for pod %s (never release)", pod.Annotations[private.AnnotationKeyIPInfo], key)
+		glog.V(3).Infof("reserved %s for pod %s (never release)", pod.Annotations[constant.ExtendedCNIArgsAnnotation], key)
 		return nil
 	case private.LabelValueImmutable:
 		break
@@ -602,7 +600,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		return p.releaseIP(key, deletedAndParentAppNotExistPod, pod)
 	}
 	if pod.Annotations != nil {
-		glog.V(3).Infof("reserved %s for pod %s", pod.Annotations[private.AnnotationKeyIPInfo], key)
+		glog.V(3).Infof("reserved %s for pod %s", pod.Annotations[constant.ExtendedCNIArgsAnnotation], key)
 	}
 	return nil
 }

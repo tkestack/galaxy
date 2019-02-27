@@ -49,10 +49,6 @@ func CreateIPAMWithTableName(t *testing.T, tableName string) *ipam {
 }
 
 func TestAllocateRelease(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
 	ips, err := ipam.allocate([]string{"pod1-1", "pod1-2", "pod1-3"})
@@ -65,6 +61,9 @@ func TestAllocateRelease(t *testing.T) {
 	ipInfo, err := ipam.first("pod1-1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if ipInfo == nil {
+		t.Fatal()
 	}
 	if ipInfo.IP.String() != "10.49.27.205/24" {
 		t.Fatal(ipInfo.IP.String())
@@ -115,10 +114,6 @@ func TestAllocateRelease(t *testing.T) {
 }
 
 func TestApplyFloatingIPs(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
 	fips := []*FloatingIP{}
@@ -168,10 +163,6 @@ func TestApplyFloatingIPs(t *testing.T) {
 }
 
 func TestRaceCondition(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	var ipams []*ipam
 	for i := 0; i < 7; i++ {
 		ipam := Start(t)
@@ -210,10 +201,6 @@ func TestRaceCondition(t *testing.T) {
 }
 
 func TestEmptyFloatingIPConf(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	var err error
 	db, err := database.NewTestDB()
 	if err != nil {
@@ -230,10 +217,6 @@ func TestEmptyFloatingIPConf(t *testing.T) {
 }
 
 func TestAllocateIPInSubnet(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
 	_, routableSubnet, _ := net.ParseCIDR("10.173.13.0/24")
@@ -255,10 +238,6 @@ func TestAllocateIPInSubnet(t *testing.T) {
 }
 
 func TestRoutableSubnet(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
 	//10.173.13.0/24
@@ -281,10 +260,6 @@ func TestRoutableSubnet(t *testing.T) {
 }
 
 func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
 
@@ -332,10 +307,6 @@ func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
 }
 
 func TestAllocateSpecificIP(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
 
@@ -354,10 +325,6 @@ func TestAllocateSpecificIP(t *testing.T) {
 }
 
 func TestMultipleIPAM(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
 	secondIPAM := CreateIPAMWithTableName(t, "test_table")
@@ -452,10 +419,6 @@ func TestGetRoutableSubnet(t *testing.T) {
 }
 
 func TestAllocateInSubnet(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
 	ipnet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
@@ -492,10 +455,6 @@ func TestAllocateInSubnet(t *testing.T) {
 }
 
 func TestUpdateKeyUpdatePolicy(t *testing.T) {
-	database.ForceSequential <- true
-	defer func() {
-		<-database.ForceSequential
-	}()
 	ipam := Start(t)
 	defer ipam.Shutdown()
 

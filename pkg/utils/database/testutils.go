@@ -44,8 +44,6 @@ const (
 }`
 )
 
-var ForceSequential = make(chan bool, 1)
-
 func NewTestDB() (*DBRecorder, error) {
 	var config struct {
 		*DBConfig `json:"database,omitempty"`

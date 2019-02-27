@@ -12,6 +12,7 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
 	galaxyapi "git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
 	k8sutil "git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/utils"
@@ -131,6 +132,10 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 	if err := disableIPv6(req.Netns); err != nil {
 		glog.Warningf("Error disable ipv6 %v", err)
 	}
+	// get extended args from pod's annotations
+	if err := injectExtendedCNIArgs(req, pod); err != nil {
+		return nil, err
+	}
 	// get network type from pods' labels
 	var networkInfo cniutil.NetworkInfo
 	if pod.Labels == nil {
@@ -140,20 +145,37 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 		if private.NetworkTypeOverlay.Has(networkType) {
 			networkInfo = cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
 		} else if private.NetworkTypeUnderlay.Has(networkType) {
-			if pod.Annotations != nil && pod.Annotations[private.AnnotationKeyIPInfo] != "" {
-				req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.IPInfoInArgs, pod.Annotations[private.AnnotationKeyIPInfo])
-				if pod.Annotations[private.AnnotationKeySecondIPInfo] != "" {
-					req.CmdArgs.Args = fmt.Sprintf("%s;%s=%s", req.CmdArgs.Args, cniutil.SecondIPInfoInArgs, pod.Annotations[private.AnnotationKeySecondIPInfo])
-				}
-			}
-			glog.V(4).Infof("pod %s_%s ip %s", pod.Name, pod.Namespace, pod.Annotations[private.AnnotationKeyIPInfo])
 			networkInfo = cniutil.NetworkInfo{private.NetworkTypeUnderlay.CNIType: {}}
 		} else {
 			return nil, fmt.Errorf("unsupported network type: %s", networkType)
 		}
 	}
+	if commonArgs, exist := req.ExtendedCNIArgs[constant.CommonCNIArgsKey]; exist {
+		for t := range networkInfo {
+			for k, v := range commonArgs {
+				networkInfo[t][k] = string([]byte(v))
+			}
+		}
+	}
 	glog.V(4).Infof("pod %s_%s networkInfo %v", pod.Name, pod.Namespace, networkInfo)
 	return cniutil.CmdAdd(req.ContainerID, req.CmdArgs, g.netConf, networkInfo)
+}
+
+// injectExtendedCNIArgs parses extended cni args from pod's annotation and assign it to req.ExtendedCNIArgs
+func injectExtendedCNIArgs(req *galaxyapi.PodRequest, pod *corev1.Pod) error {
+	if pod.Annotations == nil {
+		return nil
+	}
+	annotation := pod.Annotations[constant.ExtendedCNIArgsAnnotation]
+	if annotation == "" {
+		return nil
+	}
+	argsMap, err := constant.ParseExtendedCNIArgs(annotation)
+	if err != nil {
+		return err
+	}
+	req.ExtendedCNIArgs = argsMap
+	return nil
 }
 
 func (g *Galaxy) setupIPtables() error {

@@ -110,6 +110,16 @@ func TestIPNet(t *testing.T) {
 	if ipNet1.String() != "192.168.0.1/16" {
 		t.Fatalf("%s", ipNet1.String())
 	}
+
+	var nilIPNet *IPNet
+	data, err = json.Marshal(nilIPNet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(data, &nilIPNet)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestIPToInt(t *testing.T) {

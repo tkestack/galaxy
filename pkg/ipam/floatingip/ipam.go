@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	"github.com/golang/glog"
@@ -36,15 +37,8 @@ type IPAM interface {
 }
 
 type FloatingIPInfo struct {
-	IPInfo IPInfo
+	IPInfo constant.IPInfo
 	FIP    database.FloatingIP
-}
-
-type IPInfo struct {
-	IP             *nets.IPNet `json:"ip"`
-	Vlan           uint16      `json:"vlan"`
-	Gateway        net.IP      `json:"gateway"`
-	RoutableSubnet *nets.IPNet `json:"routable_subnet"` //the node subnet
 }
 
 // ipam manages floating ip allocation and release and does it atomically
@@ -182,7 +176,7 @@ func (i *ipam) ReleaseByPrefix(keyPrefix string) error {
 	return i.releaseByPrefix(keyPrefix)
 }
 
-func (i *ipam) first(key string) (*IPInfo, error) {
+func (i *ipam) first(key string) (*constant.IPInfo, error) {
 	fipInfo, err := i.First(key)
 	if err != nil || fipInfo == nil {
 		return nil, err
@@ -206,7 +200,7 @@ func (i *ipam) First(key string) (*FloatingIPInfo, error) {
 				Mask: fips.Mask,
 			})
 			return &FloatingIPInfo{
-				IPInfo: IPInfo{
+				IPInfo: constant.IPInfo{
 					IP:             &ip,
 					Vlan:           fips.Vlan,
 					Gateway:        fips.Gateway,
