@@ -12,6 +12,8 @@ const (
 	// cni args in pod's annotation
 	ExtendedCNIArgsAnnotation = "k8s.v1.cni.galaxy.io/args"
 
+	MultusCNIAnnotation = "k8s.v1.cni.cncf.io/networks"
+
 	CommonCNIArgsKey = "common"
 )
 

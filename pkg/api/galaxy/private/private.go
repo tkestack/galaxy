@@ -23,6 +23,8 @@ var (
 	NetworkTypeUnderlay = NetworkType{String: sets.NewString(LabelValueNetworkTypeFloatingIP), CNIType: "galaxy-k8s-vlan"}
 
 	CNIBridgePlugin = "galaxy-bridge"
+
+	CNISet = sets.NewString("galaxy-flannel", "galaxy-k8s-vlan")
 )
 
 type NetworkType struct {

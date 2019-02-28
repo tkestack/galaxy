@@ -73,7 +73,7 @@ func ParseCNIArgs(args string) (map[string]string, error) {
 	return kvMap, nil
 }
 
-func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs) (types.Result, error) {
+func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs, ifName string) (types.Result, error) {
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
 		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
@@ -88,12 +88,12 @@ func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs) (types.Resu
 		ContainerID:   args.ContainerID,
 		NetNS:         args.Netns,
 		PluginArgsStr: args.Args,
-		IfName:        args.IfName,
+		IfName:        ifName,
 		Path:          args.Path,
 	})
 }
 
-func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs) error {
+func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs, ifName string) error {
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
 		return fmt.Errorf("error serializing delegate netconf: %v", err)
@@ -108,33 +108,50 @@ func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs) error {
 		ContainerID:   args.ContainerID,
 		NetNS:         args.Netns,
 		PluginArgsStr: args.Args,
-		IfName:        args.IfName,
+		IfName:        ifName,
 		Path:          args.Path,
 	})
 }
 
-func CmdAdd(containerID string, cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, networkInfo NetworkInfo) (types.Result, error) {
-	if len(networkInfo) == 0 {
+func CmdAdd(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, networkInfos []*NetworkInfo) (types.Result, error) {
+	if len(networkInfos) == 0 {
 		return nil, fmt.Errorf("No network info returned")
 	}
-	if err := SaveNetworkInfo(containerID, networkInfo); err != nil {
-		return nil, fmt.Errorf("Error save network info %v for %s: %v", networkInfo, containerID, err)
-	}
+	/*
+		if err := SaveNetworkInfo(containerID, networkInfos); err != nil {
+			return nil, fmt.Errorf("Error save network info %v for %s: %v", networkInfos, containerID, err)
+		}
+	*/
 	var (
 		err    error
 		result types.Result
 	)
-	for t, v := range networkInfo {
-		conf, ok := netConf[t]
-		if !ok {
-			return nil, fmt.Errorf("network %s not configured", t)
+	for idx, networkInfo := range networkInfos {
+		for t, v := range *networkInfo {
+			conf, ok := netConf[t]
+			if !ok {
+				return nil, fmt.Errorf("network %s not configured", t)
+			}
+			//append additional args from network info
+			cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
+			var ifName string
+			//In Galaxy.cmdAdd() function, pods without "k8s.v1.cni.cncf.io/networks" annotation use overlay network.
+			//If pod has "k8s.v1.cni.cncf.io/networks" annotation, k8s.ParsePodNetworkAnnotation() will check whether IfName exist.
+			//There can't be a pod with multi-cni use the same ifName in each cni
+			if v, has := v["IfName"]; has {
+				ifName = v
+			} else {
+				ifName = cmdArgs.IfName
+			}
+			result, err = DelegateAdd(conf, cmdArgs, ifName)
+			if err != nil {
+				//fail to add cni, then delete all established CNIs recursively
+				glog.Errorf("fail to add network %s: %v, then rollback and delete it", v, err)
+				delErr := CmdDel(cmdArgs, netConf, networkInfos, idx)
+				glog.Warningf("fail to delete cni in rollback %v", delErr)
+				return nil, fmt.Errorf("fail to establish network %s:%v", v, err)
+			}
 		}
-		//append additional args from network info
-		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
-		result, err = DelegateAdd(conf, cmdArgs)
-		// configure only one network
-		//TODO configure multiple networks with extra args
-		break
 	}
 	if err != nil {
 		return nil, err
@@ -144,26 +161,44 @@ func CmdAdd(containerID string, cmdArgs *skel.CmdArgs, netConf map[string]map[st
 
 type NetworkInfo map[string]map[string]string
 
-func CmdDel(containerID string, cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}) error {
-	networkInfo, err := ConsumeNetworkInfo(containerID)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Duplicated cmdDel invoked by kubelet
-			return nil
+func CmdDel(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, networkInfos []*NetworkInfo, lastIdx int) error {
+	/*
+		networkInfo, err := ConsumeNetworkInfo(containerID)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// Duplicated cmdDel invoked by kubelet
+				return nil
+			}
+			return fmt.Errorf("Error consume network info %v for %s: %v", networkInfo, containerID, err)
 		}
-		return fmt.Errorf("Error consume network info %v for %s: %v", networkInfo, containerID, err)
-	}
-	for t, v := range networkInfo {
-		conf, ok := netConf[t]
-		if !ok {
-			return fmt.Errorf("network %s not configured", t)
+	*/
+	var errorSet []string
+	for idx := lastIdx; idx >= 0; idx-- {
+		networkInfo := networkInfos[idx]
+		for t, v := range *networkInfo {
+			conf, ok := netConf[t]
+			if !ok {
+				return fmt.Errorf("network %s not configured", t)
+			}
+			//append additional args from network info
+			cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
+			var ifName string
+			if v, has := v["IfName"]; has {
+				ifName = v
+			} else {
+				ifName = cmdArgs.IfName
+			}
+			err := DelegateDel(conf, cmdArgs, ifName)
+			if err != nil {
+				errorSet = append(errorSet, err.Error())
+				glog.Errorf("failed to delete network %v: %v", v, err)
+			}
 		}
-		//append additional args from network info
-		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
-		err = DelegateDel(conf, cmdArgs)
-		return err
 	}
-	return fmt.Errorf("No network info returned")
+	if len(errorSet) > 0 {
+		return fmt.Errorf(strings.Join(errorSet, " / "))
+	}
+	return nil
 }
 
 const (

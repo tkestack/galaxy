@@ -7,8 +7,10 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"github.com/golang/glog"
 )
 
@@ -116,4 +118,104 @@ type PortMapConf struct {
 	RuntimeConfig struct {
 		PortMaps []Port `json:"portMappings,omitempty"`
 	} `json:"runtimeConfig,omitempty"`
+}
+
+//such as struct NetworkSelectionElement, function ParsePodNetworkAnnotation &  parsePodNetworkObjectName all written in compatible with multus-cni
+//reference to https://github.com/intel/multus-cni/blob/master/k8sclient/k8sclient.go
+
+// NetworkSelectionElement represents one element of the JSON format
+// Network Attachment Selection Annotation as described in section 4.1.2
+// of the CRD specification.
+type NetworkSelectionElement struct {
+	// Name contains the name of the Network object this element selects
+	Name string `json:"name"`
+	// Namespace contains the optional namespace that the network referenced
+	// by Name exists in
+	Namespace string `json:"namespace,omitempty"`
+	// IPRequest contains an optional requested IP address for this network
+	// attachment
+	IPRequest string `json:"ips,omitempty"`
+	// MacRequest contains an optional requested MAC address for this
+	// network attachment
+	MacRequest string `json:"mac,omitempty"`
+	// InterfaceRequest contains an optional requested name for the
+	// network interface this attachment will create in the container
+	InterfaceRequest string `json:"interface,omitempty"`
+}
+
+func ParsePodNetworkAnnotation(podNetworks string) ([]*NetworkSelectionElement, error) {
+	var networks []*NetworkSelectionElement
+	if podNetworks == "" {
+		return nil, fmt.Errorf("parsePodNetworkAnnotation: pod annotation should be written as <namespace>/<network name>@<ifname>")
+	}
+
+	//In multus-cni, network annotation written as <namespace>/<network name>@<ifname>
+	//Actually, namespace in annotation will be ignored in parsing
+	if strings.IndexAny(podNetworks, "[{\"") >= 0 {
+		if err := json.Unmarshal([]byte(podNetworks), &networks); err != nil {
+			return nil, fmt.Errorf("parsePodNetworkAnnotation: failed to parse pod Network Attachment Selection Annotation JSON format: %v", err)
+		}
+	} else {
+		// Comma-delimited list of network attachment object names
+		for _, item := range strings.Split(podNetworks, ",") {
+			// Remove leading and trailing whitespace.
+			item = strings.TrimSpace(item)
+
+			// Parse network name (i.e. <namespace>/<network name>@<ifname>)
+			_, networkName, netIfName, err := parsePodNetworkObjectName(item)
+			if err != nil {
+				return nil, fmt.Errorf("parsePodNetworkAnnotation: %v", err)
+			}
+			if !private.CNISet.Has(networkName) {
+				return nil, fmt.Errorf("unsupported network %s", networkName)
+			}
+			networks = append(networks, &NetworkSelectionElement{
+				Name:             networkName,
+				InterfaceRequest: netIfName,
+			})
+		}
+	}
+
+	return networks, nil
+}
+
+func parsePodNetworkObjectName(podNetwork string) (string, string, string, error) {
+	var netNsName string
+	var netIfName string
+	var networkName string
+
+	glog.V(5).Infof("parsePodNetworkObjectName: %s", podNetwork)
+	slashItems := strings.Split(podNetwork, "/")
+	if len(slashItems) == 2 {
+		netNsName = strings.TrimSpace(slashItems[0])
+		networkName = slashItems[1]
+	} else if len(slashItems) == 1 {
+		networkName = slashItems[0]
+	} else {
+		return "", "", "", fmt.Errorf("Invalid network object %s (failed at '/') ", podNetwork)
+	}
+
+	atItems := strings.Split(networkName, "@")
+	networkName = strings.TrimSpace(atItems[0])
+	if len(atItems) == 2 {
+		netIfName = strings.TrimSpace(atItems[1])
+	} else if len(atItems) != 1 {
+		return "", "", "", fmt.Errorf("Invalid network object (failed at '@') ")
+	}
+
+	// Check and see if each item matches the specification for valid attachment name.
+	// "Valid attachment names must be comprised of units of the DNS-1123 label format"
+	// [a-z0-9]([-a-z0-9]*[a-z0-9])?
+	// And we allow at (@), and forward slash (/) (units separated by commas)
+	// It must start and end alphanumerically.
+	allItems := []string{netNsName, networkName, netIfName}
+	for i := range allItems {
+		matched, _ := regexp.MatchString("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", allItems[i])
+		if !matched && len([]rune(allItems[i])) > 0 {
+			return "", "", "", fmt.Errorf("Failed to parse: one or more items did not match comma-delimited format (must consist of lower case alphanumeric characters). Must start and end with an alphanumeric character), mismatch @ '%v' ", allItems[i])
+		}
+	}
+
+	glog.V(5).Infof("parsePodNetworkObjectName: parsed: %s, %s, %s", netNsName, networkName, netIfName)
+	return netNsName, networkName, netIfName, nil
 }
