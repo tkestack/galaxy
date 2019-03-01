@@ -17,6 +17,7 @@ import (
 	"github.com/jinzhu/gorm"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -27,14 +28,12 @@ import (
 )
 
 const (
-	nodeUnlabeld, nodeHasNoIP, node3, node4 = "node1", "node2", "node3", "node4"
+	drainedNode, nodeHasNoIP, node3, node4 = "node1", "node2", "node3", "node4"
 )
 
 var (
-	objectLabel    = map[string]string{private.LabelKeyNetworkType: private.LabelValueNetworkTypeFloatingIP}
-	secondIPLabel  = map[string]string{private.LabelKeyNetworkType: private.LabelValueNetworkTypeFloatingIP, private.LabelKeyEnableSecondIP: private.LabelValueEnabled}
-	immutableLabel = map[string]string{private.LabelKeyNetworkType: private.LabelValueNetworkTypeFloatingIP, private.LabelKeyFloatingIP: private.LabelValueImmutable}
-	nodeLabel      = map[string]string{private.LabelKeyNetworkType: private.NodeLabelValueNetworkTypeFloatingIP}
+	secondIPLabel  = map[string]string{private.LabelKeyEnableSecondIP: private.LabelValueEnabled}
+	immutableLabel = map[string]string{private.LabelKeyFloatingIP: private.LabelValueImmutable}
 )
 
 func TestFilter(t *testing.T) {
@@ -43,38 +42,36 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodes := []corev1.Node{
-		createNode(nodeUnlabeld, nil, "10.49.27.2"),      // no floating ip label node
-		createNode(nodeHasNoIP, nodeLabel, "10.49.28.2"), // no floating ip configured for this node
-		createNode(node3, nodeLabel, "10.49.27.3"),       // good node
-		createNode(node4, nodeLabel, "10.173.13.4"),      // good node
+		createNode(drainedNode, nil, "10.180.1.3"), // no floating ip left on this node
+		createNode(nodeHasNoIP, nil, "10.49.28.2"), // no floating ip configured for this node
+		createNode(node3, nil, "10.49.27.3"),       // good node
+		createNode(node4, nil, "10.173.13.4"),      // good node
 	}
 	fipPlugin, stopChan := newPlugin(t, conf, &nodes[0], &nodes[1], &nodes[2], &nodes[3])
 	defer func() { stopChan <- struct{}{} }()
-	if err := fipPlugin.ipam.ReleaseByPrefix(""); err != nil {
-		t.Fatal(err)
+	// drain drainedNode
+	drainedNodeIPNet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
+	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", drainedNodeIPNet, database.PodDelete, ""); err != nil || ipInfo == nil || "10.180.154.7" != ipInfo.String() {
+		t.Fatal(err, ipInfo)
 	}
-	// pod doesn't have floating ip label, filter should return all nodes
-	filtered, failed, err := fipPlugin.Filter(createPod("pod1", "ns1", nil), nodes)
+	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", drainedNodeIPNet, database.PodDelete, ""); err != nil || ipInfo == nil || "10.180.154.8" != ipInfo.String() {
+		t.Fatal(err, ipInfo)
+	}
+	// pod doesn't has no floating ip resource name, filter should return all nodes
+	filtered, failed, err := fipPlugin.Filter(&corev1.Pod{ObjectMeta: v1.ObjectMeta{Name: "pod1", Namespace: "ns1"}}, nodes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFiltered(filtered, nodeUnlabeld, nodeHasNoIP, node3, node4); err != nil {
+	if err := checkFilterResult(filtered, failed, []string{drainedNode, nodeHasNoIP, node3, node4}, []string{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFailed(failed); err != nil {
+	// a pod has floating ip resource name, filter should return nodes that has floating ips
+	if filtered, failed, err = fipPlugin.Filter(createPod("pod1", "ns1", nil), nodes); err != nil {
 		t.Fatal(err)
 	}
-	// a pod has floating ip label, filter should return nodes that has floating ips
-	if filtered, failed, err = fipPlugin.Filter(createPod("pod1", "ns1", objectLabel), nodes); err != nil {
+	if err := checkFilterResult(filtered, failed, []string{node3, node4}, []string{drainedNode, nodeHasNoIP}); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFiltered(filtered, node3, node4); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkFailed(failed, nodeUnlabeld, nodeHasNoIP); err != nil {
-		t.Fatal(err)
-	}
-
 	// the following is to check release policy
 	// allocate a ip of 10.173.13.0/24
 	_, ipNet, _ := net.ParseCIDR("10.173.13.0/24")
@@ -89,10 +86,7 @@ func TestFilter(t *testing.T) {
 	if filtered, failed, err = fipPlugin.Filter(pod, nodes); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFiltered(filtered, node4); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkFailed(failed, nodeUnlabeld, nodeHasNoIP, node3); err != nil {
+	if err := checkFilterResult(filtered, failed, []string{node4}, []string{drainedNode, nodeHasNoIP, node3}); err != nil {
 		t.Fatal(err)
 	}
 	// check pod allocated the previous ip and policy should be updated to AppDeleteOrScaleDown
@@ -112,10 +106,7 @@ func TestFilter(t *testing.T) {
 	if filtered, failed, err = fipPlugin.Filter(createPod("pod2-1", "ns1", immutableLabel), nodes); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkFiltered(filtered, node3, node4); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkFailed(failed, nodeUnlabeld, nodeHasNoIP); err != nil {
+	if err := checkFilterResult(filtered, failed, []string{node3, node4}, []string{drainedNode, nodeHasNoIP}); err != nil {
 		t.Fatal(err)
 	}
 	// forget the pod1, the ip should be reserved, because pod1 has immutable label attached
@@ -221,18 +212,20 @@ func TestFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filteredNodes, _, err := fipPlugin.Filter(pod, nodes); err != nil {
+	if filtered, failed, err = fipPlugin.Filter(pod, nodes); err != nil {
 		t.Fatal(err)
-	} else if len(filteredNodes) != 0 {
-		t.Fatalf("shoult has no node for deployment, wait for release, but got %v", filteredNodes)
+	}
+	if err := checkFilterResult(filtered, failed, []string{}, []string{drainedNode, nodeHasNoIP, node3, node4}); err != nil {
+		t.Fatal(err)
 	}
 	// because replicas = 1, ip will be reserved
 	if err := fipPlugin.unbind(deadPod); err != nil {
 		t.Fatal(err)
 	}
-	if _, failedNodes, err := fipPlugin.Filter(pod, nodes); err != nil {
+	if filtered, failed, err = fipPlugin.Filter(pod, nodes); err != nil {
 		t.Fatal(err)
-	} else if err = checkFailed(failedNodes, nodeUnlabeld, nodeHasNoIP, node4); err != nil {
+	}
+	if err := checkFilterResult(filtered, failed, []string{node3}, []string{drainedNode, nodeHasNoIP, node4}); err != nil {
 		t.Fatal(err)
 	}
 	fip2, err := fipPlugin.ipam.First(keyForDeploymentPod(pod, "dp"))
@@ -242,9 +235,6 @@ func TestFilter(t *testing.T) {
 		t.Fatalf("allocate another ip, expect reserved one")
 	}
 
-	neverLabel := make(map[string]string)
-	neverLabel[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
-	neverLabel[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
 	pod.Labels[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
 	deadPod.Labels[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
 	// when replicas = 0 and never release policy, ip will be reserved
@@ -253,9 +243,10 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	replicas = 1
-	if _, failedNodes, err := fipPlugin.Filter(deadPod, nodes); err != nil {
+	if filtered, failed, err = fipPlugin.Filter(deadPod, nodes); err != nil {
 		t.Fatal(err)
-	} else if err = checkFailed(failedNodes, nodeUnlabeld, nodeHasNoIP, node4); err != nil {
+	}
+	if err := checkFilterResult(filtered, failed, []string{node3}, []string{drainedNode, nodeHasNoIP, node4}); err != nil {
 		t.Fatal(err)
 	}
 	fip3, err := fipPlugin.ipam.First(keyForDeploymentPod(deadPod, "dp"))
@@ -270,10 +261,6 @@ func TestFilter(t *testing.T) {
 type expectAttr struct {
 	empty    bool
 	contains []string
-}
-
-func expectAttrContains(substr ...string) expectAttr {
-	return expectAttr{contains: substr}
 }
 
 func expectAttrEmpty() expectAttr {
@@ -303,6 +290,16 @@ func checkPolicyAndAttr(ipam floatingip.IPAM, key string, expectPolicy database.
 		if !strings.Contains(fip.FIP.Attr, expectAttr.contains[i]) {
 			return fmt.Errorf("expect attr contains %q, real attr %q", expectAttr.contains[i], fip.FIP.Attr)
 		}
+	}
+	return nil
+}
+
+func checkFilterResult(realFilterd []corev1.Node, realFailed schedulerapi.FailedNodesMap, expectFiltererd, expectFailed []string) error {
+	if err := checkFiltered(realFilterd, expectFiltererd...); err != nil {
+		return err
+	}
+	if err := checkFailed(realFailed, expectFailed...); err != nil {
+		return err
 	}
 	return nil
 }
@@ -338,7 +335,17 @@ func checkFailed(realFailed schedulerapi.FailedNodesMap, failed ...string) error
 }
 
 func createPod(name, namespace string, labels map[string]string) *corev1.Pod {
-	return &corev1.Pod{ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels}}
+	quantity := resource.NewQuantity(1, resource.DecimalSI)
+	return &corev1.Pod{
+		ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceName(constant.ResourceName): *quantity},
+				},
+			}},
+		},
+	}
 }
 
 func createNode(name string, labels map[string]string, address string) corev1.Node {
@@ -425,7 +432,7 @@ func newPlugin(t *testing.T, conf Conf, objs ...runtime.Object) (*FloatingIPPlug
 }
 
 func TestLoadConfigMap(t *testing.T) {
-	pod1 := createPod("pod1", "demo", objectLabel)
+	pod1 := createPod("pod1", "demo", nil)
 	pod2 := createPod("pod1", "demo", secondIPLabel) // want second ips
 	cm := &corev1.ConfigMap{
 		ObjectMeta: v1.ObjectMeta{Name: "testConf", Namespace: "demo"},
@@ -468,7 +475,7 @@ func TestLoadConfigMap(t *testing.T) {
 
 func TestBind(t *testing.T) {
 	node := createNode("node1", nil, "10.49.27.2")
-	pod1 := createPod("pod1", "demo", objectLabel)
+	pod1 := createPod("pod1", "demo", nil)
 	var conf Conf
 	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
 		t.Fatal(err)

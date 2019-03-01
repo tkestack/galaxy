@@ -7,10 +7,9 @@ const (
 )
 
 var (
-	LabelKeyNetworkType                 = "network"
-	LabelValueNetworkTypeFloatingIP     = "FLOATINGIP"
-	LabelValueNetworkTypeNAT            = "NAT"
-	NodeLabelValueNetworkTypeFloatingIP = "floatingip"
+	LabelKeyNetworkType             = "network"
+	LabelValueNetworkTypeFloatingIP = "FLOATINGIP"
+	LabelValueNetworkTypeNAT        = "NAT"
 
 	LabelKeyFloatingIP     = "galaxy.io/floatingip"
 	LabelValueImmutable    = "immutable" // Release IP Only when deleting or scale down App
