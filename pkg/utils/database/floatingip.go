@@ -14,14 +14,6 @@ type FloatingIP struct {
 	Policy uint16
 }
 
-type ReleasePolicy uint16
-
-const (
-	PodDelete ReleasePolicy = iota
-	AppDeleteOrScaleDown
-	Never
-)
-
 func (f FloatingIP) TableName() string {
 	if f.Table == "" {
 		return DefaultFloatingipTableName

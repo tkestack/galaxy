@@ -32,11 +32,12 @@ const (
 )
 
 var (
-	secondIPLabel  = map[string]string{private.LabelKeyEnableSecondIP: private.LabelValueEnabled}
-	immutableLabel = map[string]string{private.LabelKeyFloatingIP: private.LabelValueImmutable}
+	secondIPLabel       = map[string]string{private.LabelKeyEnableSecondIP: private.LabelValueEnabled}
+	immutableAnnotation = map[string]string{constant.ReleasePolicyAnnotation: constant.Immutable}
+	neverAnnotation     = map[string]string{constant.ReleasePolicyAnnotation: constant.Never}
 )
 
-func TestFilter(t *testing.T) {
+func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}, []corev1.Node) {
 	var conf Conf
 	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
 		t.Fatal(err)
@@ -47,16 +48,22 @@ func TestFilter(t *testing.T) {
 		createNode(node3, nil, "10.49.27.3"),       // good node
 		createNode(node4, nil, "10.173.13.4"),      // good node
 	}
-	fipPlugin, stopChan := newPlugin(t, conf, &nodes[0], &nodes[1], &nodes[2], &nodes[3])
-	defer func() { stopChan <- struct{}{} }()
+	allObjs := append([]runtime.Object{&nodes[0], &nodes[1], &nodes[2], &nodes[3]}, objs...)
+	fipPlugin, stopChan := newPlugin(t, conf, allObjs...)
 	// drain drainedNode
 	drainedNodeIPNet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
-	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", drainedNodeIPNet, database.PodDelete, ""); err != nil || ipInfo == nil || "10.180.154.7" != ipInfo.String() {
+	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", drainedNodeIPNet, constant.ReleasePolicyPodDelete, ""); err != nil || ipInfo == nil || "10.180.154.7" != ipInfo.String() {
 		t.Fatal(err, ipInfo)
 	}
-	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", drainedNodeIPNet, database.PodDelete, ""); err != nil || ipInfo == nil || "10.180.154.8" != ipInfo.String() {
+	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", drainedNodeIPNet, constant.ReleasePolicyPodDelete, ""); err != nil || ipInfo == nil || "10.180.154.8" != ipInfo.String() {
 		t.Fatal(err, ipInfo)
 	}
+	return fipPlugin, stopChan, nodes
+}
+
+func TestFilter(t *testing.T) {
+	fipPlugin, stopChan, nodes := createPluginTestNodes(t)
+	defer func() { stopChan <- struct{}{} }()
 	// pod doesn't has no floating ip resource name, filter should return all nodes
 	filtered, failed, err := fipPlugin.Filter(&corev1.Pod{ObjectMeta: v1.ObjectMeta{Name: "pod1", Namespace: "ns1"}}, nodes)
 	if err != nil {
@@ -75,11 +82,11 @@ func TestFilter(t *testing.T) {
 	// the following is to check release policy
 	// allocate a ip of 10.173.13.0/24
 	_, ipNet, _ := net.ParseCIDR("10.173.13.0/24")
-	pod := createPod("pod1-0", "ns1", immutableLabel)
-	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet(keyInDB(pod), ipNet, database.PodDelete, ""); err != nil || ipInfo == nil || "10.173.13.2" != ipInfo.String() {
+	pod := createPod("pod1-0", "ns1", immutableAnnotation)
+	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet(keyInDB(pod), ipNet, constant.ReleasePolicyPodDelete, ""); err != nil || ipInfo == nil || "10.173.13.2" != ipInfo.String() {
 		t.Fatal(err, ipInfo)
 	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.PodDelete, expectAttrEmpty()); err != nil {
+	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), constant.ReleasePolicyPodDelete, expectAttrEmpty()); err != nil {
 		t.Fatal(err)
 	}
 	// check filter result is expected
@@ -98,12 +105,12 @@ func TestFilter(t *testing.T) {
 	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrNotEmpty()); err != nil {
+	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), constant.ReleasePolicyImmutable, expectAttrNotEmpty()); err != nil {
 		t.Fatal(err)
 	}
 
 	// filter again on a new pod2, all good nodes should be filteredNodes
-	if filtered, failed, err = fipPlugin.Filter(createPod("pod2-1", "ns1", immutableLabel), nodes); err != nil {
+	if filtered, failed, err = fipPlugin.Filter(createPod("pod2-1", "ns1", immutableAnnotation), nodes); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkFilterResult(filtered, failed, []string{node3, node4}, []string{drainedNode, nodeHasNoIP}); err != nil {
@@ -121,7 +128,7 @@ func TestFilter(t *testing.T) {
 		}
 	}
 	// allocates all ips to pods of a new  statefulset
-	newPod := createPod("temp", "ns1", immutableLabel)
+	newPod := createPod("temp", "ns1", immutableAnnotation)
 	newPod.Spec.NodeName = node4
 	ipInfoSet := sets.NewString()
 	for i := 0; ; i++ {
@@ -151,7 +158,7 @@ func TestFilter(t *testing.T) {
 	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), database.AppDeleteOrScaleDown, expectAttrNotEmpty()); err != nil {
+	if err := checkPolicyAndAttr(fipPlugin.ipam, keyInDB(pod), constant.ReleasePolicyImmutable, expectAttrNotEmpty()); err != nil {
 		t.Fatal(err)
 	}
 	// check sync back into db according to pods annotation TODO move this to a separate test
@@ -180,39 +187,23 @@ func TestFilter(t *testing.T) {
 	} else if fip.Key != keyInDB(pod) {
 		t.Fatal("failed resync ip 10.173.13.2")
 	}
+}
 
+func TestFilterForDeployment(t *testing.T) {
+	fipPlugin, stopChan, nodes := createPluginTestNodes(t)
+	defer func() { stopChan <- struct{}{} }()
 	// pre-allocate ip in filter for deployment pod
-	deadPod := createPod("dp-aaa-bbb", "ns1", immutableLabel)
-	pod = createPod("dp-xxx-yyy", "ns1", immutableLabel)
-	pod.OwnerReferences = append(pod.OwnerReferences, v1.OwnerReference{
-		Kind: "ReplicaSet",
-	})
-	deadPod.OwnerReferences = append(deadPod.OwnerReferences, v1.OwnerReference{
-		Kind: "ReplicaSet",
-	})
+	deadPod := createDeploymentPod("dp-aaa-bbb", "ns1", immutableAnnotation)
+	pod := createDeploymentPod("dp-xxx-yyy", "ns1", immutableAnnotation)
 	var replicas int32 = 1
-	fipPlugin.getDeployment = func(name, namespace string) (*appv1.Deployment, error) {
-		return &appv1.Deployment{
-			ObjectMeta: v1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-			},
-			Spec: appv1.DeploymentSpec{
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: pod.ObjectMeta,
-				},
-				Replicas: &replicas,
-			},
-		}, nil
-	}
-	if err := fipPlugin.ipam.ReleaseByPrefix(""); err != nil {
-		t.Fatal(err)
-	}
+	fipPlugin.getDeployment = getDeploymentFunc(pod.ObjectMeta, &replicas)
 	fip, err := fipPlugin.allocateIP(fipPlugin.ipam, keyForDeploymentPod(deadPod, "dp"), node3, deadPod)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filtered, failed, err = fipPlugin.Filter(pod, nodes); err != nil {
+	// because deployment ip is allocated to deadPod, check if pod gets none available subnets
+	filtered, failed, err := fipPlugin.Filter(pod, nodes)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if err := checkFilterResult(filtered, failed, []string{}, []string{drainedNode, nodeHasNoIP, node3, node4}); err != nil {
@@ -235,8 +226,8 @@ func TestFilter(t *testing.T) {
 		t.Fatalf("allocate another ip, expect reserved one")
 	}
 
-	pod.Labels[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
-	deadPod.Labels[private.LabelKeyFloatingIP] = private.LabelValueNeverRelease
+	pod.Annotations = neverAnnotation
+	deadPod.Annotations = immutableAnnotation
 	// when replicas = 0 and never release policy, ip will be reserved
 	replicas = 0
 	if err := fipPlugin.unbind(pod); err != nil {
@@ -257,6 +248,147 @@ func TestFilter(t *testing.T) {
 	}
 }
 
+func createDeploymentPod(name, namespace string, annotation map[string]string) *corev1.Pod {
+	pod := createPod(name, namespace, annotation)
+	pod.OwnerReferences = append(pod.OwnerReferences, v1.OwnerReference{
+		Kind: "ReplicaSet",
+	})
+	return pod
+}
+
+func poolAnnotation(poolName string) map[string]string {
+	return map[string]string{constant.IPPoolAnnotation: poolName}
+}
+
+func getDeploymentFunc(meta v1.ObjectMeta, replicas *int32) func(name, namespace string) (*appv1.Deployment, error) {
+	fmt.Printf("getDeploymentFunc %v\n", meta.Annotations)
+	return func(name, namespace string) (*appv1.Deployment, error) {
+		return &appv1.Deployment{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+			},
+			Spec: appv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: meta,
+				},
+				Replicas: replicas,
+			},
+		}, nil
+	}
+}
+
+func TestFilterForDeploymentIPPool(t *testing.T) {
+	pod := createDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
+	pod2 := createDeploymentPod("dp2-abc-def", "ns2", poolAnnotation("pool1"))
+	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2)
+	defer func() { stopChan <- struct{}{} }()
+	var replicas int32 = 1
+	fipPlugin.getDeployment = getDeploymentFunc(pod.ObjectMeta, &replicas)
+	deployment, _ := fipPlugin.getDeployment(getDeploymentName(pod), pod.Namespace)
+	testCases := []struct {
+		testPod                       *corev1.Pod
+		expectErr                     error
+		expectFiltererd, expectFailed []string
+		preHook                       func() error
+		postHook                      func() error
+	}{
+		{
+			// test normal filter gets all good nodes
+			testPod: pod, expectFiltererd: []string{node3, node4}, expectFailed: []string{drainedNode, nodeHasNoIP},
+		},
+		{
+			// test bind gets the right key, i.e. _deployment_ns1_dp_dp-xxx-yyy, and filter gets reserved node
+			testPod: pod, expectFiltererd: []string{node4}, expectFailed: []string{drainedNode, nodeHasNoIP, node3},
+			preHook: func() error {
+				if err := fipPlugin.Bind(&schedulerapi.ExtenderBindingArgs{
+					PodName:      pod.Name,
+					PodNamespace: pod.Namespace,
+					Node:         node4,
+				}); err != nil {
+					return err
+				}
+
+				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
+					t.Fatal(err)
+				} else if fip.Key != keyForDeploymentPod(pod, deployment.Name) {
+					t.Fatalf("real key: %s, expect %s", fip.Key, keyForDeploymentPod(pod, deployment.Name))
+				}
+				return nil
+			},
+		},
+		{
+			// test unbind gets the right key, i.e. _ippool__pool1_, and filter on pod2 gets reserved node and key is updating to pod2, i.e. _deployment_ns1_dp2_dp2-abc-def
+			testPod: pod2, expectFiltererd: []string{node4}, expectFailed: []string{drainedNode, nodeHasNoIP, node3},
+			preHook: func() error {
+				// because replicas = 1, ip will be reserved
+				if err := fipPlugin.unbind(pod); err != nil {
+					t.Fatal(err)
+				}
+				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
+					t.Fatal(err)
+				} else if fip.Key != deploymentIPPoolPrefix(deployment) {
+					t.Fatalf("real key: %s, expect %s", fip.Key, keyForDeploymentPod(pod, deployment.Name))
+				}
+				return nil
+			},
+			postHook: func() error {
+				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
+					t.Fatal(err)
+				} else if fip.Key != keyForDeploymentPod(pod2, getDeploymentName(pod2)) {
+					t.Fatalf("real key: %s, expect %s", fip.Key, keyForDeploymentPod(pod2, getDeploymentName(pod2)))
+				}
+				return nil
+			},
+		},
+		{
+			// test filter again on a new deployment pod and bind gets the right key, i.e. _deployment_ns1_dp_dp-xxx-yyy
+			testPod: pod, expectFiltererd: []string{node3, node4}, expectFailed: []string{drainedNode, nodeHasNoIP},
+			postHook: func() error {
+				if err := fipPlugin.Bind(&schedulerapi.ExtenderBindingArgs{
+					PodName:      pod.Name,
+					PodNamespace: pod.Namespace,
+					Node:         node3,
+				}); err != nil {
+					return err
+				}
+				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.49.27.205")); err != nil {
+					t.Fatal(err)
+				} else if fip.Key != keyForDeploymentPod(pod, deployment.Name) {
+					t.Fatalf("real key: %s, expect %s", fip.Key, keyForDeploymentPod(pod, deployment.Name))
+				}
+				return nil
+			},
+		},
+	}
+	for i := range testCases {
+		testCase := testCases[i]
+		if testCase.preHook != nil {
+			if err := testCase.preHook(); err != nil {
+				t.Fatalf("case %d, preHook failed: %v", i, err)
+			}
+		}
+		filtered, failed, err := fipPlugin.Filter(testCase.testPod, nodes)
+		if !reflect.DeepEqual(err, testCase.expectErr) {
+			t.Fatalf("case %d, Filter failed, expect err: %v, got: %v", i, testCase.expectErr, err)
+		}
+		if testCase.expectErr == nil && err != nil {
+			t.Fatalf("case %d, Filter failed: %v", i, err)
+		}
+		if testCase.expectErr != nil && err == nil {
+			t.Fatalf("case %d, Filter failed: %v", i, err)
+		}
+		if err := checkFilterResult(filtered, failed, testCase.expectFiltererd, testCase.expectFailed); err != nil {
+			t.Fatalf("case %d, checkFilterResult failed: %v", i, err)
+		}
+		if testCase.postHook != nil {
+			if err := testCase.postHook(); err != nil {
+				t.Fatalf("case %d, postHook failed: %v", i, err)
+			}
+		}
+	}
+}
+
 // Attr has a time field which makes it hard to check, so creating this struct to do part check
 type expectAttr struct {
 	empty    bool
@@ -271,7 +403,7 @@ func expectAttrNotEmpty() expectAttr {
 	return expectAttr{empty: false}
 }
 
-func checkPolicyAndAttr(ipam floatingip.IPAM, key string, expectPolicy database.ReleasePolicy, expectAttr expectAttr) error {
+func checkPolicyAndAttr(ipam floatingip.IPAM, key string, expectPolicy constant.ReleasePolicy, expectAttr expectAttr) error {
 	fip, err := ipam.First(key)
 	if err != nil {
 		return err
@@ -334,10 +466,16 @@ func checkFailed(realFailed schedulerapi.FailedNodesMap, failed ...string) error
 	return nil
 }
 
-func createPod(name, namespace string, labels map[string]string) *corev1.Pod {
+func createPodWithLabels(name, namespace string, labels map[string]string) *corev1.Pod {
+	pod := createPod(name, namespace, nil)
+	pod.Labels = labels
+	return pod
+}
+
+func createPod(name, namespace string, annotations map[string]string) *corev1.Pod {
 	quantity := resource.NewQuantity(1, resource.DecimalSI)
 	return &corev1.Pod{
-		ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels},
+		ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace, Annotations: annotations},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{
 				Resources: corev1.ResourceRequirements{
@@ -432,8 +570,8 @@ func newPlugin(t *testing.T, conf Conf, objs ...runtime.Object) (*FloatingIPPlug
 }
 
 func TestLoadConfigMap(t *testing.T) {
-	pod1 := createPod("pod1", "demo", nil)
-	pod2 := createPod("pod1", "demo", secondIPLabel) // want second ips
+	pod1 := createPodWithLabels("pod1", "demo", nil)
+	pod2 := createPodWithLabels("pod1", "demo", secondIPLabel) // want second ips
 	cm := &corev1.ConfigMap{
 		ObjectMeta: v1.ObjectMeta{Name: "testConf", Namespace: "demo"},
 		Data: map[string]string{
@@ -510,5 +648,58 @@ func TestBind(t *testing.T) {
 		t.Errorf("Binding did not match expectation")
 		t.Logf("Expected: %v", expect)
 		t.Logf("Actual:   %v", actualBinding)
+	}
+}
+
+func TestParseReleasePolicy(t *testing.T) {
+	testCases := []struct {
+		meta   *v1.ObjectMeta
+		expect constant.ReleasePolicy
+	}{
+		{
+			meta:   &v1.ObjectMeta{Labels: map[string]string{}, Annotations: map[string]string{}},
+			expect: constant.ReleasePolicyPodDelete,
+		},
+		{
+			meta:   &v1.ObjectMeta{Labels: map[string]string{}, Annotations: map[string]string{constant.ReleasePolicyAnnotation: constant.Immutable}},
+			expect: constant.ReleasePolicyImmutable,
+		},
+		{
+			meta:   &v1.ObjectMeta{Labels: map[string]string{}, Annotations: map[string]string{constant.ReleasePolicyAnnotation: constant.Never}},
+			expect: constant.ReleasePolicyNever,
+		},
+		{
+			meta:   &v1.ObjectMeta{Labels: map[string]string{}, Annotations: map[string]string{constant.IPPoolAnnotation: "11"}},
+			expect: constant.ReleasePolicyNever,
+		},
+		{
+			meta:   &v1.ObjectMeta{Labels: map[string]string{}, Annotations: map[string]string{constant.IPPoolAnnotation: ""}},
+			expect: constant.ReleasePolicyPodDelete,
+		},
+	}
+	for i := range testCases {
+		testCase := testCases[i]
+		got := parseReleasePolicy(testCase.meta)
+		if got != testCase.expect {
+			t.Errorf("case %d, expect %v, got %v", i, testCase.expect, got)
+		}
+	}
+}
+
+func TestGetDeploymentName(t *testing.T) {
+	testCases := []struct {
+		pod    *corev1.Pod
+		expect string
+	}{
+		{pod: createPod("dp1-1-2", "ns1", nil), expect: "dp1"},
+		{pod: createPod("dp2-1-1-2", "ns1", nil), expect: "dp2-1"},
+		{pod: createPod("baddp-2", "ns1", nil), expect: ""},
+	}
+	for i := range testCases {
+		testCase := testCases[i]
+		got := getDeploymentName(testCase.pod)
+		if got != testCase.expect {
+			t.Errorf("case %d, expect %v, got %v", i, testCase.expect, got)
+		}
 	}
 }

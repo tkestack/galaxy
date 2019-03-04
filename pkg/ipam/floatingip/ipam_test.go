@@ -10,6 +10,7 @@ import (
 
 	"github.com/jinzhu/gorm"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 )
 
@@ -220,7 +221,7 @@ func TestAllocateIPInSubnet(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
 	_, routableSubnet, _ := net.ParseCIDR("10.173.13.0/24")
-	if _, err := ipam.AllocateInSubnet("pod1-1", routableSubnet, database.PodDelete, ""); err != nil {
+	if _, err := ipam.AllocateInSubnet("pod1-1", routableSubnet, constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
 	ipInfo, err := ipam.first("pod1-1")
@@ -232,7 +233,7 @@ func TestAllocateIPInSubnet(t *testing.T) {
 	}
 	//test can't find available ip
 	_, routableSubnet, _ = net.ParseCIDR("10.173.14.0/24")
-	if _, err := ipam.AllocateInSubnet("pod1-1", routableSubnet, database.PodDelete, ""); err == nil || err != ErrNoFIPForSubnet {
+	if _, err := ipam.AllocateInSubnet("pod1-1", routableSubnet, constant.ReleasePolicyPodDelete, ""); err == nil || err != ErrNoFIPForSubnet {
 		t.Fatalf("should fail because of ErrNoFIPForSubnet: %v", err)
 	}
 }
@@ -291,10 +292,10 @@ func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
 	}
 	// drain ips of 10.180.1.3/32
 	ipnet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
-	if ip, err := ipam.AllocateInSubnet("p5", ipnet, database.PodDelete, ""); err != nil || ip == nil {
+	if ip, err := ipam.AllocateInSubnet("p5", ipnet, constant.ReleasePolicyPodDelete, ""); err != nil || ip == nil {
 		t.Fatalf("ip %v err %v", ip, err)
 	}
-	if ip, err := ipam.AllocateInSubnet("p6", ipnet, database.PodDelete, ""); err != nil || ip == nil {
+	if ip, err := ipam.AllocateInSubnet("p6", ipnet, constant.ReleasePolicyPodDelete, ""); err != nil || ip == nil {
 		t.Fatalf("ip %v err %v", ip, err)
 	}
 	subnets, err = ipam.QueryRoutableSubnetByKey("")
@@ -311,7 +312,7 @@ func TestAllocateSpecificIP(t *testing.T) {
 	defer ipam.Shutdown()
 
 	ip := net.ParseIP("10.49.27.216")
-	if err := ipam.AllocateSpecificIP("pod1", ip, database.PodDelete, ""); err != nil {
+	if err := ipam.AllocateSpecificIP("pod1", ip, constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
 	fip, err := ipam.ByIP(ip)
@@ -319,7 +320,7 @@ func TestAllocateSpecificIP(t *testing.T) {
 		t.Fatalf("key %s, err %v", fip.Key, err)
 	}
 	// check if an allocated ip can be allocated again, should return an ErrNotUpdated error
-	if err := ipam.AllocateSpecificIP("pod2", ip, database.PodDelete, ""); err == nil || err != ErrNotUpdated {
+	if err := ipam.AllocateSpecificIP("pod2", ip, constant.ReleasePolicyPodDelete, ""); err == nil || err != ErrNotUpdated {
 		t.Fatal(err)
 	}
 }
@@ -375,13 +376,13 @@ func TestMultipleIPAM(t *testing.T) {
 		}
 	}
 	ip := net.ParseIP("10.49.27.216")
-	if err := secondIPAM.AllocateSpecificIP("pod1", ip, database.PodDelete, ""); err != nil {
+	if err := secondIPAM.AllocateSpecificIP("pod1", ip, constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
 	check(ip, "pod1")
 
 	_, routableSubnet, _ := net.ParseCIDR("10.173.13.0/24")
-	ip2, err := secondIPAM.AllocateInSubnet("pod2", routableSubnet, database.PodDelete, "")
+	ip2, err := secondIPAM.AllocateInSubnet("pod2", routableSubnet, constant.ReleasePolicyPodDelete, "")
 	if err != nil || ip2 == nil {
 		t.Fatalf("ip %v, err %v", ip2, err)
 	}
@@ -422,7 +423,7 @@ func TestAllocateInSubnet(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
 	ipnet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
-	allocatedIP, err := ipam.AllocateInSubnet("pod1", ipnet, database.PodDelete, "")
+	allocatedIP, err := ipam.AllocateInSubnet("pod1", ipnet, constant.ReleasePolicyPodDelete, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,7 +432,7 @@ func TestAllocateInSubnet(t *testing.T) {
 	}
 
 	ipnet = &net.IPNet{IP: net.ParseIP("10.173.13.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
-	allocatedIP, err = ipam.AllocateInSubnet("pod2", ipnet, database.PodDelete, "")
+	allocatedIP, err = ipam.AllocateInSubnet("pod2", ipnet, constant.ReleasePolicyPodDelete, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,7 +441,7 @@ func TestAllocateInSubnet(t *testing.T) {
 	}
 
 	// test AllocateInSubnetWithKey
-	if err = ipam.AllocateInSubnetWithKey("pod2", "pod3", ipnet.String(), database.PodDelete, ""); err != nil {
+	if err = ipam.AllocateInSubnetWithKey("pod2", "pod3", ipnet.String(), constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
 	ipInfo, err := ipam.First("pod2")
@@ -459,7 +460,7 @@ func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	defer ipam.Shutdown()
 
 	ipnet := &net.IPNet{IP: net.ParseIP("10.173.13.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
-	allocatedIP, err := ipam.AllocateInSubnet("pod2", ipnet, database.PodDelete, "")
+	allocatedIP, err := ipam.AllocateInSubnet("pod2", ipnet, constant.ReleasePolicyPodDelete, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +484,7 @@ func TestUpdateKeyUpdatePolicy(t *testing.T) {
 		t.Error(fmt.Sprintf("%+v", ipInfo))
 	}
 
-	if err := ipam.UpdatePolicy("pod3", ipInfo.IPInfo.IP.IP, database.Never, "111"); err != nil {
+	if err := ipam.UpdatePolicy("pod3", ipInfo.IPInfo.IP.IP, constant.ReleasePolicyNever, "111"); err != nil {
 		t.Fatal(err)
 	}
 	ipInfo, err = ipam.First("pod3")

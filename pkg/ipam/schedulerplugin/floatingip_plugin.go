@@ -221,7 +221,7 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 	if dp != "" {
 		key = keyForDeploymentPod(pod, dp)
 	}
-	policy := parseReleasePolicy(pod.GetLabels())
+	policy := parseReleasePolicy(&pod.ObjectMeta)
 	var err error
 	var deployment *appv1.Deployment
 	if dp != "" {
@@ -248,7 +248,7 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		// We'd better do the allocate in filter for reserve situation.
 		reserveSubnet := subnetSet.List()[0]
 		subnetSet = sets.NewString(reserveSubnet)
-		prefixKey := deploymentPrefix(dp, pod.Namespace)
+		prefixKey := deploymentIPPoolPrefix(deployment)
 		attr := getAttr(pod)
 		if err := p.ipam.AllocateInSubnetWithKey(prefixKey, key, reserveSubnet, policy, attr); err != nil {
 			return nil, err
@@ -270,8 +270,8 @@ func getAvailableSubnet(ipam floatingip.IPAM, key string, dp *appv1.Deployment) 
 	if len(subnets) != 0 {
 		glog.V(3).Infof("[%s] %s already have an allocated floating ip in subnets %v, it may have been deleted or evicted", ipam.Name(), key, subnets)
 	} else {
-		if dp != nil && parseReleasePolicy(dp.Spec.Template.GetLabels()) != database.PodDelete { // get label from pod?
-			prefixKey := deploymentPrefix(dp.Name, dp.Namespace)
+		if dp != nil && parseReleasePolicy(&dp.Spec.Template.ObjectMeta) != constant.ReleasePolicyPodDelete { // get label from pod?
+			prefixKey := deploymentIPPoolPrefix(dp)
 			var ips []database.FloatingIP
 			ips, err = ipam.ByPrefix(prefixKey)
 			if err != nil {
@@ -319,7 +319,7 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 	if err != nil {
 		return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
 	}
-	policy := parseReleasePolicy(pod.GetLabels())
+	policy := parseReleasePolicy(&pod.ObjectMeta)
 	attr := getAttr(pod)
 	if ipInfo != nil {
 		how = "reused"
@@ -354,13 +354,17 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 func (p *FloatingIPPlugin) podBelongToDeployment(pod *corev1.Pod) string {
 	if len(pod.OwnerReferences) == 1 && pod.OwnerReferences[0].Kind == "ReplicaSet" {
 		// assume pod belong to deployment for convenient, name format: dpname-rsid-podid
-		parts := strings.Split(pod.Name, "-")
-		if len(parts) < 3 {
-			return ""
-		}
-		return strings.Join(parts[:len(parts)-2], "-")
+		return getDeploymentName(pod)
 	}
 	return ""
+}
+
+func getDeploymentName(pod *corev1.Pod) string {
+	parts := strings.Split(pod.Name, "-")
+	if len(parts) < 3 {
+		return ""
+	}
+	return strings.Join(parts[:len(parts)-2], "-")
 }
 
 func (p *FloatingIPPlugin) releaseIP(key string, reason string, pod *corev1.Pod) error {
@@ -488,11 +492,11 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		defer p.dpLock.Unlock()
 	}
 
-	switch pod.GetLabels()[private.LabelKeyFloatingIP] {
-	case private.LabelValueNeverRelease:
-		if dp := p.podBelongToDeployment(pod); dp != "" {
-			key := keyForDeploymentPod(pod, dp)
-			keyPrefix := deploymentPrefix(dp, pod.Namespace)
+	policy := parseReleasePolicy(&pod.ObjectMeta)
+	switch policy {
+	case constant.ReleasePolicyNever:
+		if dp != "" {
+			keyPrefix := fmtDeploymentIPPoolPrefix(pod.Annotations, dp, pod.Namespace)
 			err := p.ipam.UpdateKey(key, keyPrefix)
 			if err != nil {
 				glog.Errorf("failed put back pod(%s) ip to deployment %s: %v", pod.Name, dp, err)
@@ -506,7 +510,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		}
 		glog.V(3).Infof("reserved %s for pod %s (never release)", pod.Annotations[constant.ExtendedCNIArgsAnnotation], key)
 		return nil
-	case private.LabelValueImmutable:
+	case constant.ReleasePolicyImmutable:
 		break
 	default:
 		return p.releaseIP(key, deletedAndIPMutablePod, pod)
@@ -543,7 +547,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		} else {
 			replicas = int(*deploy.Spec.Replicas)
 		}
-		prefixKey := deploymentPrefix(dp, pod.Namespace)
+		prefixKey := deploymentIPPoolPrefix(deploy)
 		fips, err := p.ipam.ByPrefix(prefixKey)
 		if err != nil {
 			return err
@@ -695,25 +699,39 @@ func wantSecondIP(pod *corev1.Pod) bool {
 	return labelMap[private.LabelKeyEnableSecondIP] == private.LabelValueEnabled
 }
 
-func parseReleasePolicy(labels map[string]string) database.ReleasePolicy {
-	switch labels[private.LabelKeyFloatingIP] {
-	case private.LabelValueNeverRelease:
-		return database.Never
-	case private.LabelValueImmutable:
-		return database.AppDeleteOrScaleDown
-	default:
-		return database.PodDelete
+func parseReleasePolicy(meta *v1.ObjectMeta) constant.ReleasePolicy {
+	if meta.Annotations == nil {
+		return constant.ReleasePolicyPodDelete
 	}
+	// if there is a pool annotations, we consider it as never release policy
+	pool := getPoolPrefix(meta.Annotations)
+	if pool != "" {
+		return constant.ReleasePolicyNever
+	}
+	return constant.ConvertReleasePolicy(meta.Annotations[constant.ReleasePolicyAnnotation])
+}
+
+type Attr struct {
+	Time int64
+	Pool string
 }
 
 func getAttr(pod *corev1.Pod) string {
 	t := time.Now().Unix()
-	obj := struct {
-		Time int64
-	}{Time: t}
+	// save pool name into attrs cause we may not get annotation in resync logic if deployment is deleted and we lost pod delete event
+	pool := getPoolPrefix(pod.Annotations)
+	obj := Attr{Time: t, Pool: pool}
 	attr, err := json.Marshal(obj)
 	if err != nil {
 		glog.Warningf("failed to marshal attr %+v: %v", obj, err)
 	}
 	return string(attr)
+}
+
+func getPoolPrefix(annotations map[string]string) string {
+	pool := ""
+	if annotations != nil {
+		pool = annotations[constant.IPPoolAnnotation]
+	}
+	return pool
 }

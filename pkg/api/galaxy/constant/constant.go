@@ -67,3 +67,28 @@ func ParseIPInfo(str string) ([]IPInfo, error) {
 	}
 	return ipInfos, nil
 }
+
+type ReleasePolicy uint16
+
+const (
+	ReleasePolicyPodDelete ReleasePolicy = iota
+	ReleasePolicyImmutable
+	ReleasePolicyNever
+)
+
+const (
+	ReleasePolicyAnnotation = "k8s.v1.cni.galaxy.io/release-policy"
+	Immutable               = "immutable" // Release IP Only when deleting or scale down App
+	Never                   = "never"     // Never Release IP
+)
+
+func ConvertReleasePolicy(policyStr string) ReleasePolicy {
+	switch policyStr {
+	case Never:
+		return ReleasePolicyNever
+	case Immutable:
+		return ReleasePolicyImmutable
+	default:
+		return ReleasePolicyPodDelete
+	}
+}

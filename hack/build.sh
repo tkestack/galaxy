@@ -14,7 +14,7 @@ ln -sfn ${ROOT} ${ROOT}/go/src/${PKG}
 export GOPATH=${ROOT}/go
 export GOOS=linux
 if [ ! -d ${ROOT}/go/src/${CNI_PKG} ]; then
-	tar zxvf ${ROOT}/hack/plugins-0.6.0.tar.gz -C ${ROOT}/go/src/github.com/containernetworking/
+	tar zxf ${ROOT}/hack/plugins-0.6.0.tar.gz -C ${ROOT}/go/src/github.com/containernetworking/
 	mv ${ROOT}/go/src/github.com/containernetworking/plugins-0.6.0 ${ROOT}/go/src/github.com/containernetworking/plugins
 fi
 function cleanup() {
