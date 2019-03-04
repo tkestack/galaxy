@@ -117,11 +117,6 @@ func CmdAdd(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, ne
 	if len(networkInfos) == 0 {
 		return nil, fmt.Errorf("No network info returned")
 	}
-	/*
-		if err := SaveNetworkInfo(containerID, networkInfos); err != nil {
-			return nil, fmt.Errorf("Error save network info %v for %s: %v", networkInfos, containerID, err)
-		}
-	*/
 	var (
 		err    error
 		result types.Result
@@ -135,14 +130,7 @@ func CmdAdd(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, ne
 			//append additional args from network info
 			cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
 			var ifName string
-			//In Galaxy.cmdAdd() function, pods without "k8s.v1.cni.cncf.io/networks" annotation use overlay network.
-			//If pod has "k8s.v1.cni.cncf.io/networks" annotation, k8s.ParsePodNetworkAnnotation() will check whether IfName exist.
-			//There can't be a pod with multi-cni use the same ifName in each cni
-			if v, has := v["IfName"]; has {
-				ifName = v
-			} else {
-				ifName = cmdArgs.IfName
-			}
+			ifName = v["IfName"]
 			result, err = DelegateAdd(conf, cmdArgs, ifName)
 			if err != nil {
 				//fail to add cni, then delete all established CNIs recursively
@@ -162,16 +150,6 @@ func CmdAdd(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, ne
 type NetworkInfo map[string]map[string]string
 
 func CmdDel(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, networkInfos []*NetworkInfo, lastIdx int) error {
-	/*
-		networkInfo, err := ConsumeNetworkInfo(containerID)
-		if err != nil {
-			if os.IsNotExist(err) {
-				// Duplicated cmdDel invoked by kubelet
-				return nil
-			}
-			return fmt.Errorf("Error consume network info %v for %s: %v", networkInfo, containerID, err)
-		}
-	*/
 	var errorSet []string
 	for idx := lastIdx; idx >= 0; idx-- {
 		networkInfo := networkInfos[idx]
@@ -183,11 +161,7 @@ func CmdDel(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, ne
 			//append additional args from network info
 			cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
 			var ifName string
-			if v, has := v["IfName"]; has {
-				ifName = v
-			} else {
-				ifName = cmdArgs.IfName
-			}
+			ifName = v["IfName"]
 			err := DelegateDel(conf, cmdArgs, ifName)
 			if err != nil {
 				errorSet = append(errorSet, err.Error())

@@ -141,21 +141,7 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 	if err := injectExtendedCNIArgs(req, pod); err != nil {
 		return nil, err
 	}
-	// get network type from pods' labels
-	/*
-		if pod.Labels == nil {
-			networkInfo = cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
-		} else {
-			networkType := pod.Labels[private.LabelKeyNetworkType]
-			if private.NetworkTypeOverlay.Has(networkType) {
-				networkInfo = cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
-			} else if private.NetworkTypeUnderlay.Has(networkType) {
-				networkInfo = cniutil.NetworkInfo{private.NetworkTypeUnderlay.CNIType: {}}
-			} else {
-				return nil, fmt.Errorf("unsupported network type: %s", networkType)
-			}
-		}
-	*/
+
 	var networkInfos []*cniutil.NetworkInfo
 	if pod.Annotations == nil {
 		networkInfo := cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
@@ -167,14 +153,15 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 			if err != nil {
 				return nil, err
 			}
+			//init networkInfo
+			for idx, network := range networks {
+				network.InterfaceRequest = setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName)
+				networkInfo := cniutil.NetworkInfo{network.Name: {"IfName": network.InterfaceRequest}}
+				networkInfos = append(networkInfos, &networkInfo)
+			}
 			if networks[0].InterfaceRequest != "eth0" {
 				glog.Errorf("invalid pod %s_%s network annotation %s: first network interface must be eth0", pod.Name, pod.Namespace, v)
 				return nil, fmt.Errorf("first network interface must be eth0")
-			}
-			//init networkInfo
-			for _, network := range networks {
-				networkInfo := cniutil.NetworkInfo{network.Name: {"IfName": network.InterfaceRequest}}
-				networkInfos = append(networkInfos, &networkInfo)
 			}
 		} else {
 			networkInfo := cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
@@ -209,14 +196,15 @@ func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest, pod *corev1.Pod) error {
 			if err != nil {
 				return err
 			}
+			//init networkInfo
+			for idx, network := range networks {
+				network.InterfaceRequest = setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName)
+				networkInfo := cniutil.NetworkInfo{network.Name: {"IfName": network.InterfaceRequest}}
+				networkInfos = append(networkInfos, &networkInfo)
+			}
 			if networks[0].InterfaceRequest != "eth0" {
 				glog.Errorf("invalid pod %s_%s network annotation %s: first network interface must be eth0", pod.Name, pod.Namespace, v)
 				return fmt.Errorf("first network interface must be eth0")
-			}
-			//init networkInfo
-			for _, network := range networks {
-				networkInfo := cniutil.NetworkInfo{network.Name: {"IfName": network.InterfaceRequest}}
-				networkInfos = append(networkInfos, &networkInfo)
 			}
 		} else {
 			networkInfo := cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
@@ -412,4 +400,14 @@ func convertResult(result types.Result) (*t020.Result, error) {
 		return nil, fmt.Errorf("CNI plugin reported an invalid IPv4 address: %+v.", result020.IP4)
 	}
 	return result020, nil
+}
+
+func setNetInterface(netIf string, idx int, argIf string) string {
+	if netIf != "" {
+		return netIf
+	}
+	if idx == 0 {
+		return argIf
+	}
+	return fmt.Sprintf("eth%d", idx)
 }
