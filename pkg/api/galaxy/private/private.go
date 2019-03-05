@@ -11,10 +11,6 @@ var (
 	LabelValueNetworkTypeFloatingIP = "FLOATINGIP"
 	LabelValueNetworkTypeNAT        = "NAT"
 
-	LabelKeyFloatingIP     = "galaxy.io/floatingip"
-	LabelValueImmutable    = "immutable" // Release IP Only when deleting or scale down App
-	LabelValueNeverRelease = "never"     // Never Release IP
-
 	LabelKeyEnableSecondIP = "galaxy.io/secondip"
 	LabelValueEnabled      = "true"
 

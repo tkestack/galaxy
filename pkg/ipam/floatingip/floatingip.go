@@ -23,10 +23,6 @@ type FloatingIPConf struct {
 	Vlan           uint16      `json:"vlan,omitempty"`
 }
 
-type KeyIterator interface {
-	Iterator() []string
-}
-
 func (fip *FloatingIP) MarshalJSON() ([]byte, error) {
 	conf := FloatingIPConf{}
 	conf.RoutableSubnet = nets.NetsIPNet(fip.RoutableSubnet)

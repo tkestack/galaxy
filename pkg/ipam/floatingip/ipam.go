@@ -20,13 +20,12 @@ var (
 
 type IPAM interface {
 	ConfigurePool([]*FloatingIP) error
-	AllocateSpecificIP(string, net.IP, database.ReleasePolicy, string) error
-	AllocateInSubnet(string, *net.IPNet, database.ReleasePolicy, string) (net.IP, error)
-	AllocateInSubnetWithKey(oldK, newK, subnet string, policy database.ReleasePolicy, attr string) error
+	AllocateSpecificIP(string, net.IP, constant.ReleasePolicy, string) error
+	AllocateInSubnet(string, *net.IPNet, constant.ReleasePolicy, string) (net.IP, error)
+	AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error
 	UpdateKey(oldK, newK string) error
-	UpdatePolicy(string, net.IP, database.ReleasePolicy, string) error
+	UpdatePolicy(string, net.IP, constant.ReleasePolicy, string) error
 	Release([]string) error
-	ReleaseByPrefix(string) error
 	First(string) (*FloatingIPInfo, error) // returns nil,nil if key is not found
 	ByIP(net.IP) (database.FloatingIP, error)
 	ByPrefix(string) ([]database.FloatingIP, error)
@@ -219,7 +218,7 @@ func (i *ipam) Shutdown() {
 	}
 }
 
-func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy database.ReleasePolicy, attr string) (allocated net.IP, err error) {
+func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy constant.ReleasePolicy, attr string) (allocated net.IP, err error) {
 	if routableSubnet == nil {
 		// this should never happen
 		return nil, fmt.Errorf("nil routableSubnet")
@@ -336,11 +335,11 @@ func (i *ipam) ByIP(ip net.IP) (database.FloatingIP, error) {
 	return i.findByIP(nets.IPToInt(ip))
 }
 
-func (i *ipam) AllocateSpecificIP(key string, ip net.IP, policy database.ReleasePolicy, attr string) error {
+func (i *ipam) AllocateSpecificIP(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
 	return i.updateKey(nets.IPToInt(ip), key, uint16(policy), attr)
 }
 
-func (i *ipam) UpdatePolicy(key string, ip net.IP, policy database.ReleasePolicy, attr string) error {
+func (i *ipam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
 	return i.updatePolicy(nets.IPToInt(ip), key, uint16(policy), attr)
 }
 
@@ -354,7 +353,7 @@ func (i *ipam) UpdateKey(oldK, newK string) error {
 	})
 }
 
-func (i *ipam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy database.ReleasePolicy, attr string) error {
+func (i *ipam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		ret := tx.Table(i.Name()).Where("`key` = ? AND subnet = ?", oldK, subnet).Limit(1).UpdateColumns(map[string]interface{}{`key`: newK, "policy": policy, "attr": attr})
 		if ret.Error != nil {

@@ -1,15 +1,14 @@
 package schedulerplugin
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"github.com/golang/glog"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +31,11 @@ func (p *FloatingIPPlugin) storeReady() bool {
 	return true
 }
 
+type resyncObj struct {
+	appFulName string
+	attr       string
+}
+
 // resyncPod releases ips from
 // 1. deleted pods whose parent app does not exist
 // 2. deleted pods whose parent deployment or statefulset exist but is not ip immutable
@@ -48,17 +52,18 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	if err != nil {
 		return err
 	}
-	podInDB := make(map[string]string) // podFullName to AppFullName
+	podInDB := make(map[string]resyncObj)
 	for _, fip := range all {
-		if fip.Key == "" {
+		if fip.Key == "" || isIPPoolKey(fip.Key) {
 			continue
 		}
-		if fip.Policy == uint16(database.Never) {
+		if fip.Policy == uint16(constant.ReleasePolicyNever) {
 			// never release these ips
 			// for deployment, put back to deployment
+			// we do nothing for statefulset pod, because we preserve ip according to its pod name
 			appName, podName, namespace := resolveDpAppPodName(fip.Key)
 			if podName != "" {
-				podInDB[fip.Key] = fmtKey(appName, namespace)
+				podInDB[fip.Key] = resyncObj{appFulName: fmtKey(appName, namespace), attr: fip.Attr}
 			}
 			continue
 		}
@@ -70,7 +75,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				continue
 			}
 		}
-		podInDB[fip.Key] = fmtKey(appName, namespace)
+		podInDB[fip.Key] = resyncObj{appFulName: fmtKey(appName, namespace), attr: fip.Attr}
 	}
 	pods, err := p.listWantedPods()
 	if err != nil {
@@ -103,10 +108,11 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		}
 		glog.V(4).Infof("existPods %v", podMap)
 	}
-	for podFullName, appFullName := range podInDB {
+	for podFullName, obj := range podInDB {
 		if _, ok := existPods[podFullName]; ok {
 			continue
 		}
+		appFullName := obj.appFulName
 		// we can't get labels of not exist pod, so get them from it's ss or deployment
 		ss, ok := ssMap[appFullName]
 		if ok && !strings.HasPrefix(podFullName, "_deployment_") {
@@ -117,7 +123,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				}
 				continue
 			}
-			if ss.Spec.Template.GetLabels()[private.LabelKeyFloatingIP] != private.LabelValueImmutable {
+			if parseReleasePolicy(&ss.Spec.Template.ObjectMeta) != constant.ReleasePolicyImmutable {
 				// 2. deleted pods whose parent statefulset exist but is not ip immutable
 				if err := releaseIP(ipam, podFullName, deletedAndIPMutablePod); err != nil {
 					glog.Warningf("[%s] %v", ipam.Name(), err)
@@ -138,7 +144,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			continue
 		}
 		dp, ok := dpMap[appFullName]
-		if ok && strings.HasPrefix(podFullName, "_deployment_") {
+		if ok && isDeploymentKey(podFullName) {
 			if !p.hasResourceName(&dp.Spec.Template.Spec) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, podFullName, deletedAndLabelMissMatchPod); err != nil {
@@ -146,22 +152,22 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				}
 				continue
 			}
-			policy := dp.Spec.Template.GetLabels()[private.LabelKeyFloatingIP]
-			if policy != private.LabelValueImmutable && policy != private.LabelValueNeverRelease {
+			policy := parseReleasePolicy(&dp.Spec.Template.ObjectMeta)
+			if policy == constant.ReleasePolicyPodDelete {
 				// 2. deleted pods whose parent deployment exist but is not ip immutable
 				if err := releaseIP(ipam, podFullName, deletedAndIPMutablePod); err != nil {
 					glog.Warningf("[%s] %v", ipam.Name(), err)
 				}
 				continue
 			}
-			dpKey := deploymentPrefix(dp.Name, dp.Namespace)
+			dpKey := deploymentIPPoolPrefix(dp)
 			fips, err := ipam.ByPrefix(dpKey)
 			if err != nil {
 				glog.Errorf("failed query prefix: %v", err)
 				continue
 			}
 			replicas := int(*dp.Spec.Replicas)
-			if replicas < len(fips) && policy == private.LabelValueImmutable {
+			if replicas < len(fips) && policy == constant.ReleasePolicyImmutable {
 				if err = releaseIP(ipam, podFullName, deletedAndScaledDownDpPod); err != nil {
 					glog.Errorf("[%s] %v", ipam.Name(), err)
 				}
@@ -171,7 +177,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				}
 			}
 			continue
-		} else if strings.HasPrefix(podFullName, "_deployment_") {
+		} else if isDeploymentKey(podFullName) {
 			appName, _, namespace := resolveDpAppPodName(podFullName)
 			fip, err := ipam.First(podFullName)
 			if err != nil {
@@ -180,8 +186,16 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			} else if fip == nil {
 				continue
 			}
-			if fip.FIP.Policy == uint16(database.Never) {
-				prefixKey := deploymentPrefix(appName, namespace)
+			if fip.FIP.Policy == uint16(constant.ReleasePolicyNever) {
+				var attr Attr
+				if err := json.Unmarshal([]byte(obj.attr), &attr); err != nil {
+					glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.attr, podFullName, err)
+					continue
+				}
+				prefixKey := attr.Pool
+				if prefixKey == "" {
+					prefixKey = deploymentPrefix(appName, namespace)
+				}
 				if err = ipam.UpdateKey(podFullName, prefixKey); err != nil {
 					glog.Errorf("failed reserve fip: %v", err)
 				}
@@ -240,6 +254,26 @@ func deploymentPrefix(deployment, namespace string) string {
 	return fmt.Sprintf("_deployment_%s_%s_", namespace, deployment)
 }
 
+func deploymentIPPoolPrefix(deployment *appv1.Deployment) string {
+	return fmtDeploymentIPPoolPrefix(deployment.Spec.Template.Annotations, deployment.Name, deployment.Namespace)
+}
+
+func fmtDeploymentIPPoolPrefix(podAnnotation map[string]string, dpName, namespace string) string {
+	if pool := getPoolPrefix(podAnnotation); pool != "" {
+		// ip pool may be shared with other namespaces, so leave namespace empty
+		return fmt.Sprintf("_ippool__%s_", pool)
+	}
+	return deploymentPrefix(dpName, namespace)
+}
+
+func isIPPoolKey(key string) bool {
+	return strings.HasPrefix(key, "_ippool__")
+}
+
+func isDeploymentKey(key string) bool {
+	return strings.HasPrefix(key, "_deployment_")
+}
+
 func fmtKey(name, namespace string) string {
 	return fmt.Sprintf("%s_%s", namespace, name)
 }
@@ -273,7 +307,7 @@ func resolveAppPodName(podFullName string) (string, string, string) {
 }
 
 func resolveDpAppPodName(podFullName string) (string, string, string) {
-	if strings.HasPrefix(podFullName, "_deployment_") {
+	if isDeploymentKey(podFullName) {
 		parts := strings.Split(podFullName, "_")
 		if len(parts) == 4 {
 			return parts[3], "", parts[2]
@@ -362,7 +396,7 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, p
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
 		}
 	} else {
-		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(pod.Labels), getAttr(pod)); err != nil {
+		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta), getAttr(pod)); err != nil {
 			return err
 		}
 		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)
