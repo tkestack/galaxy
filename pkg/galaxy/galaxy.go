@@ -26,7 +26,7 @@ type Galaxy struct {
 	dockerCli *docker.DockerInterface
 	netConf   map[string]map[string]interface{}
 	pmhandler *portmapping.PortMappingHandler
-	client    *kubernetes.Clientset
+	client    kubernetes.Interface
 	pm        *policy.PolicyManager
 }
 
@@ -72,7 +72,7 @@ func (g *Galaxy) Start() error {
 		kernel.DisableRPFilter(g.quitChan)
 		go eni.SetupENIs(g.quitChan)
 	}
-	return g.startServer()
+	return g.StartServer()
 }
 
 func (g *Galaxy) Stop() error {
@@ -125,4 +125,8 @@ func (g *Galaxy) initk8sClient() {
 		glog.Fatalf("Can not generate client from config: error(%v)", err)
 	}
 	glog.Infof("apiserver address %s, kubeconf %s", g.Master, g.KubeConf)
+}
+
+func (g *Galaxy) SetClient(cli kubernetes.Interface) {
+	g.client = cli
 }

@@ -57,7 +57,7 @@ var (
 type PolicyManager struct {
 	sync.Mutex
 	policies           []policy
-	client             *kubernetes.Clientset
+	client             kubernetes.Interface
 	ipsetHandle        ipset.Interface
 	iptableHandle      utiliptables.Interface
 	hostName           string
@@ -70,7 +70,7 @@ type PolicyManager struct {
 	quitChan           <-chan struct{}
 }
 
-func New(client *kubernetes.Clientset, quitChan <-chan struct{}) *PolicyManager {
+func New(client kubernetes.Interface, quitChan <-chan struct{}) *PolicyManager {
 	pm := &PolicyManager{
 		client:        client,
 		ipsetHandle:   ipset.New(utilexec.New()),

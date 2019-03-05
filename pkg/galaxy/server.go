@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-func (g *Galaxy) startServer() error {
+func (g *Galaxy) StartServer() error {
 	g.installHandlers()
 	if err := os.Remove(private.GalaxySocketPath); err != nil {
 		if !os.IsNotExist(err) {
