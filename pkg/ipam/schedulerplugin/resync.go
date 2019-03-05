@@ -13,7 +13,6 @@ import (
 	"github.com/golang/glog"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -73,7 +72,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		}
 		podInDB[fip.Key] = fmtKey(appName, namespace)
 	}
-	pods, err := p.PodLister.List(p.objectSelector)
+	pods, err := p.listWantedPods()
 	if err != nil {
 		return err
 	}
@@ -111,7 +110,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		// we can't get labels of not exist pod, so get them from it's ss or deployment
 		ss, ok := ssMap[appFullName]
 		if ok && !strings.HasPrefix(podFullName, "_deployment_") {
-			if !p.wantedObject(&ss.Spec.Template.ObjectMeta) {
+			if !p.hasResourceName(&ss.Spec.Template.Spec) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, podFullName, deletedAndLabelMissMatchPod); err != nil {
 					glog.Warningf("[%s] %v", ipam.Name(), err)
@@ -140,7 +139,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		}
 		dp, ok := dpMap[appFullName]
 		if ok && strings.HasPrefix(podFullName, "_deployment_") {
-			if !p.wantedObject(&dp.Spec.Template.ObjectMeta) {
+			if !p.hasResourceName(&dp.Spec.Template.Spec) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, podFullName, deletedAndLabelMissMatchPod); err != nil {
 					glog.Warningf("[%s] %v", ipam.Name(), err)
@@ -204,7 +203,7 @@ func (p *FloatingIPPlugin) getSSMap() (map[string]*appv1.StatefulSet, error) {
 	}
 	key2App := make(map[string]*appv1.StatefulSet)
 	for i := range sss {
-		if !p.wantedObject(&sss[i].ObjectMeta) {
+		if !p.hasResourceName(&sss[i].Spec.Template.Spec) {
 			continue
 		}
 		key2App[statefulsetName(sss[i])] = sss[i]
@@ -220,7 +219,7 @@ func (p *FloatingIPPlugin) getDPMap() (map[string]*appv1.Deployment, error) {
 	}
 	key2App := make(map[string]*appv1.Deployment)
 	for i := range dps {
-		if !p.wantedObject(&dps[i].ObjectMeta) {
+		if !p.hasResourceName(&dps[i].Spec.Template.Spec) {
 			continue
 		}
 		key2App[deploymentName(dps[i])] = dps[i]
@@ -286,15 +285,29 @@ func resolveDpAppPodName(podFullName string) (string, string, string) {
 	return "", "", ""
 }
 
+func (p *FloatingIPPlugin) listWantedPods() ([]*corev1.Pod, error) {
+	pods, err := p.PodLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods: %v", err)
+	}
+	var filtered []*corev1.Pod
+	for i := range pods {
+		if p.hasResourceName(&pods[i].Spec) {
+			filtered = append(filtered, pods[i])
+		}
+	}
+	return filtered, nil
+}
+
 // syncPodIPs sync all pods' ips with db, if a pod has PodIP and its ip is unallocated, allocate the ip to it
 func (p *FloatingIPPlugin) syncPodIPsIntoDB() {
 	glog.Infof("sync pod ips into DB")
 	if !p.storeReady() {
 		return
 	}
-	pods, err := p.PodLister.List(p.objectSelector)
+	pods, err := p.listWantedPods()
 	if err != nil {
-		glog.Warningf("failed to list pods: %v", err)
+		glog.Warning(err)
 		return
 	}
 	for i := range pods {
@@ -355,39 +368,4 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, p
 		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)
 	}
 	return nil
-}
-
-// labelNodes labels node which have floatingip configuration with labels network=floatingip
-// TODO After we finally remove all old pods created by previous gaiastack which has network=floatingip node selector
-// we can remove all network=floatingip label from galaxy code
-func (p *FloatingIPPlugin) labelNodes() {
-	if p.conf != nil && p.conf.DisableLabelNode {
-		return
-	}
-	nodes, err := p.Client.CoreV1().Nodes().List(v1.ListOptions{})
-	if err != nil {
-		glog.Warningf("failed to get nodes: %v", err)
-		return
-	}
-	for i := range nodes.Items {
-		node := nodes.Items[i]
-		if node.Labels == nil {
-			node.Labels = make(map[string]string)
-		}
-		if node.Labels[private.LabelKeyNetworkType] == private.NodeLabelValueNetworkTypeFloatingIP {
-			continue
-		}
-		_, err := p.getNodeSubnet(&node)
-		if err != nil {
-			// node has no fip configuration
-			return
-		}
-		node.Labels[private.LabelKeyNetworkType] = private.NodeLabelValueNetworkTypeFloatingIP
-		_, err = p.Client.CoreV1().Nodes().Update(&node)
-		if err != nil {
-			glog.Warningf("failed to update node label: %v", err)
-		} else {
-			glog.Infof("update node %s label %s=%s", node.Name, private.LabelKeyNetworkType, private.NodeLabelValueNetworkTypeFloatingIP)
-		}
-	}
 }

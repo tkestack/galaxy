@@ -20,7 +20,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
@@ -39,15 +38,13 @@ type Conf struct {
 	ResyncInterval      uint                     `json:"resyncInterval"`
 	ConfigMapName       string                   `json:"configMapName"`
 	ConfigMapNamespace  string                   `json:"configMapNamespace"`
-	DisableLabelNode    bool                     `json:"disableLabelNode"`
 	FloatingIPKey       string                   `json:"floatingipKey"`       // configmap floatingip data key
 	SecondFloatingIPKey string                   `json:"secondFloatingipKey"` // configmap second floatingip data key
 }
 
 // FloatingIPPlugin Allocates Floating IP for deployments
 type FloatingIPPlugin struct {
-	objectSelector, nodeSelector labels.Selector
-	ipam, secondIPAM             floatingip.IPAM
+	ipam, secondIPAM floatingip.IPAM
 	// node name to subnet cache
 	nodeSubnet     map[string]*net.IPNet
 	nodeSubnetLock sync.Mutex
@@ -93,9 +90,6 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		db:                db,
 	}
 	plugin.hasSecondIPConf.Store(false)
-	if err := plugin.initSelector(); err != nil {
-		glog.Fatal(err)
-	}
 	plugin.getDeployment = func(name, namespace string) (*appv1.Deployment, error) {
 		return plugin.DeploymentLister.Deployments(namespace).Get(name)
 	}
@@ -128,7 +122,6 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 			if _, err := p.updateConfigMap(); err != nil {
 				glog.Warning(err)
 			}
-			p.labelNodes()
 		}, time.Minute, stop)
 	}
 	go wait.Until(func() {
@@ -143,18 +136,6 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 		p.syncPodIPsIntoDB()
 	}, time.Duration(p.conf.ResyncInterval)*time.Minute, stop)
 	go p.loop(stop)
-}
-
-func (p *FloatingIPPlugin) initSelector() error {
-	objectSelectorMap := make(map[string]string)
-	objectSelectorMap[private.LabelKeyNetworkType] = private.LabelValueNetworkTypeFloatingIP
-	nodeSelectorMap := make(map[string]string)
-	nodeSelectorMap[private.LabelKeyNetworkType] = private.NodeLabelValueNetworkTypeFloatingIP
-
-	labels.SelectorFromSet(labels.Set(objectSelectorMap))
-	p.objectSelector = labels.SelectorFromSet(labels.Set(objectSelectorMap))
-	p.nodeSelector = labels.SelectorFromSet(labels.Set(nodeSelectorMap))
-	return nil
 }
 
 // updateConfigMap fetches the newest floatingips configmap and syncs in memory/db config,
@@ -199,51 +180,20 @@ func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) erro
 	return nil
 }
 
-// Filter marks nodes which haven't been labeled as supporting floating IP or have no available ips as FailedNodes
+// Filter marks nodes which have no available ips as FailedNodes
 // If the given pod doesn't want floating IP, none failedNodes returns
 func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev1.Node, schedulerapi.FailedNodesMap, error) {
 	failedNodesMap := schedulerapi.FailedNodesMap{}
-	if !p.wantedObject(&pod.ObjectMeta) {
+	if !p.hasResourceName(&pod.Spec) {
 		return nodes, failedNodesMap, nil
 	}
 	filteredNodes := []corev1.Node{}
-	key := keyInDB(pod)
-	dp := p.podBelongToDeployment(pod)
-	if dp != "" {
-		key = keyForDeploymentPod(pod, dp)
-	}
-	policy := parseReleasePolicy(pod.GetLabels())
-	var err error
-	var deployment *appv1.Deployment
-	if dp != "" {
-		deployment, err = p.getDeployment(dp, pod.Namespace)
-		if err != nil {
-			return filteredNodes, failedNodesMap, err
-		}
-	}
-	subnets, reserve, err := getAvailableSubnet(p.ipam, key, deployment)
+	subnetSet, err := p.getSubnet(pod)
 	if err != nil {
-		return filteredNodes, failedNodesMap, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
-	}
-	subnetSet := sets.NewString(subnets...)
-	if p.enabledSecondIP(pod) {
-		secondSubnets, reserve2, err := getAvailableSubnet(p.secondIPAM, key, deployment)
-		if err != nil {
-			return filteredNodes, failedNodesMap, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
-		}
-		subnetSet = subnetSet.Intersection(sets.NewString(secondSubnets...))
-		reserve = reserve || reserve2
-	}
-	if reserve && subnetSet.Len() > 0 {
-		reserveSubnet := subnetSet.List()[0]
-		subnetSet = sets.NewString(reserveSubnet)
+		return filteredNodes, failedNodesMap, err
 	}
 	for i := range nodes {
 		nodeName := nodes[i].Name
-		if !p.nodeSelector.Matches(labels.Set(nodes[i].GetLabels())) {
-			failedNodesMap[nodeName] = "FloatingIPPlugin:UnlabelNode"
-			continue
-		}
 		subnet, err := p.getNodeSubnet(&nodes[i])
 		if err != nil {
 			failedNodesMap[nodes[i].Name] = err.Error()
@@ -262,21 +212,54 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 		}
 		glog.V(4).Infof("filtered nodes %v failed nodes %v", nodeNames, failedNodesMap)
 	}
+	return filteredNodes, failedNodesMap, nil
+}
+
+func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
+	key := keyInDB(pod)
+	dp := p.podBelongToDeployment(pod)
+	if dp != "" {
+		key = keyForDeploymentPod(pod, dp)
+	}
+	policy := parseReleasePolicy(pod.GetLabels())
+	var err error
+	var deployment *appv1.Deployment
+	if dp != "" {
+		deployment, err = p.getDeployment(dp, pod.Namespace)
+		if err != nil {
+			return nil, err
+		}
+	}
+	subnets, reserve, err := getAvailableSubnet(p.ipam, key, deployment)
+	if err != nil {
+		return nil, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
+	}
+	subnetSet := sets.NewString(subnets...)
+	if p.enabledSecondIP(pod) {
+		secondSubnets, reserve2, err := getAvailableSubnet(p.secondIPAM, key, deployment)
+		if err != nil {
+			return nil, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
+		}
+		subnetSet = subnetSet.Intersection(sets.NewString(secondSubnets...))
+		reserve = reserve || reserve2
+	}
 	if reserve && subnetSet.Len() > 0 {
+		// Since bind is in a different goroutine than filter in scheduler, we can't ensure the first pod got binded before the next one got filtered.
+		// We'd better do the allocate in filter for reserve situation.
 		reserveSubnet := subnetSet.List()[0]
+		subnetSet = sets.NewString(reserveSubnet)
 		prefixKey := deploymentPrefix(dp, pod.Namespace)
 		attr := getAttr(pod)
 		if err := p.ipam.AllocateInSubnetWithKey(prefixKey, key, reserveSubnet, policy, attr); err != nil {
-			return filteredNodes, failedNodesMap, err
+			return nil, err
 		}
 		if p.enabledSecondIP(pod) {
 			if err := p.secondIPAM.AllocateInSubnetWithKey(prefixKey, key, reserveSubnet, policy, attr); err != nil {
-				return filteredNodes, failedNodesMap, err
+				return nil, err
 			}
 		}
 	}
-
-	return filteredNodes, failedNodesMap, nil
+	return subnetSet, nil
 }
 
 func getAvailableSubnet(ipam floatingip.IPAM, key string, dp *appv1.Deployment) (subnets []string, reserve bool, err error) {
@@ -323,7 +306,7 @@ func getAvailableSubnet(ipam floatingip.IPAM, key string, dp *appv1.Deployment) 
 
 func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*schedulerapi.HostPriorityList, error) {
 	list := &schedulerapi.HostPriorityList{}
-	if !p.wantedObject(&pod.ObjectMeta) {
+	if !p.hasResourceName(&pod.Spec) {
 		return list, nil
 	}
 	//TODO
@@ -423,7 +406,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	if err != nil {
 		return fmt.Errorf("failed to find pod %s: %v", key, err)
 	}
-	if !p.wantedObject(&pod.ObjectMeta) {
+	if !p.hasResourceName(&pod.Spec) {
 		// we will config extender resources which ensures pod which doesn't want floatingip won't be sent to plugin
 		// see https://github.com/kubernetes/kubernetes/pull/60332
 		return fmt.Errorf("pod which doesn't want floatingip have been sent to plugin")
@@ -472,7 +455,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 }
 
 func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
-	if !p.wantedObject(&newPod.ObjectMeta) {
+	if !p.hasResourceName(&newPod.Spec) {
 		return nil
 	}
 	if !evicted(oldPod) && evicted(newPod) {
@@ -487,7 +470,7 @@ func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
 }
 
 func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
-	if !p.wantedObject(&pod.ObjectMeta) {
+	if !p.hasResourceName(&pod.Spec) {
 		return nil
 	}
 	glog.Warningf("pod %s deleted, handle", pod.Name)
@@ -605,15 +588,16 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	return nil
 }
 
-func (p *FloatingIPPlugin) wantedObject(o *v1.ObjectMeta) bool {
-	labelMap := o.GetLabels()
-	if labelMap == nil {
-		return false
+func (p *FloatingIPPlugin) hasResourceName(spec *corev1.PodSpec) bool {
+	for i := range spec.Containers {
+		reqResource := spec.Containers[i].Resources.Requests
+		for name := range reqResource {
+			if name == constant.ResourceName {
+				return true
+			}
+		}
 	}
-	if !p.objectSelector.Matches(labels.Set(labelMap)) {
-		return false
-	}
-	return true
+	return false
 }
 
 func getNodeIP(node *corev1.Node) net.IP {
