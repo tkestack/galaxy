@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	"github.com/golang/glog"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +36,7 @@ func (p *FloatingIPPlugin) storeReady() bool {
 type resyncObj struct {
 	appFulName string
 	attr       string
+	ip         uint32
 }
 
 // resyncPod releases ips from
@@ -53,27 +56,31 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		return err
 	}
 	podInDB := make(map[string]resyncObj)
+	assignPodsInDB := make(map[string]resyncObj) // syncing ips with cloudprovider
 	for _, fip := range all {
 		if fip.Key == "" || isIPPoolKey(fip.Key) {
 			continue
 		}
-		if fip.Policy == uint16(constant.ReleasePolicyNever) {
-			// never release these ips
-			// for deployment, put back to deployment
-			// we do nothing for statefulset pod, because we preserve ip according to its pod name
-			appName, podName, namespace := resolveDpAppPodName(fip.Key)
-			if podName != "" {
-				podInDB[fip.Key] = resyncObj{appFulName: fmtKey(appName, namespace), attr: fip.Attr}
-			}
-			continue
-		}
+		var podName string
 		appName, _, namespace := resolveAppPodName(fip.Key)
 		if namespace == "" {
-			appName, _, namespace = resolveDpAppPodName(fip.Key)
+			appName, podName, namespace = resolveDpAppPodName(fip.Key)
 			if namespace == "" {
 				glog.Warningf("unexpected key: %s", fip.Key)
 				continue
 			}
+		}
+		// we send unassign request to cloud provider for any release policy
+		assignPodsInDB[fip.Key] = resyncObj{appFulName: fmtKey(appName, namespace), attr: fip.Attr, ip: fip.IP}
+		if fip.Policy == uint16(constant.ReleasePolicyNever) {
+			// never release these ips
+			// for deployment, put back to deployment
+			// we do nothing for statefulset pod, because we preserve ip according to its pod name
+			if podName != "" {
+				podInDB[fip.Key] = resyncObj{appFulName: fmtKey(appName, namespace), attr: fip.Attr}
+			}
+			// skip if it is a statefulset key and is ReleasePolicyNever
+			continue
 		}
 		podInDB[fip.Key] = resyncObj{appFulName: fmtKey(appName, namespace), attr: fip.Attr}
 	}
@@ -107,6 +114,28 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			podMap[k] = fmtKey(v.Name, v.Namespace)
 		}
 		glog.V(4).Infof("existPods %v", podMap)
+	}
+	for podFullName, obj := range assignPodsInDB {
+		if _, ok := existPods[podFullName]; ok {
+			continue
+		}
+		var attr Attr
+		if err := json.Unmarshal([]byte(obj.attr), &attr); err != nil {
+			glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.attr, podFullName, err)
+			continue
+		}
+		if attr.NodeName == "" {
+			glog.Errorf("empty nodeName for %s in db", podFullName)
+			continue
+		}
+		if err = p.cloudProviderUnAssignIP(&cloudprovider.UnAssignIPRequest{
+			NodeName:  attr.NodeName,
+			IPAddress: nets.IntToIP(obj.ip).String(),
+		}); err != nil {
+			// delete this record from podInDB map to have a retry
+			delete(podInDB, podFullName)
+			glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.ip).String(), podFullName, err)
+		}
 	}
 	for podFullName, obj := range podInDB {
 		if _, ok := existPods[podFullName]; ok {
@@ -292,6 +321,7 @@ func parsePodIndex(name string) (int, error) {
 }
 
 // resolveAppPodName returns appname, podId, namespace
+// "kube-system_fip-bj-111": {"fip-bj", "111", "kube-system"}
 func resolveAppPodName(podFullName string) (string, string, string) {
 	// namespace_ssname-id, e.g. default_fip-0
 	// _ is not a valid char in appname
@@ -306,6 +336,8 @@ func resolveAppPodName(podFullName string) (string, string, string) {
 	return parts[1][:lastIndex], parts[1][lastIndex+1:], parts[0]
 }
 
+// resolveDpAppPodName returns appname, podname, namespace
+// "_deployment_default_dp1_dp1-rs1-pod1": {"dp1", "dp1-rs1-pod1", "default"}
 func resolveDpAppPodName(podFullName string) (string, string, string) {
 	if isDeploymentKey(podFullName) {
 		parts := strings.Split(podFullName, "_")
@@ -396,7 +428,7 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, p
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
 		}
 	} else {
-		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta), getAttr(pod)); err != nil {
+		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta), getAttr(pod, pod.Spec.NodeName)); err != nil {
 			return err
 		}
 		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)

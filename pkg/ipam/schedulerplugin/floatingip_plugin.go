@@ -13,6 +13,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"github.com/golang/glog"
@@ -33,13 +34,14 @@ const (
 )
 
 type Conf struct {
-	FloatingIPs         []*floatingip.FloatingIP `json:"floatingips,omitempty"`
-	DBConfig            *database.DBConfig       `json:"database"`
-	ResyncInterval      uint                     `json:"resyncInterval"`
-	ConfigMapName       string                   `json:"configMapName"`
-	ConfigMapNamespace  string                   `json:"configMapNamespace"`
-	FloatingIPKey       string                   `json:"floatingipKey"`       // configmap floatingip data key
-	SecondFloatingIPKey string                   `json:"secondFloatingipKey"` // configmap second floatingip data key
+	FloatingIPs           []*floatingip.FloatingIP `json:"floatingips,omitempty"`
+	DBConfig              *database.DBConfig       `json:"database"`
+	ResyncInterval        uint                     `json:"resyncInterval"`
+	ConfigMapName         string                   `json:"configMapName"`
+	ConfigMapNamespace    string                   `json:"configMapNamespace"`
+	FloatingIPKey         string                   `json:"floatingipKey"`       // configmap floatingip data key
+	SecondFloatingIPKey   string                   `json:"secondFloatingipKey"` // configmap second floatingip data key
+	CloudProviderGRPCAddr string                   `json:"cloudProviderGrpcAddr"`
 }
 
 // FloatingIPPlugin Allocates Floating IP for deployments
@@ -55,8 +57,8 @@ type FloatingIPPlugin struct {
 	unreleased                   chan *corev1.Pod
 	hasSecondIPConf              atomic.Value
 	getDeployment                func(name, namespace string) (*appv1.Deployment, error)
-	dpLock                       sync.Mutex
 	db                           *database.DBRecorder //for testing
+	cloudProvider                cloudprovider.CloudProvider
 }
 
 func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin, error) {
@@ -92,6 +94,9 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 	plugin.hasSecondIPConf.Store(false)
 	plugin.getDeployment = func(name, namespace string) (*appv1.Deployment, error) {
 		return plugin.DeploymentLister.Deployments(namespace).Get(name)
+	}
+	if conf.CloudProviderGRPCAddr != "" {
+		plugin.cloudProvider = cloudprovider.NewGRPCCloudProvider(conf.CloudProviderGRPCAddr)
 	}
 	return plugin, nil
 }
@@ -249,7 +254,8 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		reserveSubnet := subnetSet.List()[0]
 		subnetSet = sets.NewString(reserveSubnet)
 		prefixKey := deploymentIPPoolPrefix(deployment)
-		attr := getAttr(pod)
+		// we can't get nodename on filter, update attr on bind
+		attr := getAttr(pod, "")
 		if err := p.ipam.AllocateInSubnetWithKey(prefixKey, key, reserveSubnet, policy, attr); err != nil {
 			return nil, err
 		}
@@ -320,7 +326,7 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 		return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
 	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)
-	attr := getAttr(pod)
+	attr := getAttr(pod, nodeName)
 	if ipInfo != nil {
 		how = "reused"
 		glog.Infof("pod %s have an allocated floating ip %s, updating policy to %v attr %s", key, ipInfo.IPInfo.IP.String(), policy, attr)
@@ -346,8 +352,48 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 			return nil, fmt.Errorf("nil floating ip for key %s: %v", key, err)
 		}
 	}
+	if err := p.cloudProviderAssignIP(&cloudprovider.AssignIPRequest{
+		NodeName:  nodeName,
+		IPAddress: ipInfo.IPInfo.IP.String(),
+	}, func() {
+		// rollback allocated ip
+		if how == "reused" {
+			if err := ipam.UpdatePolicy(key, ipInfo.IPInfo.IP.IP, constant.ReleasePolicy(ipInfo.FIP.Policy), ipInfo.FIP.Attr); err != nil {
+				glog.Warningf("failed to rollback policy from %v to %d, attr from %s to %s", policy, ipInfo.FIP.Policy, attr, ipInfo.FIP.Attr)
+			}
+		} else {
+			if err := ipam.Release([]string{key}); err != nil {
+				glog.Warningf("failed to rollback floating ip %s to %s: %v", ipInfo.IPInfo.IP.IP.String(), key, err)
+			}
+		}
+	}); err != nil {
+		return nil, fmt.Errorf("failed to assign ip %s to %s: %v", ipInfo.IPInfo.IP.IP.String(), key, err)
+	}
 	glog.Infof("[%s] %s floating ip %s, policy %v, attr %s for %s", ipam.Name(), how, ipInfo.IPInfo.IP.String(), policy, attr, key)
 	return &ipInfo.IPInfo, nil
+}
+
+func (p *FloatingIPPlugin) cloudProviderAssignIP(req *cloudprovider.AssignIPRequest, rollback func()) error {
+	if p.cloudProvider == nil {
+		return nil
+	}
+	reply, err := p.cloudProvider.AssignIP(req)
+	if err != nil || !reply.Success {
+		rollback()
+		return fmt.Errorf("cloud provider AssignIP reply success %v, message %s, err %v", reply.Success, reply.Msg, err)
+	}
+	return nil
+}
+
+func (p *FloatingIPPlugin) cloudProviderUnAssignIP(req *cloudprovider.UnAssignIPRequest) error {
+	if p.cloudProvider == nil {
+		return nil
+	}
+	reply, err := p.cloudProvider.UnAssignIP(req)
+	if err != nil || !reply.Success {
+		return fmt.Errorf("cloud provider UnAssignIP reply success %v, message %s, err %v", reply.Success, reply.Msg, err)
+	}
+	return nil
 }
 
 // podBelongToDeployment return deployment name if pod is generated by deployment
@@ -488,10 +534,20 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	dp := p.podBelongToDeployment(pod)
 	if dp != "" {
 		key = keyForDeploymentPod(pod, dp)
-		p.dpLock.Lock()
-		defer p.dpLock.Unlock()
 	}
-
+	if p.cloudProvider != nil {
+		ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
+		if err != nil || len(ipInfos) == 0 || ipInfos[0].IP == nil {
+			glog.Errorf("bad format of %s: %s, err %v", key, pod.Annotations[constant.ExtendedCNIArgsAnnotation], err)
+		} else {
+			if err = p.cloudProviderUnAssignIP(&cloudprovider.UnAssignIPRequest{
+				NodeName:  pod.Spec.NodeName,
+				IPAddress: ipInfos[0].IP.IP.String(),
+			}); err != nil {
+				return fmt.Errorf("failed to unassign ip %s to %s: %v", ipInfos[0].IP.IP.String(), key, err)
+			}
+		}
+	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)
 	switch policy {
 	case constant.ReleasePolicyNever:
@@ -712,15 +768,16 @@ func parseReleasePolicy(meta *v1.ObjectMeta) constant.ReleasePolicy {
 }
 
 type Attr struct {
-	Time int64
-	Pool string
+	Time     int64
+	Pool     string
+	NodeName string // need this attr to send unassign request to cloud provider on resync
 }
 
-func getAttr(pod *corev1.Pod) string {
+func getAttr(pod *corev1.Pod, nodeName string) string {
 	t := time.Now().Unix()
 	// save pool name into attrs cause we may not get annotation in resync logic if deployment is deleted and we lost pod delete event
 	pool := getPoolPrefix(pod.Annotations)
-	obj := Attr{Time: t, Pool: pool}
+	obj := Attr{Time: t, Pool: pool, NodeName: nodeName}
 	attr, err := json.Marshal(obj)
 	if err != nil {
 		glog.Warningf("failed to marshal attr %+v: %v", obj, err)

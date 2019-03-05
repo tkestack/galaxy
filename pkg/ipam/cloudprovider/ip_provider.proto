@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package cloudprovider;
+
+// The service definition.
+service IPProviderService {
+  rpc AssignIP (AssignIPRequest) returns (AssignIPReply) {}
+  rpc UnAssignIP (UnAssignIPRequest) returns (UnAssignIPReply) {}
+}
+
+message AssignIPRequest {
+  string node_name = 1;
+  string IP_address = 2;
+}
+
+message AssignIPReply{
+  bool success = 1;
+  string msg = 2;
+}
+
+message UnAssignIPRequest {
+  string node_name = 1;
+  string IP_address = 2;
+}
+
+message UnAssignIPReply {
+  bool success = 1;
+  string msg = 2;
+}
