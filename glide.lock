@@ -1,9 +1,10 @@
-hash: ca2d6538c4f83a830e2ddd169a7c86ef340674de4be70a803474a5e2a4437393
-updated: 2019-03-07T15:26:13.197348+08:00
+hash: 174bb5ff803ed857dd637a4e180c28c99223476a7a06de063f56cef15f2ca409
+updated: 2019-03-07T21:37:13.174791+08:00
 imports:
 - name: github.com/containernetworking/cni
   version: a7885cb6f8ab03fba07852ded351e4f5e7a112bf
   subpackages:
+  - libcni
   - pkg/invoke
   - pkg/skel
   - pkg/types
@@ -16,11 +17,26 @@ imports:
   - pkg/ip
   - pkg/ipam
   - pkg/ns
+  - pkg/testutils
+  - pkg/utils
   - pkg/utils/hwaddr
+  - pkg/utils/sysctl
+  - plugins/ipam/host-local/backend
+  - plugins/ipam/host-local/backend/allocator
+  - plugins/ipam/host-local/backend/disk
+  - plugins/ipam/host-local/backend/testing
 - name: github.com/coreos/go-iptables
   version: 259c8e6a4275d497442c721fa52204d7a58bde8b
   subpackages:
   - iptables
+- name: github.com/coreos/go-systemd
+  version: 2688e91251d9d8e404e86dd8f096e23b2f086958
+  subpackages:
+  - activation
+- name: github.com/d2g/dhcp4
+  version: f0e4d29ff0231dce36e250b2ed9ff08412584bca
+- name: github.com/d2g/dhcp4client
+  version: bed07e1bc5b85f69c6f0fd73393aa35ec68ed892
 - name: github.com/davecgh/go-spew
   version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
@@ -110,6 +126,8 @@ imports:
   - simplelru
 - name: github.com/imdario/mergo
   version: 9316a62528ac99aaecb4e47eadd6dc8aa6533d58
+- name: github.com/j-keck/arping
+  version: 2cf9dc699c5640a7e2c81403a44127bf28033600
 - name: github.com/jinzhu/gorm
   version: 9acaa33324bbcc78239a1c913d4f1292c12177b9
   subpackages:
@@ -118,6 +136,8 @@ imports:
   version: 04140366298a54a039076d798123ffa108fff46c
 - name: github.com/json-iterator/go
   version: ab8a2e0c74be9d3be70b3184d9acc634935ded82
+- name: github.com/mattn/go-shellwords
+  version: 02e3cf038dcea8290e44424da473dd12be796a8a
 - name: github.com/Microsoft/go-winio
   version: 6c8aa416ae893afe5671c38161833ff14ae6d6c0
 - name: github.com/modern-go/concurrent
@@ -136,7 +156,7 @@ imports:
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/vishvananda/netlink
-  version: da7420cab5e209195f5f7387fccd4c7f48758d30
+  version: a2ad57a690f3caf3015351d2d6e1c0b95c349752
   subpackages:
   - nl
 - name: github.com/vishvananda/netns
@@ -165,7 +185,7 @@ imports:
   - jws
   - jwt
 - name: golang.org/x/sys
-  version: 076b546753157f758b316e59bcb51e6807c04057
+  version: 48ac38b7c8cbedd50b1613c0fccacfc7d88dfcdf
   subpackages:
   - unix
   - windows
@@ -489,6 +509,7 @@ testImports:
   version: 2e1be8f7d90e9d3e3e58b0ce470f2f14d075406f
   subpackages:
   - config
+  - extensions/table
   - internal/codelocation
   - internal/containernode
   - internal/failer
@@ -509,6 +530,8 @@ testImports:
   version: 65fb64232476ad9046e57c26cd0bff3d3a8dc6cd
   subpackages:
   - format
+  - gbytes
+  - gexec
   - internal/assertion
   - internal/asyncassertion
   - internal/oraclematcher

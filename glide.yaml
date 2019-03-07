@@ -23,7 +23,7 @@ import:
   version: 778f2e774c725116edbc3d039dc0dfc1cc62aae8
   repo: https://github.com/sirupsen/logrus.git
 - package: github.com/vishvananda/netlink
-  version: da7420cab5e209195f5f7387fccd4c7f48758d30
+  version: v1.0.0
   subpackages:
   - nl
 - package: github.com/vishvananda/netns
@@ -42,7 +42,7 @@ import:
 - package: golang.org/x/crypto
   version: 81e90905daefcd6fd217b62423c0908922eadb30
 - package: golang.org/x/sys
-  version: 076b546753157f758b316e59bcb51e6807c04057
+  version: 48ac38b7c8cbedd50b1613c0fccacfc7d88dfcdf
 - package: golang.org/x/text
   version: b19bf474d317b857955b12035d2c5acb57ce8b01
 - package: github.com/go-sql-driver/mysql
