@@ -211,6 +211,15 @@ func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest, pod *corev1.Pod) error {
 			networkInfos = append(networkInfos, &networkInfo)
 		}
 	}
+	if commonArgs, exist := req.ExtendedCNIArgs[constant.CommonCNIArgsKey]; exist {
+		for _, networkInfo := range networkInfos {
+			for t := range *networkInfo {
+				for k, v := range commonArgs {
+					(*networkInfo)[t][k] = string([]byte(v))
+				}
+			}
+		}
+	}
 	glog.V(4).Infof("pod %s_%s networkInfo %v", pod.Name, pod.Namespace, networkInfos)
 	return cniutil.CmdDel(req.CmdArgs, g.netConf, networkInfos, len(networkInfos)-1)
 }
