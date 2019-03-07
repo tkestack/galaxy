@@ -10,6 +10,8 @@ import (
 	log "github.com/golang/glog"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/util/wait"
+
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ips"
 )
 
 const (
@@ -97,8 +99,8 @@ func ensureENINetwrok(eniMetaMap map[string]*eniMeta) error {
 				log.Errorf("failed to get eni %s index: %v", ifName, err)
 				return fmt.Errorf("failed to get eni %s index: %v", ifName, err)
 			}
-			ip := net.IPNet{IP: net.ParseIP(eniMeta.PrimaryIp), Mask: convertMask(eniMeta.Mask)}
-			err = EnsureENINetwork(ifName, devIndex, ip)
+			ip := net.IPNet{IP: net.ParseIP(eniMeta.PrimaryIp), Mask: ips.ParseIPv4Mask(eniMeta.Mask)}
+			err = ensureENINetwork(ifName, devIndex, ip)
 			if err != nil {
 				log.Errorf("failed to setup eni %s network: %v", ifName, err)
 				return err
@@ -115,7 +117,7 @@ func ensureENINetwrok(eniMetaMap map[string]*eniMeta) error {
 	return nil
 }
 
-func EnsureENINetwork(ifname string, eniTable int, primaryIp net.IPNet) error {
+func ensureENINetwork(ifname string, eniTable int, primaryIp net.IPNet) error {
 	log.Infof("setting up network for an eni with %s, primaryIp %v, route table %d",
 		ifname, primaryIp, eniTable)
 
@@ -128,11 +130,6 @@ func EnsureENINetwork(ifname string, eniTable int, primaryIp net.IPNet) error {
 	if err := netlink.LinkSetUp(link); err != nil {
 		return fmt.Errorf("failed to bring up eni %s: %v", link.Attrs().Name, err)
 	}
-
-	// ensure eni addr
-	//if err := ensureEniAddr(link, &primaryIp); err != nil {
-	//	return err
-	//}
 
 	// ensure eni route
 	if err := ensureENIRoute(link, &primaryIp, eniTable); err != nil {
@@ -156,29 +153,9 @@ func ensureENIRoute(link netlink.Link, primaryIp *net.IPNet, eniTable int) error
 		Flags:     int(netlink.FLAG_ONLINK),
 	}
 
-	err := netlink.RouteDel(&r)
-	if err != nil && !IsNotExistsError(err) {
-		return fmt.Errorf("failed to clean up old routes: %v", err)
-	}
-
-	if err := netlink.RouteAdd(&r); err != nil {
-		if !IsFileExistsError(err) {
-			return fmt.Errorf("failed to add route %s via %s table %d: %v", r.Dst.IP.String(), gw.String(), eniTable, err)
-		}
-
-		err = netlink.RouteDel(&netlink.Route{
-			Dst:   &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
-			Scope: netlink.SCOPE_UNIVERSE,
-			Table: eniTable,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to delete route entry %s: %v", r.Dst.IP.String(), err)
-		}
-
-		err = netlink.RouteAdd(&r)
-		if err != nil {
-			return fmt.Errorf("failed to add route entry %s: %v", r.Dst.IP.String(), err)
-		}
+	err := netlink.RouteReplace(&r)
+	if err != nil {
+		return fmt.Errorf("failed to replace route %+v: %v", &r, err)
 	}
 
 	// remove the route that default out to eni-x out of main route table

@@ -1,7 +1,6 @@
 package eni
 
 import (
-	"net"
 	"strconv"
 	"strings"
 	"syscall"
@@ -66,13 +65,6 @@ func getENIMetaMap(metaCli *metadata.MetaData) (eniMetaMap map[string]*eniMeta, 
 		eniMetaMap[imac] = enim
 	}
 	return
-}
-
-func convertMask(str string) net.IPMask {
-	ip := net.ParseIP(str)
-	ip = ip.To4()
-	mask := net.IPv4Mask(ip[0], ip[1], ip[2], ip[3])
-	return mask
 }
 
 // isNotExistsError returns true if the error type is syscall.ESRCH
