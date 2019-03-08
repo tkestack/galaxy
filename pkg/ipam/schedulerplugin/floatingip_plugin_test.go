@@ -12,6 +12,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"github.com/jinzhu/gorm"
@@ -328,7 +329,7 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
 					t.Fatal(err)
 				} else if fip.Key != deploymentIPPoolPrefix(deployment) {
-					t.Fatalf("real key: %s, expect %s", fip.Key, keyForDeploymentPod(pod, deployment.Name))
+					t.Fatalf("real key: %s, expect %s", fip.Key, deploymentIPPoolPrefix(deployment))
 				}
 				return nil
 			},
@@ -701,5 +702,94 @@ func TestGetDeploymentName(t *testing.T) {
 		if got != testCase.expect {
 			t.Errorf("case %d, expect %v, got %v", i, testCase.expect, got)
 		}
+	}
+}
+
+type fakeCloudProvider struct {
+	expectIP          string
+	expectNode        string
+	invokedAssignIP   bool
+	invokedUnAssignIP bool
+}
+
+func (f *fakeCloudProvider) AssignIP(in *rpc.AssignIPRequest) (*rpc.AssignIPReply, error) {
+	f.invokedAssignIP = true
+	if in == nil {
+		return nil, fmt.Errorf("nil request")
+	}
+	if in.IPAddress != f.expectIP {
+		return nil, fmt.Errorf("expect ip %s, got %s", f.expectIP, in.IPAddress)
+	}
+	if in.NodeName != f.expectNode {
+		return nil, fmt.Errorf("expect node name %s, got %s", f.expectNode, in.NodeName)
+	}
+	return &rpc.AssignIPReply{Success: true}, nil
+}
+
+func (f *fakeCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssignIPReply, error) {
+	f.invokedUnAssignIP = true
+	if in == nil {
+		return nil, fmt.Errorf("nil request")
+	}
+	if in.IPAddress != f.expectIP {
+		return nil, fmt.Errorf("expect ip %s, got %s", f.expectIP, in.IPAddress)
+	}
+	if in.NodeName != f.expectNode {
+		return nil, fmt.Errorf("expect node name %s, got %s", f.expectNode, in.NodeName)
+	}
+	return &rpc.UnAssignIPReply{Success: true}, nil
+}
+
+func TestUnBind(t *testing.T) {
+	pod1 := createPod("pod1", "demo", map[string]string{})
+	node := createNode("TestUnBindNode", nil, "10.173.13.4")
+	var conf Conf
+	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
+		t.Fatal(err)
+	}
+	fipPlugin, stopChan := newPlugin(t, conf, pod1, &node)
+	defer func() { stopChan <- struct{}{} }()
+	fipPlugin.cloudProvider = &fakeCloudProvider{}
+	// if a pod has not got cni args annotation, unbind should return nil
+	if err := fipPlugin.unbind(pod1); err != nil {
+		t.Fatal(err)
+	}
+	// if a pod has got bad cni args annotation, unbind should return error
+	pod1.Annotations[constant.ExtendedCNIArgsAnnotation] = "fff"
+	if err := fipPlugin.unbind(pod1); err == nil {
+		t.Fatal(err)
+	}
+
+	// bind before testing normal unbind
+	fakeCP := &fakeCloudProvider{expectIP: "10.173.13.2", expectNode: node.Name}
+	fipPlugin.cloudProvider = fakeCP
+	if err := fipPlugin.Bind(&schedulerapi.ExtenderBindingArgs{
+		PodName:      pod1.Name,
+		PodNamespace: pod1.Namespace,
+		Node:         node.Name,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fipInfo, err := fipPlugin.ipam.First(keyInDB(pod1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fipInfo == nil {
+		t.Fatal("expect 10.173.13.2")
+	}
+	if fipInfo.IPInfo.IP.IP.String() != "10.173.13.2" {
+		t.Fatalf("real IP: %s, expect 10.173.13.2", fipInfo.IPInfo.IP.IP.String())
+	}
+	str, err := constant.FormatIPInfo([]constant.IPInfo{fipInfo.IPInfo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod1.Annotations[constant.ExtendedCNIArgsAnnotation] = str
+	pod1.Spec.NodeName = node.Name
+	if err := fipPlugin.unbind(pod1); err != nil {
+		t.Fatal(err)
+	}
+	if !fakeCP.invokedAssignIP || !fakeCP.invokedUnAssignIP {
+		t.Fatal()
 	}
 }

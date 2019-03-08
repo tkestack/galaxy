@@ -55,7 +55,7 @@ type FloatingIPPlugin struct {
 	*PluginFactoryArgs
 	lastIPConf, lastSecondIPConf string
 	conf                         *Conf
-	unreleased                   chan *corev1.Pod
+	unreleased                   chan *releaseEvent
 	hasSecondIPConf              atomic.Value
 	getDeployment                func(name, namespace string) (*appv1.Deployment, error)
 	db                           *database.DBRecorder //for testing
@@ -89,7 +89,7 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		nodeSubnet:        make(map[string]*net.IPNet),
 		PluginFactoryArgs: args,
 		conf:              &conf,
-		unreleased:        make(chan *corev1.Pod, 10),
+		unreleased:        make(chan *releaseEvent, 10),
 		db:                db,
 	}
 	plugin.hasSecondIPConf.Store(false)
@@ -355,7 +355,7 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 	}
 	if err := p.cloudProviderAssignIP(&rpc.AssignIPRequest{
 		NodeName:  nodeName,
-		IPAddress: ipInfo.IPInfo.IP.String(),
+		IPAddress: ipInfo.IPInfo.IP.IP.String(),
 	}, func() {
 		// rollback allocated ip
 		if how == "reused" {
@@ -379,11 +379,19 @@ func (p *FloatingIPPlugin) cloudProviderAssignIP(req *rpc.AssignIPRequest, rollb
 		return nil
 	}
 	reply, err := p.cloudProvider.AssignIP(req)
-	glog.Infof("AssignIP reply %v  err %v", reply, err)
-	if err != nil || !reply.Success {
+	if err != nil {
 		rollback()
-		return fmt.Errorf("cloud provider AssignIP reply success %v, message %s, err %v", reply.Success, reply.Msg, err)
+		return fmt.Errorf("cloud provider AssignIP reply err %v", err)
 	}
+	if reply == nil {
+		rollback()
+		return fmt.Errorf("cloud provider AssignIP nil reply")
+	}
+	if !reply.Success {
+		rollback()
+		return fmt.Errorf("cloud provider AssignIP reply failed, message %s", reply.Msg)
+	}
+	glog.Infof("AssignIP %v success", req)
 	return nil
 }
 
@@ -392,9 +400,16 @@ func (p *FloatingIPPlugin) cloudProviderUnAssignIP(req *rpc.UnAssignIPRequest) e
 		return nil
 	}
 	reply, err := p.cloudProvider.UnAssignIP(req)
-	if err != nil || !reply.Success {
-		return fmt.Errorf("cloud provider UnAssignIP reply success %v, message %s, err %v", reply.Success, reply.Msg, err)
+	if err != nil {
+		return fmt.Errorf("cloud provider UnAssignIP reply err %v", err)
 	}
+	if reply == nil {
+		return fmt.Errorf("cloud provider UnAssignIP nil reply")
+	}
+	if !reply.Success {
+		return fmt.Errorf("cloud provider UnAssignIP reply failed, message %s", reply.Msg)
+	}
+	glog.Infof("UnAssignIP %v success", req)
 	return nil
 }
 
@@ -513,7 +528,7 @@ func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
 	if !evicted(oldPod) && evicted(newPod) {
 		// Deployments will leave evicted pods
 		// If it's a evicted one, release its ip
-		p.unreleased <- newPod
+		p.unreleased <- &releaseEvent{pod: newPod}
 	}
 	if err := p.syncPodIP(newPod); err != nil {
 		glog.Warningf("failed to sync pod ip: %v", err)
@@ -526,7 +541,7 @@ func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
 		return nil
 	}
 	glog.Warningf("pod %s deleted, handle", pod.Name)
-	p.unreleased <- pod
+	p.unreleased <- &releaseEvent{pod: pod}
 	return nil
 }
 
@@ -538,9 +553,14 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		key = keyForDeploymentPod(pod, dp)
 	}
 	if p.cloudProvider != nil {
+		if pod.Annotations == nil || pod.Annotations[constant.ExtendedCNIArgsAnnotation] == "" {
+			// If a pod has not been allocated an ip, e.g. ip pool is drained, do nothing
+			// If the annotation is deleted manually, we count on resync to release ips
+			return nil
+		}
 		ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
 		if err != nil || len(ipInfos) == 0 || ipInfos[0].IP == nil {
-			glog.Errorf("bad format of %s: %s, err %v", key, pod.Annotations[constant.ExtendedCNIArgsAnnotation], err)
+			return fmt.Errorf("bad format of %s: %s, err %v", key, pod.Annotations[constant.ExtendedCNIArgsAnnotation], err)
 		} else {
 			if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
 				NodeName:  pod.Spec.NodeName,
@@ -671,20 +691,31 @@ func getNodeIP(node *corev1.Node) net.IP {
 	return nil
 }
 
+type releaseEvent struct {
+	pod        *corev1.Pod
+	retryTimes int
+}
+
 func (p *FloatingIPPlugin) loop(stop chan struct{}) {
 	for {
 		select {
 		case <-stop:
 			return
-		case pod := <-p.unreleased:
-			go func() {
-				if err := p.unbind(pod); err != nil {
-					glog.Warning(err)
-					// backoff time if required
-					time.Sleep(300 * time.Millisecond)
-					p.unreleased <- pod
+		case event := <-p.unreleased:
+			if err := p.unbind(event.pod); err != nil {
+				event.retryTimes++
+				glog.Warning("unbind pod %s failed for %d times: %v", keyInDB(event.pod), event.retryTimes, err)
+				if event.retryTimes > 3 {
+					// leave it to resync to protect chan from explosion
+					glog.Errorf("abort unbind for pod %s, retried %d times: %v", keyInDB(event.pod), event.retryTimes, err)
+				} else {
+					go func() {
+						// backoff time if required
+						time.Sleep(300 * time.Millisecond * time.Duration(event.retryTimes))
+						p.unreleased <- event
+					}()
 				}
-			}()
+			}
 		}
 	}
 }
