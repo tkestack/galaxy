@@ -38,7 +38,7 @@ echo "   flannel"
 go build -o bin/${BIN_PREFIX}-flannel $flags ${CNI_PKG}/plugins/meta/flannel
 
 # build galaxy cni plugins
-PLUGINS="$GOPATH/src/${PKG}/cni/k8s-vlan $GOPATH/src/${PKG}/cni/sdn $GOPATH/src/${PKG}/cni/veth $GOPATH/src/${PKG}/cni/k8s-sriov"
+PLUGINS="$GOPATH/src/${PKG}/cni/k8s-vlan $GOPATH/src/${PKG}/cni/sdn $GOPATH/src/${PKG}/cni/veth $GOPATH/src/${PKG}/cni/k8s-sriov $GOPATH/src/${PKG}/cni/tke-route-eni"
 for d in $PLUGINS; do
 	if [ -d $d ]; then
 		plugin=$(basename $d)

@@ -11,6 +11,7 @@ type ServerRunOptions struct {
 	NetworkConf          string
 	BridgeNFCallIptables bool
 	IPForward            bool
+	RouteENI             bool
 }
 
 func NewServerRunOptions() *ServerRunOptions {
@@ -18,6 +19,7 @@ func NewServerRunOptions() *ServerRunOptions {
 		NetworkConf:          `{"galaxy-flannel":{"delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}}`,
 		IPForward:            true,
 		BridgeNFCallIptables: true,
+		RouteENI:             false,
 	}
 	return opt
 }
@@ -30,4 +32,5 @@ func (s *ServerRunOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.KubeConf, "kubeconfig", s.KubeConf, "The kube config file location of APISwitch, used to support TLS")
 	fs.BoolVar(&s.BridgeNFCallIptables, "bridge-nf-call-iptables", s.BridgeNFCallIptables, "Ensure bridge-nf-call-iptables is set/unset")
 	fs.BoolVar(&s.IPForward, "ip-forward", s.IPForward, "Ensure ip-forward is set/unset")
+	fs.BoolVar(&s.RouteENI, "route-eni", s.RouteENI, "Ensure route-eni is set/unset")
 }

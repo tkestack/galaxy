@@ -13,6 +13,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/kernel"
 	"git.code.oa.com/gaiastack/galaxy/pkg/network/portmapping"
 	"git.code.oa.com/gaiastack/galaxy/pkg/policy"
+	"git.code.oa.com/gaiastack/galaxy/pkg/tke/eni"
 	"github.com/golang/glog"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -66,6 +67,11 @@ func (g *Galaxy) Start() error {
 		return err
 	}
 	go wait.Until(g.pm.Run, 3*time.Minute, g.quitChan)
+
+	if g.RouteENI {
+		kernel.DisableRPFilter(g.quitChan)
+		go eni.SetupENIs(g.quitChan)
+	}
 	return g.startServer()
 }
 

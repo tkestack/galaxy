@@ -9,7 +9,7 @@ import:
   subpackages:
   - client
   - types
-- package: github.com/docker/distribution 
+- package: github.com/docker/distribution
   version: cd27f179f2c10c5d300e6d09025b538c475b0d51
 - package: github.com/docker/go-connections
   version: f549a9393d05688dff0992ef3efd8bbe6c628aeb
@@ -23,28 +23,26 @@ import:
   version: 778f2e774c725116edbc3d039dc0dfc1cc62aae8
   repo: https://github.com/sirupsen/logrus.git
 - package: github.com/vishvananda/netlink
-  version: da7420cab5e209195f5f7387fccd4c7f48758d30
+  version: v1.0.0
   subpackages:
   - nl
 - package: github.com/vishvananda/netns
   version: 8ba1072b58e0c2a240eb5f6120165c7776c3e7b8
 - package: k8s.io/client-go
-  repo: https://github.com/kubernetes/client-go.git
   version: kubernetes-1.13.2
+  repo: https://github.com/kubernetes/client-go.git
 - package: k8s.io/api
   version: kubernetes-1.13.2
 - package: k8s.io/apimachinery
   version: kubernetes-1.13.2
 - package: k8s.io/kube-openapi
-#  version: 39a7bf85c140f972372c2a0d1ee40adbf0c8bfe1
 - package: k8s.io/utils
-#  version: aedf551cdb8b0119df3a19c65fde413a13b34997
 - package: golang.org/x/net
   version: 1c05540f6879653db88113bc4a2b70aec4bd491f
 - package: golang.org/x/crypto
   version: 81e90905daefcd6fd217b62423c0908922eadb30
 - package: golang.org/x/sys
-  version: 076b546753157f758b316e59bcb51e6807c04057
+  version: 48ac38b7c8cbedd50b1613c0fccacfc7d88dfcdf
 - package: golang.org/x/text
   version: b19bf474d317b857955b12035d2c5acb57ce8b01
 - package: github.com/go-sql-driver/mysql
@@ -54,7 +52,6 @@ import:
 - package: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - package: gopkg.in/yaml.v2
-#  version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
 - package: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - package: github.com/google/uuid
@@ -63,6 +60,9 @@ import:
   version: 6c8aa416ae893afe5671c38161833ff14ae6d6c0
 - package: github.com/opencontainers/runc
   version: bbb17efcb4c0ab986407812a31ba333a7450064c
+- package: github.com/dbdd4us/qcloudapi-sdk-go
+  subpackages:
+  - metadata
 testImport:
 - package: github.com/onsi/ginkgo
   version: ^1.4.0

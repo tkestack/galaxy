@@ -1,5 +1,5 @@
-hash: ae4f0e89e8a07a2b9ffa7f64fb9a0e0cafbf73e567702e281acba0642955ab23
-updated: 2019-02-01T17:08:45.940727698+08:00
+hash: 174bb5ff803ed857dd637a4e180c28c99223476a7a06de063f56cef15f2ca409
+updated: 2019-03-07T21:37:13.174791+08:00
 imports:
 - name: github.com/containernetworking/cni
   version: a7885cb6f8ab03fba07852ded351e4f5e7a112bf
@@ -30,7 +30,7 @@ imports:
   subpackages:
   - iptables
 - name: github.com/coreos/go-systemd
-  version: d6c05a1dcbb5ac02b7653da4d99e5db340c20778
+  version: 2688e91251d9d8e404e86dd8f096e23b2f086958
   subpackages:
   - activation
 - name: github.com/d2g/dhcp4
@@ -41,6 +41,11 @@ imports:
   version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
   - spew
+- name: github.com/dbdd4us/qcloudapi-sdk-go
+  version: ea2ba2432feed7c6e605c3d0963212eda06072aa
+  subpackages:
+  - metadata
+  - util
 - name: github.com/docker/distribution
   version: cd27f179f2c10c5d300e6d09025b538c475b0d51
   subpackages:
@@ -79,7 +84,7 @@ imports:
 - name: github.com/go-sql-driver/mysql
   version: ae5a66df4d33ba404d639bd0fc9189cd5ee79bcf
 - name: github.com/godbus/dbus
-  version: a389bdde4dd695d414e47b755e95e72b7826432c
+  version: 85c1474126142d121b888906ca5a6da61a7aa8e1
 - name: github.com/gogo/protobuf
   version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
@@ -132,7 +137,7 @@ imports:
 - name: github.com/json-iterator/go
   version: ab8a2e0c74be9d3be70b3184d9acc634935ded82
 - name: github.com/mattn/go-shellwords
-  version: 3c0603ff9671145648171317c30371d805656003
+  version: 02e3cf038dcea8290e44424da473dd12be796a8a
 - name: github.com/Microsoft/go-winio
   version: 6c8aa416ae893afe5671c38161833ff14ae6d6c0
 - name: github.com/modern-go/concurrent
@@ -151,7 +156,7 @@ imports:
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/vishvananda/netlink
-  version: da7420cab5e209195f5f7387fccd4c7f48758d30
+  version: a2ad57a690f3caf3015351d2d6e1c0b95c349752
   subpackages:
   - nl
 - name: github.com/vishvananda/netns
@@ -180,7 +185,7 @@ imports:
   - jws
   - jwt
 - name: golang.org/x/sys
-  version: 076b546753157f758b316e59bcb51e6807c04057
+  version: 48ac38b7c8cbedd50b1613c0fccacfc7d88dfcdf
   subpackages:
   - unix
   - windows
@@ -487,7 +492,7 @@ imports:
   subpackages:
   - pkg/util/proto
 - name: k8s.io/utils
-  version: aedf551cdb8b0119df3a19c65fde413a13b34997
+  version: c2654d5206da6b7b6ace12841e8f359bb89b443c
   subpackages:
   - exec
 - name: sigs.k8s.io/yaml

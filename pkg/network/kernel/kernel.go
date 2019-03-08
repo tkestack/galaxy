@@ -27,6 +27,11 @@ func IPForward(quit <-chan struct{}, set bool) {
 	setArg(expect, "/proc/sys/net/ipv4/ip_forward", quit)
 }
 
+func DisableRPFilter(quit <-chan struct{}) {
+	setArg("0", "/proc/sys/net/ipv4/conf/all/rp_filter", quit)
+	setArg("0", "/proc/sys/net/ipv4/conf/eth0/rp_filter", quit)
+}
+
 func setArg(expect string, file string, quit <-chan struct{}) {
 	go wait.Until(func() {
 		glog.Infof("starting to ensure kernel args %s", file)

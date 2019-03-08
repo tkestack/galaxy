@@ -24,10 +24,6 @@ type UnitOption struct {
 	Value   string
 }
 
-func NewUnitOption(section, name, value string) *UnitOption {
-	return &UnitOption{Section: section, Name: name, Value: value}
-}
-
 func (uo *UnitOption) String() string {
 	return fmt.Sprintf("{Section: %q, Name: %q, Value: %q}", uo.Section, uo.Name, uo.Value)
 }
