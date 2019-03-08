@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"github.com/golang/glog"
 )
 
@@ -165,9 +164,6 @@ func ParsePodNetworkAnnotation(podNetworks string) ([]*NetworkSelectionElement, 
 			_, networkName, netIfName, err := parsePodNetworkObjectName(item)
 			if err != nil {
 				return nil, fmt.Errorf("parsePodNetworkAnnotation: %v", err)
-			}
-			if !private.CNISet.Has(networkName) {
-				return nil, fmt.Errorf("unsupported network %s", networkName)
 			}
 			networks = append(networks, &NetworkSelectionElement{
 				Name:             networkName,

@@ -3,10 +3,8 @@ package cniutil
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -113,7 +111,7 @@ func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs, ifName stri
 	})
 }
 
-func CmdAdd(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, networkInfos []*NetworkInfo) (types.Result, error) {
+func CmdAdd(cmdArgs *skel.CmdArgs, networkInfos []*NetworkInfo) (types.Result, error) {
 	if len(networkInfos) == 0 {
 		return nil, fmt.Errorf("No network info returned")
 	}
@@ -122,23 +120,17 @@ func CmdAdd(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, ne
 		result types.Result
 	)
 	for idx, networkInfo := range networkInfos {
-		for t, v := range *networkInfo {
-			conf, ok := netConf[t]
-			if !ok {
-				return nil, fmt.Errorf("network %s not configured", t)
-			}
-			//append additional args from network info
-			cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
-			var ifName string
-			ifName = v["IfName"]
-			result, err = DelegateAdd(conf, cmdArgs, ifName)
-			if err != nil {
-				//fail to add cni, then delete all established CNIs recursively
-				glog.Errorf("fail to add network %s: %v, then rollback and delete it", v, err)
-				delErr := CmdDel(cmdArgs, netConf, networkInfos, idx)
-				glog.Warningf("fail to delete cni in rollback %v", delErr)
-				return nil, fmt.Errorf("fail to establish network %s:%v", v, err)
-			}
+		//append additional args from network info
+		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(networkInfo.Args))
+		var ifName string
+		ifName = networkInfo.Args["IfName"]
+		result, err = DelegateAdd(networkInfo.Conf, cmdArgs, ifName)
+		if err != nil {
+			//fail to add cni, then delete all established CNIs recursively
+			glog.Errorf("fail to add network %s: %v, then rollback and delete it", networkInfo.Args, err)
+			delErr := CmdDel(cmdArgs, networkInfos, idx)
+			glog.Warningf("fail to delete cni in rollback %v", delErr)
+			return nil, fmt.Errorf("fail to establish network %s:%v", networkInfo.Args, err)
 		}
 	}
 	if err != nil {
@@ -147,63 +139,34 @@ func CmdAdd(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, ne
 	return result, nil
 }
 
-type NetworkInfo map[string]map[string]string
+type NetworkInfo struct {
+	NetworkType string
+	Args        map[string]string
+	Conf        map[string]interface{}
+}
 
-func CmdDel(cmdArgs *skel.CmdArgs, netConf map[string]map[string]interface{}, networkInfos []*NetworkInfo, lastIdx int) error {
+func NewNetworkInfo(networkType string, args map[string]string, conf map[string]interface{}) *NetworkInfo {
+	return &NetworkInfo{NetworkType: networkType, Args: args, Conf: conf}
+}
+
+func CmdDel(cmdArgs *skel.CmdArgs, networkInfos []*NetworkInfo, lastIdx int) error {
 	var errorSet []string
 	for idx := lastIdx; idx >= 0; idx-- {
 		networkInfo := networkInfos[idx]
-		for t, v := range *networkInfo {
-			conf, ok := netConf[t]
-			if !ok {
-				return fmt.Errorf("network %s not configured", t)
-			}
-			//append additional args from network info
-			cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(v))
-			var ifName string
-			ifName = v["IfName"]
-			err := DelegateDel(conf, cmdArgs, ifName)
-			if err != nil {
-				errorSet = append(errorSet, err.Error())
-				glog.Errorf("failed to delete network %v: %v", v, err)
-			}
+		//append additional args from network info
+		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(networkInfo.Args))
+		var ifName string
+		ifName = networkInfo.Args["IfName"]
+		err := DelegateDel(networkInfo.Conf, cmdArgs, ifName)
+		if err != nil {
+			errorSet = append(errorSet, err.Error())
+			glog.Errorf("failed to delete network %v: %v", networkInfo.Args, err)
 		}
 	}
 	if len(errorSet) > 0 {
 		return fmt.Errorf(strings.Join(errorSet, " / "))
 	}
 	return nil
-}
-
-const (
-	stateDir = "/var/lib/cni/galaxy"
-)
-
-func SaveNetworkInfo(containerID string, info NetworkInfo) error {
-	if err := os.MkdirAll(stateDir, 0700); err != nil {
-		return err
-	}
-	path := filepath.Join(stateDir, containerID)
-	data, err := json.Marshal(info)
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(path, data, 0600)
-}
-
-func ConsumeNetworkInfo(containerID string) (NetworkInfo, error) {
-	m := make(map[string]map[string]string)
-	path := filepath.Join(stateDir, containerID)
-	defer os.Remove(path) // nolint: errcheck
-
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		return m, err
-	}
-	if err := json.Unmarshal(data, &m); err != nil {
-		return m, err
-	}
-	return m, nil
 }
 
 func IPInfoToResult(ipInfo *constant.IPInfo) *t020.Result {

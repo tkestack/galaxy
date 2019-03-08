@@ -133,95 +133,66 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 	return
 }
 
-func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Result, error) {
-	if err := disableIPv6(req.Netns); err != nil {
-		glog.Warningf("Error disable ipv6 %v", err)
-	}
+func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]*cniutil.NetworkInfo, error) {
 	// get extended args from pod's annotations
 	if err := injectExtendedCNIArgs(req, pod); err != nil {
 		return nil, err
 	}
 
 	var networkInfos []*cniutil.NetworkInfo
-	if pod.Annotations == nil {
-		networkInfo := cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
-		networkInfos = append(networkInfos, &networkInfo)
+	if pod.Annotations == nil || pod.Annotations[constant.MultusCNIAnnotation] == "" {
+		for _, netType := range g.DefaultNetworks {
+			networkInfos = append(networkInfos, cniutil.NewNetworkInfo(netType, map[string]string{}, g.netConf[netType]))
+		}
 	} else {
-		if v, has := pod.Annotations[constant.MultusCNIAnnotation]; has {
-			glog.V(4).Infof("pod %s_%s network annotation is %s", pod.Name, pod.Namespace, v)
-			networks, err := k8s.ParsePodNetworkAnnotation(v)
-			if err != nil {
-				return nil, err
+		v := pod.Annotations[constant.MultusCNIAnnotation]
+		glog.V(4).Infof("pod %s_%s network annotation is %s", pod.Name, pod.Namespace, v)
+		networks, err := k8s.ParsePodNetworkAnnotation(v)
+		if err != nil {
+			return nil, err
+		}
+		//init networkInfo
+		for idx, network := range networks {
+			network.InterfaceRequest = setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName)
+			if _, ok := g.netConf[network.Name]; !ok {
+				return nil, fmt.Errorf("pod %s_%s requires network %s which is not configured", pod.Name, pod.Namespace, network.Name)
 			}
-			//init networkInfo
-			for idx, network := range networks {
-				network.InterfaceRequest = setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName)
-				networkInfo := cniutil.NetworkInfo{network.Name: {"IfName": network.InterfaceRequest}}
-				networkInfos = append(networkInfos, &networkInfo)
-			}
-			if networks[0].InterfaceRequest != "eth0" {
-				glog.Errorf("invalid pod %s_%s network annotation %s: first network interface must be eth0", pod.Name, pod.Namespace, v)
-				return nil, fmt.Errorf("first network interface must be eth0")
-			}
-		} else {
-			networkInfo := cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
-			networkInfos = append(networkInfos, &networkInfo)
+			networkInfo := cniutil.NewNetworkInfo(network.Name, map[string]string{"IfName": network.InterfaceRequest}, g.netConf[network.Name])
+			networkInfos = append(networkInfos, networkInfo)
+		}
+		if networks[0].InterfaceRequest != "eth0" {
+			glog.Errorf("invalid pod %s_%s network annotation %s: first network interface must be eth0", pod.Name, pod.Namespace, v)
+			return nil, fmt.Errorf("first network interface must be eth0")
 		}
 	}
 	if commonArgs, exist := req.ExtendedCNIArgs[constant.CommonCNIArgsKey]; exist {
-		for _, networkInfo := range networkInfos {
-			for t := range *networkInfo {
-				for k, v := range commonArgs {
-					(*networkInfo)[t][k] = string([]byte(v))
-				}
+		for i := range networkInfos {
+			for k, v := range commonArgs {
+				networkInfos[i].Args[k] = string([]byte(v))
 			}
 		}
 	}
 	glog.V(4).Infof("pod %s_%s networkInfo %v", pod.Name, pod.Namespace, networkInfos)
-	return cniutil.CmdAdd(req.CmdArgs, g.netConf, networkInfos)
+	return networkInfos, nil
 }
 
-func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest, pod *corev1.Pod) error {
+func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Result, error) {
 	if err := disableIPv6(req.Netns); err != nil {
 		glog.Warningf("Error disable ipv6 %v", err)
 	}
-	var networkInfos []*cniutil.NetworkInfo
-	if pod.Annotations == nil {
-		networkInfo := cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
-		networkInfos = append(networkInfos, &networkInfo)
-	} else {
-		if v, has := pod.Annotations[constant.MultusCNIAnnotation]; has {
-			glog.V(4).Infof("pod %s_%s network annotation is %s", pod.Name, pod.Namespace, v)
-			networks, err := k8s.ParsePodNetworkAnnotation(v)
-			if err != nil {
-				return err
-			}
-			//init networkInfo
-			for idx, network := range networks {
-				network.InterfaceRequest = setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName)
-				networkInfo := cniutil.NetworkInfo{network.Name: {"IfName": network.InterfaceRequest}}
-				networkInfos = append(networkInfos, &networkInfo)
-			}
-			if networks[0].InterfaceRequest != "eth0" {
-				glog.Errorf("invalid pod %s_%s network annotation %s: first network interface must be eth0", pod.Name, pod.Namespace, v)
-				return fmt.Errorf("first network interface must be eth0")
-			}
-		} else {
-			networkInfo := cniutil.NetworkInfo{private.NetworkTypeOverlay.CNIType: {}}
-			networkInfos = append(networkInfos, &networkInfo)
-		}
+	networkInfos, err := g.resolveNetworks(req, pod)
+	if err != nil {
+		return nil, err
 	}
-	if commonArgs, exist := req.ExtendedCNIArgs[constant.CommonCNIArgsKey]; exist {
-		for _, networkInfo := range networkInfos {
-			for t := range *networkInfo {
-				for k, v := range commonArgs {
-					(*networkInfo)[t][k] = string([]byte(v))
-				}
-			}
-		}
+	return cniutil.CmdAdd(req.CmdArgs, networkInfos)
+}
+
+func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest, pod *corev1.Pod) error {
+	networkInfos, err := g.resolveNetworks(req, pod)
+	if err != nil {
+		return err
 	}
-	glog.V(4).Infof("pod %s_%s networkInfo %v", pod.Name, pod.Namespace, networkInfos)
-	return cniutil.CmdDel(req.CmdArgs, g.netConf, networkInfos, len(networkInfos)-1)
+	return cniutil.CmdDel(req.CmdArgs, networkInfos, len(networkInfos)-1)
 }
 
 // injectExtendedCNIArgs parses extended cni args from pod's annotation and assign it to req.ExtendedCNIArgs
@@ -291,22 +262,17 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 		req.Ports[i].PodIP = result.IP4.IP.IP.To4().String()
 		req.Ports[i].PodName = req.PodName
 	}
-	var randomPortMapping bool
-	if pod.Labels != nil && pod.Labels[private.LabelKeyNetworkType] == private.LabelValueNetworkTypeNAT {
-		randomPortMapping = true
-	} else {
-		var newPorts []k8s.Port
-		for i := range req.Ports {
-			if req.Ports[i].HostPort != 0 {
-				newPorts = append(newPorts, req.Ports[i])
-			}
+	var newPorts []k8s.Port
+	for i := range req.Ports {
+		if req.Ports[i].HostPort != 0 {
+			newPorts = append(newPorts, req.Ports[i])
 		}
-		if len(newPorts) == 0 {
-			return nil
-		}
-		req.Ports = newPorts
 	}
-	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), randomPortMapping, req.Ports); err != nil {
+	if len(newPorts) == 0 {
+		return nil
+	}
+	req.Ports = newPorts
+	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), true, req.Ports); err != nil {
 		return err
 	}
 	data, err := json.Marshal(req.Ports)

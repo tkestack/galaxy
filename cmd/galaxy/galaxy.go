@@ -15,10 +15,7 @@ import (
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
-	galaxy, err := galaxy.NewGalaxy()
-	if err != nil {
-		glog.Fatalf("Error create galaxy: %v", err)
-	}
+	galaxy := galaxy.NewGalaxy()
 	galaxy.AddFlags(pflag.CommandLine)
 	flag.InitFlags()
 	logs.InitLogs()
