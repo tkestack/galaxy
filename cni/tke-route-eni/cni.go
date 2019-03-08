@@ -179,12 +179,11 @@ func cmdDel(args *skel.CmdArgs) error {
 	}
 
 	err = ns.WithNetNSPath(args.Netns, func(_ ns.NetNS) error {
-		var err error
-		_, err = ip.DelLinkByNameAddr(args.IfName, netlink.FAMILY_V4)
-		if err != nil && err == ip.ErrLinkNotFound {
+		subErr := ip.DelLinkByName(args.IfName)
+		if subErr != nil && subErr == ip.ErrLinkNotFound {
 			return nil
 		}
-		return fmt.Errorf("failed to delete ns %s link %s: %v", args.Netns, args.IfName, err)
+		return fmt.Errorf("failed to delete ns %s link %s: %v", args.Netns, args.IfName, subErr)
 	})
 
 	return nil
