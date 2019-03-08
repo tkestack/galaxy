@@ -1,5 +1,5 @@
-hash: 174bb5ff803ed857dd637a4e180c28c99223476a7a06de063f56cef15f2ca409
-updated: 2019-03-07T21:37:13.174791+08:00
+hash: d7a51d2009e1f02336b2d0d58b48cbc86859afd6a45e58e5a81624fe95d5a970
+updated: 2019-03-08T19:51:59.58808053+08:00
 imports:
 - name: github.com/containernetworking/cni
   version: a7885cb6f8ab03fba07852ded351e4f5e7a112bf
@@ -175,8 +175,10 @@ imports:
   - http2
   - http2/hpack
   - idna
+  - internal/timeseries
   - lex/httplex
   - proxy
+  - trace
 - name: golang.org/x/oauth2
   version: a6bd8cefa1811bd24b86f8902872e4e8225f74c4
   subpackages:
@@ -226,6 +228,43 @@ imports:
   - internal/remote_api
   - internal/urlfetch
   - urlfetch
+- name: google.golang.org/genproto
+  version: 09f6ed296fc66555a25fe4ce95173148778dfa85
+  subpackages:
+  - googleapis/rpc/status
+- name: google.golang.org/grpc
+  version: 2fdaae294f38ed9a121193c51ec99fecd3b13eb7
+  subpackages:
+  - balancer
+  - balancer/base
+  - balancer/roundrobin
+  - binarylog/grpc_binarylog_v1
+  - codes
+  - connectivity
+  - credentials
+  - credentials/internal
+  - encoding
+  - encoding/proto
+  - grpclog
+  - internal
+  - internal/backoff
+  - internal/binarylog
+  - internal/channelz
+  - internal/envconfig
+  - internal/grpcrand
+  - internal/grpcsync
+  - internal/syscall
+  - internal/transport
+  - keepalive
+  - metadata
+  - naming
+  - peer
+  - resolver
+  - resolver/dns
+  - resolver/passthrough
+  - stats
+  - status
+  - tap
 - name: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - name: gopkg.in/yaml.v2
@@ -310,6 +349,10 @@ imports:
   - pkg/watch
   - third_party/forked/golang/json
   - third_party/forked/golang/reflect
+- name: k8s.io/apiserver
+  version: 0edeb49d092e08b78add7a3827745c37b6634f3e
+  subpackages:
+  - pkg/util/trace
 - name: k8s.io/client-go
   version: 6bf63545bd0257ed9e701ad95307ffa51b4407c0
   repo: https://github.com/kubernetes/client-go.git
@@ -492,7 +535,7 @@ imports:
   subpackages:
   - pkg/util/proto
 - name: k8s.io/utils
-  version: c2654d5206da6b7b6ace12841e8f359bb89b443c
+  version: 982821ea41da7e7c15f3d3738921eb2e7e241ccd
   subpackages:
   - exec
 - name: sigs.k8s.io/yaml

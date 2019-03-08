@@ -63,6 +63,8 @@ import:
 - package: github.com/dbdd4us/qcloudapi-sdk-go
   subpackages:
   - metadata
+- package: google.golang.org/grpc
+  version: v1.19.0
 testImport:
 - package: github.com/onsi/ginkgo
   version: ^1.4.0
