@@ -166,11 +166,11 @@ func cmdDel(args *skel.CmdArgs) error {
 		return err
 	}
 
-	savedIP := result020.IP4.IP
+	savedIP := result020.IP4.IP.IP
 
 	err = cleanHostRule(savedIP.String(), *conf.RouteTable)
 	if err != nil {
-		return err
+		return fmt.Errorf("args %s savedIP %s %v", args.Args, savedIP.String(), err)
 	}
 
 	// see https://github.com/kubernetes/kubernetes/issues/20379#issuecomment-255272531
