@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package cloudprovider;
+package rpc;
 
 // The service definition.
 service IPProviderService {

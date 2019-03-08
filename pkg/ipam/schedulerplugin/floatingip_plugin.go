@@ -14,6 +14,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"github.com/golang/glog"
@@ -352,7 +353,7 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 			return nil, fmt.Errorf("nil floating ip for key %s: %v", key, err)
 		}
 	}
-	if err := p.cloudProviderAssignIP(&cloudprovider.AssignIPRequest{
+	if err := p.cloudProviderAssignIP(&rpc.AssignIPRequest{
 		NodeName:  nodeName,
 		IPAddress: ipInfo.IPInfo.IP.String(),
 	}, func() {
@@ -373,11 +374,12 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key, nodeName string
 	return &ipInfo.IPInfo, nil
 }
 
-func (p *FloatingIPPlugin) cloudProviderAssignIP(req *cloudprovider.AssignIPRequest, rollback func()) error {
+func (p *FloatingIPPlugin) cloudProviderAssignIP(req *rpc.AssignIPRequest, rollback func()) error {
 	if p.cloudProvider == nil {
 		return nil
 	}
 	reply, err := p.cloudProvider.AssignIP(req)
+	glog.Infof("AssignIP reply %v  err %v", reply, err)
 	if err != nil || !reply.Success {
 		rollback()
 		return fmt.Errorf("cloud provider AssignIP reply success %v, message %s, err %v", reply.Success, reply.Msg, err)
@@ -385,7 +387,7 @@ func (p *FloatingIPPlugin) cloudProviderAssignIP(req *cloudprovider.AssignIPRequ
 	return nil
 }
 
-func (p *FloatingIPPlugin) cloudProviderUnAssignIP(req *cloudprovider.UnAssignIPRequest) error {
+func (p *FloatingIPPlugin) cloudProviderUnAssignIP(req *rpc.UnAssignIPRequest) error {
 	if p.cloudProvider == nil {
 		return nil
 	}
@@ -540,7 +542,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		if err != nil || len(ipInfos) == 0 || ipInfos[0].IP == nil {
 			glog.Errorf("bad format of %s: %s, err %v", key, pod.Annotations[constant.ExtendedCNIArgsAnnotation], err)
 		} else {
-			if err = p.cloudProviderUnAssignIP(&cloudprovider.UnAssignIPRequest{
+			if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
 				NodeName:  pod.Spec.NodeName,
 				IPAddress: ipInfos[0].IP.IP.String(),
 			}); err != nil {

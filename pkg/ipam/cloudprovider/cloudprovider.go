@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -17,14 +18,14 @@ import (
 const NotFound = "ResourceNotFound"
 
 type CloudProvider interface {
-	AssignIP(in *AssignIPRequest) (*AssignIPReply, error)
-	UnAssignIP(in *UnAssignIPRequest) (*UnAssignIPReply, error)
+	AssignIP(in *rpc.AssignIPRequest) (*rpc.AssignIPReply, error)
+	UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssignIPReply, error)
 }
 
 type GRPCCloudProvider struct {
 	init              sync.Once
 	cloudProviderAddr string
-	client            IPProviderServiceClient
+	client            rpc.IPProviderServiceClient
 	backOff           wait.Backoff
 	timeout           time.Duration
 }
@@ -50,11 +51,11 @@ func (p *GRPCCloudProvider) connect() {
 		if err != nil {
 			glog.Fatalf("failed to connect to cloud provider %s: %v", p.cloudProviderAddr, err)
 		}
-		p.client = NewIPProviderServiceClient(conn)
+		p.client = rpc.NewIPProviderServiceClient(conn)
 	})
 }
 
-func (p *GRPCCloudProvider) AssignIP(in *AssignIPRequest) (reply *AssignIPReply, err error) {
+func (p *GRPCCloudProvider) AssignIP(in *rpc.AssignIPRequest) (reply *rpc.AssignIPReply, err error) {
 	p.connect()
 	glog.V(3).Infof("send %+v", *in)
 	t := trace.New("AssignIP")
@@ -72,7 +73,7 @@ func (p *GRPCCloudProvider) AssignIP(in *AssignIPRequest) (reply *AssignIPReply,
 	return
 }
 
-func (p *GRPCCloudProvider) UnAssignIP(in *UnAssignIPRequest) (reply *UnAssignIPReply, err error) {
+func (p *GRPCCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (reply *rpc.UnAssignIPReply, err error) {
 	p.connect()
 	glog.V(3).Infof("send %+v", *in)
 	t := trace.New("AssignIP")

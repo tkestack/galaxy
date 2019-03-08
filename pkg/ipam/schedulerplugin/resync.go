@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	"github.com/golang/glog"
@@ -128,7 +128,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			glog.Errorf("empty nodeName for %s in db", podFullName)
 			continue
 		}
-		if err = p.cloudProviderUnAssignIP(&cloudprovider.UnAssignIPRequest{
+		if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
 			NodeName:  attr.NodeName,
 			IPAddress: nets.IntToIP(obj.ip).String(),
 		}); err != nil {
