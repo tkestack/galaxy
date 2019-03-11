@@ -566,7 +566,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 				NodeName:  pod.Spec.NodeName,
 				IPAddress: ipInfos[0].IP.IP.String(),
 			}); err != nil {
-				return fmt.Errorf("failed to unassign ip %s to %s: %v", ipInfos[0].IP.IP.String(), key, err)
+				return fmt.Errorf("failed to unassign ip %s from %s: %v", ipInfos[0].IP.IP.String(), key, err)
 			}
 		}
 	}
@@ -704,7 +704,7 @@ func (p *FloatingIPPlugin) loop(stop chan struct{}) {
 		case event := <-p.unreleased:
 			if err := p.unbind(event.pod); err != nil {
 				event.retryTimes++
-				glog.Warning("unbind pod %s failed for %d times: %v", keyInDB(event.pod), event.retryTimes, err)
+				glog.Warningf("unbind pod %s failed for %d times: %v", keyInDB(event.pod), event.retryTimes, err)
 				if event.retryTimes > 3 {
 					// leave it to resync to protect chan from explosion
 					glog.Errorf("abort unbind for pod %s, retried %d times: %v", keyInDB(event.pod), event.retryTimes, err)

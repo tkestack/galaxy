@@ -109,7 +109,11 @@ func (g *Galaxy) Start() error {
 
 	if g.RouteENI {
 		kernel.DisableRPFilter(g.quitChan)
-		go eni.SetupENIs(g.quitChan)
+		go func() {
+			if err := eni.SetupENIs(g.quitChan); err != nil {
+				glog.Errorf("failed to setup eni: %v", err)
+			}
+		}()
 	}
 	return g.startServer()
 }

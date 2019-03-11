@@ -97,7 +97,10 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
 	}
-	defer netns.Close()
+	defer func() {
+		// make gometalinter check pass
+		_ = netns.Close()
+	}()
 
 	_, results, err := galaxyIpam.Allocate(conf.IPAM.Type, args)
 	if err != nil {
@@ -180,13 +183,16 @@ func cmdDel(args *skel.CmdArgs) error {
 
 	err = ns.WithNetNSPath(args.Netns, func(_ ns.NetNS) error {
 		subErr := ip.DelLinkByName(args.IfName)
-		if subErr != nil && subErr == ip.ErrLinkNotFound {
+		if subErr == nil {
+			return nil
+		}
+		if subErr == ip.ErrLinkNotFound {
 			return nil
 		}
 		return fmt.Errorf("failed to delete ns %s link %s: %v", args.Netns, args.IfName, subErr)
 	})
 
-	return nil
+	return err
 }
 
 func main() {

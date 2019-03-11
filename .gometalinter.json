@@ -5,7 +5,6 @@
     "unconvert",
     "varcheck",
     "structcheck",
-    "maligned",
     "errcheck",
     "goconst",
     "ineffassign",

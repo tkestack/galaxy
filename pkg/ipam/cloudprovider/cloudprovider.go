@@ -83,7 +83,7 @@ func (p *GRPCCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (reply *rpc.Un
 		glog.V(4).Infof("reply %v, err %v", reply, err)
 		if err != nil {
 			// Expect cloud provider returns success if already unassigned
-			t.Step(fmt.Sprintf("AssignIP for %+v failed: %v", in, err))
+			t.Step(fmt.Sprintf("UnAssignIP for %+v failed: %v", in, err))
 			return false, err
 		}
 		return true, nil
