@@ -19,6 +19,7 @@ const (
 	devPrefix      = "eth"
 
 	setupPeriod = 30 * time.Second
+	pollPeriod  = 3 * time.Minute
 )
 
 type eniMeta struct {
@@ -30,7 +31,17 @@ type eniMeta struct {
 	LocalIpList []string
 }
 
-func SetupENIs(stopChan <-chan struct{}) error {
+func SetupENIs(stopChan <-chan struct{}) {
+	go wait.PollImmediateUntil(pollPeriod, func() (done bool, err error) {
+		err = setupENIs(stopChan)
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	}, stopChan)
+}
+
+func setupENIs(stopChan <-chan struct{}) error {
 	// setup eni network
 	log.Infof("setup eni network")
 
