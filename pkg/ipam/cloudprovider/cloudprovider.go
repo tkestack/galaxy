@@ -34,7 +34,7 @@ func NewGRPCCloudProvider(cloudProviderAddr string) CloudProvider {
 			Duration: 10 * time.Millisecond,
 			Factor:   5.0,
 			Jitter:   0.1},
-		timeout:           time.Second * 3,
+		timeout:           time.Second * 5,
 		cloudProviderAddr: cloudProviderAddr,
 	}
 }
@@ -56,7 +56,7 @@ func (p *GRPCCloudProvider) AssignIP(in *rpc.AssignIPRequest) (reply *rpc.Assign
 	p.connect()
 	glog.V(3).Infof("AssignIP %v", in)
 	t := trace.New("AssignIP")
-	defer t.LogIfLong(time.Second)
+	defer t.LogIfLong(3 * time.Second)
 	err = wait.ExponentialBackoff(p.backOff, func() (done bool, err error) {
 		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		defer cancel()
@@ -75,7 +75,7 @@ func (p *GRPCCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (reply *rpc.Un
 	p.connect()
 	glog.V(3).Infof("UnAssignIP %v", in)
 	t := trace.New("UnAssignIP")
-	defer t.LogIfLong(time.Second)
+	defer t.LogIfLong(3 * time.Second)
 	err = wait.ExponentialBackoff(p.backOff, func() (done bool, err error) {
 		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		defer cancel()
