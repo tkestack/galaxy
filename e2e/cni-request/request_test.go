@@ -12,6 +12,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/e2e"
 	"git.code.oa.com/gaiastack/galaxy/e2e/helper"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/galaxy"
 
 	"github.com/golang/glog"
@@ -116,7 +117,7 @@ var _ = Describe("cni add request", func() {
 		client := &http.Client{
 			Transport: &http.Transport{
 				Dial: func(proto, addr string) (net.Conn, error) {
-					return net.Dial("unix", "/var/run/galaxy.sock")
+					return net.Dial("unix", private.GalaxySocketPath)
 				},
 			},
 		}
@@ -133,7 +134,7 @@ var _ = Describe("cni add request", func() {
 		client := &http.Client{
 			Transport: &http.Transport{
 				Dial: func(proto, addr string) (net.Conn, error) {
-					return net.Dial("unix", "/var/run/galaxy.sock")
+					return net.Dial("unix", private.GalaxySocketPath)
 				},
 			},
 		}

@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: galaxy
+  name: galaxy
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: galaxy
+  template:
+    metadata:
+      labels:
+        app: galaxy
+    spec:
+      hostNetwork: true
+      hostPID: true
+      nodeName: tbds-10-12-67-238
+      containers:
+      - image: docker.oa.com:8080/library/galaxy:1.0.0-alpha
+        imagePullPolicy: Always
+        name: galaxy
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: galaxy-run
+          mountPath: /var/run/galaxy/
+        - name: flannel-run
+          mountPath: /run/flannel
+        - name: kube-config
+          mountPath: /etc/kubernetes/
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: galaxy-run
+        hostPath:
+          path: /var/run/galaxy
+      - name: flannel-run
+        hostPath:
+          path: /run/flannel
+      - name: kube-config
+        hostPath:
+          path: /etc/kubernetes/

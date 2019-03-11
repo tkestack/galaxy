@@ -1,0 +1,1 @@
+/usr/bin/galaxy --network-conf={"galaxy-flannel":{"delegate":{"type":"galaxy-veth","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/etc/kubernetes/subnet.env"},"galaxy-k8s-vlan":{"device":"eth1"}} --kubeconfig=/etc/kubernetes/kubeconfig --logtostderr=true --log_dir=/gaia/k8s/log/galaxy --v=3 --bridge-nf-call-iptables=false

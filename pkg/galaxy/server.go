@@ -29,6 +29,9 @@ import (
 
 func (g *Galaxy) StartServer() error {
 	g.installHandlers()
+	if err := os.MkdirAll(private.GalaxySocketDir, 0755); err != nil {
+		return fmt.Errorf("failed to create %s: %v", private.GalaxySocketDir, err)
+	}
 	if err := os.Remove(private.GalaxySocketPath); err != nil {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("failed to remove %s: %v", private.GalaxySocketPath, err)

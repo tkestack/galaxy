@@ -1,7 +1,8 @@
 package private
 
 const (
-	GalaxySocketPath = "/var/run/galaxy.sock"
+	GalaxySocketPath = "/var/run/galaxy/galaxy.sock"
+	GalaxySocketDir  = "/var/run/galaxy"
 )
 
 var (
