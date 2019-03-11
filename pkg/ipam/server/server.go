@@ -36,7 +36,7 @@ const COMPONENT_NAME = "galaxy-ipam"
 type Server struct {
 	JsonConf
 	*options.ServerRunOptions
-	client               *kubernetes.Clientset
+	client               kubernetes.Interface
 	plugin               *schedulerplugin.FloatingIPPlugin
 	informerFactory      informers.SharedInformerFactory
 	stopChan             chan struct{}

@@ -19,7 +19,7 @@ create_go_path_tree
   # Using a len=1 golang channel doesn't fix it.
   go test -coverpkg $PKG/pkg/... -coverprofile=coverage.txt -covermode=atomic -p=1 -v $(glide novendor | grep -v '/go/' | grep -v '/e2e/')
   go tool cover -func=coverage.txt
-  for i in e2e/k8s-vlan e2e/veth; do
+  for i in e2e/k8s-vlan e2e/veth e2e/cni-request; do
     ginkgo -v $i -- --logtostderr --v=4
   done
 )
