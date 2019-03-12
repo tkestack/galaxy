@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/gaiastack/galaxy/pkg/galaxy"
-
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,14 +12,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 )
-
-func InitGalaxy() (*galaxy.Galaxy, error) {
-	g, err := galaxy.NewGalaxy()
-	if err != nil {
-		return nil, err
-	}
-	return g, nil
-}
 
 var extraPods *v1.PodList
 

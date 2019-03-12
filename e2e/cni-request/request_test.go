@@ -49,8 +49,8 @@ const (
 
 var (
 	g          *galaxy.Galaxy
-	err        error
 	createFile bool
+	jsonFile   string
 )
 
 var _ = BeforeSuite(func() {
@@ -72,8 +72,16 @@ FLANNEL_IPMASQ=true`
 			Expect(err).NotTo(HaveOccurred())
 		}
 	}
+	jsonConfigFile, err := ioutil.TempFile("", "")
+	Expect(err).NotTo(HaveOccurred())
+	jsonFile = jsonConfigFile.Name()
+	Expect(jsonConfigFile.Close()).NotTo(HaveOccurred())
+	err = ioutil.WriteFile(jsonFile, []byte(`{"NetworkConf":[{"type":"galaxy-flannel", "delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}], "DefaultNetworks": ["galaxy-flannel"]}`), 0644)
+	Expect(err).NotTo(HaveOccurred())
 
-	g, err = e2e.InitGalaxy()
+	g := galaxy.NewGalaxy()
+	g.JsonConfigPath = jsonFile
+	err = g.Init()
 	Expect(err).NotTo(HaveOccurred())
 	fakeCli := e2e.CreateFakeClient()
 	g.SetClient(fakeCli)
@@ -81,10 +89,17 @@ FLANNEL_IPMASQ=true`
 })
 
 var _ = AfterSuite(func() {
-	g.Stop()
-	if createFile == true {
+	if g != nil {
+		g.Stop()
+	}
+	if createFile {
 		if err := os.Remove(FlannelSubnetFile); err != nil {
 			glog.Errorf("fail to remove %s", FlannelSubnetFile)
+		}
+	}
+	if jsonFile != "" {
+		if err := os.Remove(jsonFile); err != nil {
+			glog.Errorf("fail to remove %s", jsonFile)
 		}
 	}
 })
