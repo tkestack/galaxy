@@ -44,7 +44,7 @@ func NewGalaxy() *Galaxy {
 	return g
 }
 
-func (g *Galaxy) init() error {
+func (g *Galaxy) Init() error {
 	if g.JsonConfigPath == "" {
 		return fmt.Errorf("json config is required")
 	}
@@ -94,7 +94,7 @@ func (g *Galaxy) checkNetworkConf() error {
 }
 
 func (g *Galaxy) Start() error {
-	if err := g.init(); err != nil {
+	if err := g.Init(); err != nil {
 		return err
 	}
 	g.initk8sClient()
