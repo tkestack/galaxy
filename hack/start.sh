@@ -1,0 +1,1 @@
+/usr/bin/galaxy --logtostderr=false --log-dir=/data/logs --v=3 --kubeconfig=/etc/kubernetes/kubelet-kubeconfig --route-eni
