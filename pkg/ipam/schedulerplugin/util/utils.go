@@ -1,9 +1,10 @@
-package schedulerplugin
+package util
 
 import (
 	"fmt"
 	"strings"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -33,45 +34,63 @@ func resolveStatefulsetName(pod *corev1.Pod) string {
 	return ""
 }
 
-type keyObj struct {
+type KeyObj struct {
 	// stores the key format in database
 	// for deployment dp_namespace_deploymentName_podName,
 	// for pool pool__poolName_dp_namespace_deploymentName_podName, for statefulset sts_namespace_statefulsetName_podName
 	// If deployment name is 63 bytes, e.g. dp1234567890dp1234567890dp1234567890dp1234567890dp1234567890dp1
 	// deployment pod name will be 63 bytes with modified suffix, e.g. dp1234567890dp1234567890dp1234567890dp1234567890dp1234567848p74
 	// So we can't get deployment name from pod name and have to store deployment name with pod name
-	keyInDB      string
-	isDeployment bool
-	appName      string
-	podName      string
-	namespace    string
+	KeyInDB      string
+	IsDeployment bool
+	AppName      string
+	PodName      string
+	Namespace    string
 	// the annotation value if pod has pool annotation
-	poolName string
+	PoolName string
 }
 
-// poolPrefix returns the common key prefix in database, for deployment dp_namespace_deploymentName_
+func NewKeyObj(isDeployment bool, namespace, appName, podName, poolName string) *KeyObj {
+	k := &KeyObj{IsDeployment: isDeployment, AppName: appName, PodName: podName, Namespace: namespace, PoolName: poolName}
+	k.genKey()
+	return k
+}
+
+func (k *KeyObj) genKey() {
+	var prefix string
+	if k.PoolName != "" {
+		prefix = fmt.Sprintf("%s%s_", poolPrefix, k.PoolName)
+	}
+	appTypePrefix := statefulsetPrefixKey
+	if k.IsDeployment {
+		appTypePrefix = deploymentPrefixKey
+	}
+	k.KeyInDB = fmt.Sprintf("%s%s%s_%s_%s", prefix, appTypePrefix, k.Namespace, k.AppName, k.PodName)
+}
+
+// PoolPrefix returns the common key prefix in database, for deployment dp_namespace_deploymentName_
 // for pool pool__poolName_, for statefulset sts_namespace_statefulsetName_
-// For now, if it is a statefulset pod, poolPrefix is useless since we reserve ip by full pod name
-// poolPrefix is used by pool and deployment only.
-func (k *keyObj) poolPrefix() string {
-	if k.poolName != "" {
-		return fmt.Sprintf("%s%s_", poolPrefix, k.poolName)
+// For now, if it is a statefulset pod, PoolPrefix is useless since we reserve ip by full pod name
+// PoolPrefix is used by pool and deployment only.
+func (k *KeyObj) PoolPrefix() string {
+	if k.PoolName != "" {
+		return fmt.Sprintf("%s%s_", poolPrefix, k.PoolName)
 	}
-	if k.isDeployment {
-		return fmt.Sprintf("%s%s_%s_", deploymentPrefixKey, k.namespace, k.appName)
+	if k.IsDeployment {
+		return fmt.Sprintf("%s%s_%s_", deploymentPrefixKey, k.Namespace, k.AppName)
 	}
-	return fmt.Sprintf("%s%s_%s_", statefulsetPrefixKey, k.namespace, k.appName)
+	return fmt.Sprintf("%s%s_%s_", statefulsetPrefixKey, k.Namespace, k.AppName)
 }
 
-func (k *keyObj) poolAppPrefix() string {
-	if k.poolName != "" {
+func (k *KeyObj) PoolAppPrefix() string {
+	if k.PoolName != "" {
 		appTypePrefix := statefulsetPrefixKey
-		if k.isDeployment {
+		if k.IsDeployment {
 			appTypePrefix = deploymentPrefixKey
 		}
-		return fmt.Sprintf("%s%s_%s%s_%s_", poolPrefix, k.poolName, appTypePrefix, k.namespace, k.appName)
+		return fmt.Sprintf("%s%s_%s%s_%s_", poolPrefix, k.PoolName, appTypePrefix, k.Namespace, k.AppName)
 	}
-	return k.poolPrefix()
+	return k.PoolPrefix()
 }
 
 const (
@@ -81,36 +100,29 @@ const (
 	statefulsetPrefixKey = "sts_"
 )
 
-func formatKey(pod *corev1.Pod) *keyObj {
-	var prefix string
-	pool := getPoolPrefix(pod.Annotations)
-	if pool != "" {
-		prefix = fmt.Sprintf("%s%s_", poolPrefix, pool)
-	}
+func FormatKey(pod *corev1.Pod) *KeyObj {
+	pool := constant.GetPool(pod.Annotations)
 	deploymentName := resolveDeploymentName(pod)
-	keyObj := &keyObj{
-		poolName:  pool,
-		podName:   pod.Name,
-		namespace: pod.Namespace}
-	var appTypePrefix string
+	keyObj := &KeyObj{
+		PoolName:  pool,
+		PodName:   pod.Name,
+		Namespace: pod.Namespace}
 	if deploymentName != "" {
-		appTypePrefix = deploymentPrefixKey
-		keyObj.appName = deploymentName
-		keyObj.isDeployment = true
+		keyObj.AppName = deploymentName
+		keyObj.IsDeployment = true
 	} else {
 		stsName := resolveStatefulsetName(pod)
 		if stsName == "" {
 			return keyObj
 		}
-		keyObj.appName = stsName
-		appTypePrefix = statefulsetPrefixKey
+		keyObj.AppName = stsName
 	}
-	keyObj.keyInDB = fmt.Sprintf("%s%s%s_%s_%s", prefix, appTypePrefix, keyObj.namespace, keyObj.appName, keyObj.podName)
+	keyObj.genKey()
 	return keyObj
 }
 
-func parseKey(key string) *keyObj {
-	keyObj := &keyObj{keyInDB: key}
+func ParseKey(key string) *KeyObj {
+	keyObj := &KeyObj{KeyInDB: key}
 	removedPoolKey := key
 	if strings.HasPrefix(key, poolPrefix) {
 		// _ippool__poolName_deployment_namespace_deploymentName_podName
@@ -118,7 +130,7 @@ func parseKey(key string) *keyObj {
 		if len(parts) != 2 {
 			return keyObj
 		}
-		keyObj.poolName = parts[0]
+		keyObj.PoolName = parts[0]
 		if strings.HasPrefix(parts[1], deploymentPrefixKey[1:]) {
 			removedPoolKey = "_" + parts[1]
 		} else {
@@ -126,10 +138,10 @@ func parseKey(key string) *keyObj {
 		}
 	}
 	if strings.HasPrefix(removedPoolKey, deploymentPrefixKey) {
-		keyObj.isDeployment = true
-		keyObj.appName, keyObj.podName, keyObj.namespace = resolveDpKey(removedPoolKey)
+		keyObj.IsDeployment = true
+		keyObj.AppName, keyObj.PodName, keyObj.Namespace = ResolveDpKey(removedPoolKey)
 	} else {
-		keyObj.appName, keyObj.podName, keyObj.namespace = resolveStsKey(removedPoolKey)
+		keyObj.AppName, keyObj.PodName, keyObj.Namespace = resolveStsKey(removedPoolKey)
 	}
 	return keyObj
 }
@@ -147,10 +159,10 @@ func resolveStsKey(key string) (string, string, string) {
 	return "", "", ""
 }
 
-// resolveDpKey returns appname, podname, namespace
+// ResolveDpKey returns appname, podname, namespace
 // "dp_default_dp1_dp1-rs1-pod1": {"dp1", "dp1-rs1-pod1", "default"}
-func resolveDpKey(key string) (string, string, string) {
-	if isDeploymentKey(key) {
+func ResolveDpKey(key string) (string, string, string) {
+	if IsDeploymentKey(key) {
 		parts := strings.Split(key, "_")
 		if len(parts) == 4 {
 			return parts[2], parts[3], parts[1]
@@ -159,26 +171,26 @@ func resolveDpKey(key string) (string, string, string) {
 	return "", "", ""
 }
 
-func isDeploymentKey(key string) bool {
+func IsDeploymentKey(key string) bool {
 	return strings.HasPrefix(key, deploymentPrefixKey)
 }
 
-func isIPPoolKey(key string) bool {
+func IsIPPoolKey(key string) bool {
 	return strings.HasPrefix(key, "pool__")
 }
 
-func join(name, namespace string) string {
+func Join(name, namespace string) string {
 	return fmt.Sprintf("%s_%s", namespace, name)
 }
 
-func podName(pod *corev1.Pod) string {
+func PodName(pod *corev1.Pod) string {
 	return fmt.Sprintf("%s_%s", pod.Namespace, pod.Name)
 }
 
-func statefulsetName(ss *appv1.StatefulSet) string {
+func StatefulsetName(ss *appv1.StatefulSet) string {
 	return fmt.Sprintf("%s_%s", ss.Namespace, ss.Name)
 }
 
-func deploymentName(dp *appv1.Deployment) string {
+func DeploymentName(dp *appv1.Deployment) string {
 	return fmt.Sprintf("%s_%s", dp.Namespace, dp.Name)
 }

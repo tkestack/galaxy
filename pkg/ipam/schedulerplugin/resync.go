@@ -10,6 +10,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	"github.com/golang/glog"
 	appv1 "k8s.io/api/apps/v1"
@@ -36,7 +37,7 @@ func (p *FloatingIPPlugin) storeReady() bool {
 type resyncObj struct {
 	attr   string
 	ip     uint32
-	keyObj *keyObj
+	keyObj *util.KeyObj
 }
 
 // resyncPod releases ips from
@@ -58,11 +59,11 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	podInDB := make(map[string]resyncObj)
 	assignPodsInDB := make(map[string]resyncObj) // syncing ips with cloudprovider
 	for _, fip := range all {
-		if fip.Key == "" || isIPPoolKey(fip.Key) {
+		if fip.Key == "" || util.IsIPPoolKey(fip.Key) {
 			continue
 		}
-		keyObj := parseKey(fip.Key)
-		if keyObj.appName == "" {
+		keyObj := util.ParseKey(fip.Key)
+		if keyObj.AppName == "" {
 			glog.Warningf("unexpected key: %s", fip.Key)
 			continue
 		}
@@ -72,7 +73,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			// never release these ips
 			// for deployment, put back to deployment
 			// we do nothing for statefulset pod, because we preserve ip according to its pod name
-			if keyObj.isDeployment && keyObj.podName != "" {
+			if keyObj.IsDeployment && keyObj.PodName != "" {
 				podInDB[fip.Key] = resyncObj{keyObj: keyObj, attr: fip.Attr}
 			}
 			// skip if it is a statefulset key and is ReleasePolicyNever
@@ -90,8 +91,8 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			// for evicted pod, treat as not exist
 			continue
 		}
-		keyObj := formatKey(pods[i])
-		existPods[keyObj.keyInDB] = pods[i]
+		keyObj := util.FormatKey(pods[i])
+		existPods[keyObj.KeyInDB] = pods[i]
 	}
 	ssMap, err := p.getSSMap()
 	if err != nil {
@@ -104,7 +105,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	if glog.V(4) {
 		podMap := make(map[string]string, len(existPods))
 		for k, v := range existPods {
-			podMap[k] = podName(v)
+			podMap[k] = util.PodName(v)
 		}
 		glog.V(4).Infof("existPods %v", podMap)
 	}
@@ -134,10 +135,10 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		if _, ok := existPods[key]; ok {
 			continue
 		}
-		appFullName := join(obj.keyObj.appName, obj.keyObj.namespace)
+		appFullName := util.Join(obj.keyObj.AppName, obj.keyObj.Namespace)
 		// we can't get labels of not exist pod, so get them from it's ss or deployment
 		ss, ok := ssMap[appFullName]
-		if ok && !isDeploymentKey(key) {
+		if ok && !util.IsDeploymentKey(key) {
 			if !p.hasResourceName(&ss.Spec.Template.Spec) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, key, deletedAndLabelMissMatchPod); err != nil {
@@ -154,7 +155,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			}
 			index, err := parsePodIndex(key)
 			if err != nil {
-				glog.Errorf("invalid pod name %s of ss %s: %v", key, statefulsetName(ss), err)
+				glog.Errorf("invalid pod name %s of ss %s: %v", key, util.StatefulsetName(ss), err)
 				continue
 			}
 			if ss.Spec.Replicas != nil && *ss.Spec.Replicas < int32(index)+1 {
@@ -166,7 +167,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			continue
 		}
 		dp, ok := dpMap[appFullName]
-		if ok && isDeploymentKey(key) {
+		if ok && util.IsDeploymentKey(key) {
 			if !p.hasResourceName(&dp.Spec.Template.Spec) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, key, deletedAndLabelMissMatchPod); err != nil {
@@ -182,7 +183,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				}
 				continue
 			}
-			poolPrefix := obj.keyObj.poolPrefix()
+			poolPrefix := obj.keyObj.PoolPrefix()
 			fips, err := ipam.ByPrefix(poolPrefix)
 			if err != nil {
 				glog.Errorf("failed query prefix: %v", err)
@@ -200,7 +201,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				}
 			}
 			continue
-		} else if isDeploymentKey(key) {
+		} else if util.IsDeploymentKey(key) {
 			fip, err := ipam.First(key)
 			if err != nil {
 				glog.Errorf("failed get key %s: %v", key, err)
@@ -214,8 +215,8 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 					glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.attr, key, err)
 					continue
 				}
-				keyObj := parseKey(fip.FIP.Key)
-				if err = ipam.UpdateKey(key, keyObj.poolPrefix()); err != nil {
+				keyObj := util.ParseKey(fip.FIP.Key)
+				if err = ipam.UpdateKey(key, keyObj.PoolPrefix()); err != nil {
 					glog.Errorf("failed reserve fip: %v", err)
 				}
 			} else {
@@ -239,7 +240,7 @@ func (p *FloatingIPPlugin) getSSMap() (map[string]*appv1.StatefulSet, error) {
 		if !p.hasResourceName(&sss[i].Spec.Template.Spec) {
 			continue
 		}
-		key2App[statefulsetName(sss[i])] = sss[i]
+		key2App[util.StatefulsetName(sss[i])] = sss[i]
 	}
 	glog.V(4).Infof("%v", key2App)
 	return key2App, nil
@@ -255,7 +256,7 @@ func (p *FloatingIPPlugin) getDPMap() (map[string]*appv1.Deployment, error) {
 		if !p.hasResourceName(&dps[i].Spec.Template.Spec) {
 			continue
 		}
-		key2App[deploymentName(dps[i])] = dps[i]
+		key2App[util.DeploymentName(dps[i])] = dps[i]
 	}
 	glog.V(4).Infof("%v", key2App)
 	return key2App, nil
@@ -306,23 +307,23 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 	if pod.Annotations == nil {
 		return nil
 	}
-	keyObj := formatKey(pod)
+	keyObj := util.FormatKey(pod)
 	ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
 	if err != nil {
 		return err
 	}
 	if len(ipInfos) == 0 || ipInfos[0].IP == nil {
 		// should not happen
-		return fmt.Errorf("empty ipinfo for pod %s", keyObj.keyInDB)
+		return fmt.Errorf("empty ipinfo for pod %s", keyObj.KeyInDB)
 	}
-	if err := p.syncIP(p.ipam, keyObj.keyInDB, ipInfos[0].IP.IP, pod); err != nil {
+	if err := p.syncIP(p.ipam, keyObj.KeyInDB, ipInfos[0].IP.IP, pod); err != nil {
 		return fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
 	if p.enabledSecondIP(pod) {
 		if len(ipInfos) == 1 || ipInfos[1].IP == nil {
-			return fmt.Errorf("none second ipinfo for pod %s", keyObj.keyInDB)
+			return fmt.Errorf("none second ipinfo for pod %s", keyObj.KeyInDB)
 		}
-		if err := p.syncIP(p.secondIPAM, keyObj.keyInDB, ipInfos[1].IP.IP, pod); err != nil {
+		if err := p.syncIP(p.secondIPAM, keyObj.KeyInDB, ipInfos[1].IP.IP, pod); err != nil {
 			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 		}
 	}

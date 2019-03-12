@@ -14,6 +14,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"github.com/jinzhu/gorm"
 	appv1 "k8s.io/api/apps/v1"
@@ -84,11 +85,11 @@ func TestFilter(t *testing.T) {
 	// allocate a ip of 10.173.13.0/24
 	_, ipNet, _ := net.ParseCIDR("10.173.13.0/24")
 	pod := createStatefulSetPod("pod1-0", "ns1", immutableAnnotation)
-	podKey := formatKey(pod)
-	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet(podKey.keyInDB, ipNet, constant.ReleasePolicyPodDelete, ""); err != nil || ipInfo == nil || "10.173.13.2" != ipInfo.String() {
+	podKey := util.FormatKey(pod)
+	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet(podKey.KeyInDB, ipNet, constant.ReleasePolicyPodDelete, ""); err != nil || ipInfo == nil || "10.173.13.2" != ipInfo.String() {
 		t.Fatal(err, ipInfo)
 	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.keyInDB, constant.ReleasePolicyPodDelete, expectAttrEmpty()); err != nil {
+	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.KeyInDB, constant.ReleasePolicyPodDelete, expectAttrEmpty()); err != nil {
 		t.Fatal(err)
 	}
 	// check filter result is expected
@@ -100,14 +101,14 @@ func TestFilter(t *testing.T) {
 	}
 	// check pod allocated the previous ip and policy should be updated to AppDeleteOrScaleDown
 	pod.Spec.NodeName = node4
-	ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, podKey.keyInDB, pod.Spec.NodeName, pod)
+	ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, podKey.KeyInDB, pod.Spec.NodeName, pod)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.keyInDB, constant.ReleasePolicyImmutable, expectAttrNotEmpty()); err != nil {
+	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.KeyInDB, constant.ReleasePolicyImmutable, expectAttrNotEmpty()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,7 +123,7 @@ func TestFilter(t *testing.T) {
 	if err := fipPlugin.DeletePod(pod); err != nil {
 		t.Fatal(err)
 	}
-	if ipInfo, err := fipPlugin.ipam.First(podKey.keyInDB); err != nil || ipInfo == nil {
+	if ipInfo, err := fipPlugin.ipam.First(podKey.KeyInDB); err != nil || ipInfo == nil {
 		t.Fatal(err, ipInfo)
 	} else {
 		if ipInfo.IPInfo.IP.String() != "10.173.13.2/24" {
@@ -134,8 +135,8 @@ func TestFilter(t *testing.T) {
 	for i := 0; ; i++ {
 		newPod := createStatefulSetPod(fmt.Sprintf("temp-%d", i), "ns1", immutableAnnotation)
 		newPod.Spec.NodeName = node4
-		newPodKey := formatKey(newPod)
-		if ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, newPodKey.keyInDB, newPod.Spec.NodeName, newPod); err != nil {
+		newPodKey := util.FormatKey(newPod)
+		if ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, newPodKey.KeyInDB, newPod.Spec.NodeName, newPod); err != nil {
 			if !strings.Contains(err.Error(), floatingip.ErrNoEnoughIP.Error()) {
 				t.Fatal(err)
 			}
@@ -154,13 +155,13 @@ func TestFilter(t *testing.T) {
 		}
 	}
 	// see if we can allocate the reserved ip
-	if ipInfo, err = fipPlugin.allocateIP(fipPlugin.ipam, podKey.keyInDB, pod.Spec.NodeName, pod); err != nil {
+	if ipInfo, err = fipPlugin.allocateIP(fipPlugin.ipam, podKey.KeyInDB, pod.Spec.NodeName, pod); err != nil {
 		t.Fatal(err)
 	}
 	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.keyInDB, constant.ReleasePolicyImmutable, expectAttrNotEmpty()); err != nil {
+	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.KeyInDB, constant.ReleasePolicyImmutable, expectAttrNotEmpty()); err != nil {
 		t.Fatal(err)
 	}
 	// check sync back into db according to pods annotation TODO move this to a separate test
@@ -173,7 +174,7 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	pod.Annotations[constant.ExtendedCNIArgsAnnotation] = str
-	if err := fipPlugin.releaseIP(podKey.keyInDB, "", pod); err != nil {
+	if err := fipPlugin.releaseIP(podKey.KeyInDB, "", pod); err != nil {
 		t.Fatal(err)
 	}
 	if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
@@ -186,7 +187,7 @@ func TestFilter(t *testing.T) {
 	}
 	if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
 		t.Fatal(err)
-	} else if fip.Key != podKey.keyInDB {
+	} else if fip.Key != podKey.KeyInDB {
 		t.Fatal("failed resync ip 10.173.13.2")
 	}
 }
@@ -197,10 +198,10 @@ func TestFilterForDeployment(t *testing.T) {
 	// pre-allocate ip in filter for deployment pod
 	deadPod := createDeploymentPod("dp-aaa-bbb", "ns1", immutableAnnotation)
 	pod := createDeploymentPod("dp-xxx-yyy", "ns1", immutableAnnotation)
-	podKey, deadPodKey := formatKey(pod), formatKey(deadPod)
+	podKey, deadPodKey := util.FormatKey(pod), util.FormatKey(deadPod)
 	var replicas int32 = 1
 	fipPlugin.getDeployment = getDeploymentFunc(pod.ObjectMeta, &replicas)
-	fip, err := fipPlugin.allocateIP(fipPlugin.ipam, deadPodKey.keyInDB, node3, deadPod)
+	fip, err := fipPlugin.allocateIP(fipPlugin.ipam, deadPodKey.KeyInDB, node3, deadPod)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +223,7 @@ func TestFilterForDeployment(t *testing.T) {
 	if err := checkFilterResult(filtered, failed, []string{node3}, []string{drainedNode, nodeHasNoIP, node4}); err != nil {
 		t.Fatal(err)
 	}
-	fip2, err := fipPlugin.ipam.First(podKey.keyInDB)
+	fip2, err := fipPlugin.ipam.First(podKey.KeyInDB)
 	if err != nil {
 		t.Fatal(err)
 	} else if fip.IP.String() != fip2.IPInfo.IP.String() {
@@ -243,7 +244,7 @@ func TestFilterForDeployment(t *testing.T) {
 	if err := checkFilterResult(filtered, failed, []string{node3}, []string{drainedNode, nodeHasNoIP, node4}); err != nil {
 		t.Fatal(err)
 	}
-	fip3, err := fipPlugin.ipam.First(deadPodKey.keyInDB)
+	fip3, err := fipPlugin.ipam.First(deadPodKey.KeyInDB)
 	if err != nil {
 		t.Fatal(err)
 	} else if fip.IP.String() != fip3.IPInfo.IP.String() {
@@ -286,7 +287,7 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 	pod := createDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
 	pod2 := createDeploymentPod("dp2-abc-def", "ns2", poolAnnotation("pool1"))
 	pod3 := createDeploymentPod("dp2-abc-xyz", "ns2", poolAnnotation("pool1"))
-	podKey, pod2Key := formatKey(pod), formatKey(pod2)
+	podKey, pod2Key := util.FormatKey(pod), util.FormatKey(pod2)
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2, pod3)
 	defer func() { stopChan <- struct{}{} }()
 	var replicas int32 = 1
@@ -316,8 +317,8 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 
 				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
 					t.Fatal(err)
-				} else if fip.Key != podKey.keyInDB {
-					t.Fatalf("real key: %s, expect %s", fip.Key, podKey.keyInDB)
+				} else if fip.Key != podKey.KeyInDB {
+					t.Fatalf("real key: %s, expect %s", fip.Key, podKey.KeyInDB)
 				}
 				return nil
 			},
@@ -332,16 +333,16 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 				}
 				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
 					t.Fatal(err)
-				} else if fip.Key != podKey.poolPrefix() {
-					t.Fatalf("real key: %s, expect %s", fip.Key, podKey.poolPrefix())
+				} else if fip.Key != podKey.PoolPrefix() {
+					t.Fatalf("real key: %s, expect %s", fip.Key, podKey.PoolPrefix())
 				}
 				return nil
 			},
 			postHook: func() error {
 				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.173.13.2")); err != nil {
 					t.Fatal(err)
-				} else if fip.Key != pod2Key.keyInDB {
-					t.Fatalf("real key: %s, expect %s", fip.Key, pod2Key.keyInDB)
+				} else if fip.Key != pod2Key.KeyInDB {
+					t.Fatalf("real key: %s, expect %s", fip.Key, pod2Key.KeyInDB)
 				}
 				return nil
 			},
@@ -360,8 +361,8 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 				}
 				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.49.27.205")); err != nil {
 					t.Fatal(err)
-				} else if fip.Key != podKey.keyInDB {
-					t.Fatalf("real key: %s, expect %s", fip.Key, podKey.keyInDB)
+				} else if fip.Key != podKey.KeyInDB {
+					t.Fatalf("real key: %s, expect %s", fip.Key, podKey.KeyInDB)
 				}
 				return nil
 			},
@@ -377,8 +378,8 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 				}
 				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.49.27.205")); err != nil {
 					t.Fatal(err)
-				} else if fip.Key != podKey.poolPrefix() {
-					t.Fatalf("real key: %s, expect %s", fip.Key, podKey.poolPrefix())
+				} else if fip.Key != podKey.PoolPrefix() {
+					t.Fatalf("real key: %s, expect %s", fip.Key, podKey.PoolPrefix())
 				}
 				return nil
 			},
@@ -727,7 +728,7 @@ func (f *fakeCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssign
 
 func TestUnBind(t *testing.T) {
 	pod1 := createStatefulSetPod("pod1-1", "demo", map[string]string{})
-	keyObj := formatKey(pod1)
+	keyObj := util.FormatKey(pod1)
 	node := createNode("TestUnBindNode", nil, "10.173.13.4")
 	var conf Conf
 	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
@@ -756,7 +757,7 @@ func TestUnBind(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	fipInfo, err := fipPlugin.ipam.First(keyObj.keyInDB)
+	fipInfo, err := fipPlugin.ipam.First(keyObj.KeyInDB)
 	if err != nil {
 		t.Fatal(err)
 	}
