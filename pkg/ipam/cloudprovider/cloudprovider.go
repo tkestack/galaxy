@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -14,8 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apiserver/pkg/util/trace"
 )
-
-const NotFound = "ResourceNotFound"
 
 type CloudProvider interface {
 	AssignIP(in *rpc.AssignIPRequest) (*rpc.AssignIPReply, error)
@@ -37,7 +34,7 @@ func NewGRPCCloudProvider(cloudProviderAddr string) CloudProvider {
 			Duration: 10 * time.Millisecond,
 			Factor:   5.0,
 			Jitter:   0.1},
-		timeout:           time.Second * 3,
+		timeout:           time.Second * 5,
 		cloudProviderAddr: cloudProviderAddr,
 	}
 }
@@ -57,15 +54,16 @@ func (p *GRPCCloudProvider) connect() {
 
 func (p *GRPCCloudProvider) AssignIP(in *rpc.AssignIPRequest) (reply *rpc.AssignIPReply, err error) {
 	p.connect()
-	glog.V(3).Infof("send %+v", *in)
+	glog.V(3).Infof("AssignIP %v", in)
 	t := trace.New("AssignIP")
-	defer t.LogIfLong(time.Second)
-	wait.ExponentialBackoff(p.backOff, func() (done bool, err error) {
+	defer t.LogIfLong(3 * time.Second)
+	err = wait.ExponentialBackoff(p.backOff, func() (done bool, err error) {
 		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		defer cancel()
 		reply, err = p.client.AssignIP(ctx, in)
+		glog.V(4).Infof("reply %v, err %v", reply, err)
 		if err != nil {
-			t.Step(fmt.Sprintf("AssignIP for %+v failed: %v", *in, err))
+			t.Step(fmt.Sprintf("AssignIP for %v failed: %v", in, err))
 			return false, err
 		}
 		return true, nil
@@ -75,18 +73,17 @@ func (p *GRPCCloudProvider) AssignIP(in *rpc.AssignIPRequest) (reply *rpc.Assign
 
 func (p *GRPCCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (reply *rpc.UnAssignIPReply, err error) {
 	p.connect()
-	glog.V(3).Infof("send %+v", *in)
-	t := trace.New("AssignIP")
-	defer t.LogIfLong(time.Second)
-	wait.ExponentialBackoff(p.backOff, func() (done bool, err error) {
+	glog.V(3).Infof("UnAssignIP %v", in)
+	t := trace.New("UnAssignIP")
+	defer t.LogIfLong(3 * time.Second)
+	err = wait.ExponentialBackoff(p.backOff, func() (done bool, err error) {
 		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		defer cancel()
 		reply, err = p.client.UnAssignIP(ctx, in)
+		glog.V(4).Infof("reply %v, err %v", reply, err)
 		if err != nil {
-			if strings.Contains(err.Error(), NotFound) {
-				return true, nil
-			}
-			t.Step(fmt.Sprintf("AssignIP for %+v failed: %v", *in, err))
+			// Expect cloud provider returns success if already unassigned
+			t.Step(fmt.Sprintf("UnAssignIP for %+v failed: %v", in, err))
 			return false, err
 		}
 		return true, nil

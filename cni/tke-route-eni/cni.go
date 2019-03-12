@@ -97,7 +97,10 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return fmt.Errorf("failed to open netns %q: %v", args.Netns, err)
 	}
-	defer netns.Close()
+	defer func() {
+		// make gometalinter check pass
+		_ = netns.Close()
+	}()
 
 	_, results, err := galaxyIpam.Allocate(conf.IPAM.Type, args)
 	if err != nil {
@@ -166,11 +169,11 @@ func cmdDel(args *skel.CmdArgs) error {
 		return err
 	}
 
-	savedIP := result020.IP4.IP
+	savedIP := result020.IP4.IP.IP
 
 	err = cleanHostRule(savedIP.String(), *conf.RouteTable)
 	if err != nil {
-		return err
+		return fmt.Errorf("args %s savedIP %s %v", args.Args, savedIP.String(), err)
 	}
 
 	// see https://github.com/kubernetes/kubernetes/issues/20379#issuecomment-255272531
@@ -180,13 +183,16 @@ func cmdDel(args *skel.CmdArgs) error {
 
 	err = ns.WithNetNSPath(args.Netns, func(_ ns.NetNS) error {
 		subErr := ip.DelLinkByName(args.IfName)
-		if subErr != nil && subErr == ip.ErrLinkNotFound {
+		if subErr == nil {
+			return nil
+		}
+		if subErr == ip.ErrLinkNotFound {
 			return nil
 		}
 		return fmt.Errorf("failed to delete ns %s link %s: %v", args.Netns, args.IfName, subErr)
 	})
 
-	return nil
+	return err
 }
 
 func main() {

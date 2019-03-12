@@ -1,7 +1,6 @@
 package k8s
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -24,18 +23,6 @@ func TestParsePodNetworkAnnotation(t *testing.T) {
 		}
 	} else {
 		t.Errorf("case1 network num not 2")
-	}
-
-	case2 := "test-ns/unknown-network@eth0"
-	_, err = ParsePodNetworkAnnotation(case2)
-	if err == nil {
-		t.Errorf("case2 fail: can't exclude unknown cni")
-	} else {
-		if strings.Contains(err.Error(), "unsupported network") {
-			t.Log("case2 pass")
-		} else {
-			t.Errorf("case2 parse fail: error not like unsupported network")
-		}
 	}
 
 	case3 := "test-ns/galaxy-flannel"
