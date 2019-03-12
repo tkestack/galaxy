@@ -22,14 +22,14 @@ RUN yum install -y iproute iproute-doc iptables
 COPY bin/galaxy /usr/bin/
 COPY bin/disable-ipv6 bin/galaxy-bridge bin/galaxy-flannel bin/galaxy-k8s-sriov bin/galaxy-k8s-vlan bin/galaxy-veth bin/host-local bin/loopback /opt/cni/bin/
 COPY hack/start.sh /root/
-ENTRYPOINT ["sh", "/root/start.sh"]
+CMD ["sh", "/root/start.sh"]
 EOF
   docker build -f bin/images/galaxy.dockerfile -t docker.oa.com:8080/library/galaxy:${VERSION} .
   docker save -o ${ROOT}/bin/images/galaxy_image_cni.tar.gz docker.oa.com:8080/library/galaxy:${VERSION}
 }
 
 echo "begin to build galaxy & cni"
-#build_binary
+build_binary
 
 echo "begin to build image"
 mkdir -p ${ROOT}/bin/images
