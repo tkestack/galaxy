@@ -285,8 +285,9 @@ func getDeploymentFunc(meta v1.ObjectMeta, replicas *int32) func(name, namespace
 func TestFilterForDeploymentIPPool(t *testing.T) {
 	pod := createDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
 	pod2 := createDeploymentPod("dp2-abc-def", "ns2", poolAnnotation("pool1"))
+	pod3 := createDeploymentPod("dp2-abc-xyz", "ns2", poolAnnotation("pool1"))
 	podKey, pod2Key := formatKey(pod), formatKey(pod2)
-	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2)
+	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2, pod3)
 	defer func() { stopChan <- struct{}{} }()
 	var replicas int32 = 1
 	fipPlugin.getDeployment = getDeploymentFunc(pod.ObjectMeta, &replicas)
@@ -364,6 +365,24 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 				}
 				return nil
 			},
+		},
+		{
+			// unbind "pod" to get an unused pool ip, simulate upgrading a deployment by adding a "dp2" pod again
+			// Under such condition, even if deployment dp2 got enough ips which equal to its replicas. the pool has
+			// more ips, so filter should bind the unused pool ip.
+			preHook: func() error {
+				// because replicas = 1, ip will be reserved
+				if err := fipPlugin.unbind(pod); err != nil {
+					t.Fatal(err)
+				}
+				if fip, err := fipPlugin.ipam.ByIP(net.ParseIP("10.49.27.205")); err != nil {
+					t.Fatal(err)
+				} else if fip.Key != podKey.poolPrefix() {
+					t.Fatalf("real key: %s, expect %s", fip.Key, podKey.poolPrefix())
+				}
+				return nil
+			},
+			testPod: pod3, expectFiltererd: []string{node3}, expectFailed: []string{drainedNode, nodeHasNoIP, node4},
 		},
 	}
 	for i := range testCases {

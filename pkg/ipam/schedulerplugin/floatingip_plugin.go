@@ -296,7 +296,10 @@ func getAvailableSubnet(ipam floatingip.IPAM, keyObj *keyObj, dp *appv1.Deployme
 				}
 			}
 			glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d", keyObj, unusedSubnetSet, usedCount, replicas)
-			if usedCount >= replicas {
+			// check usedCount >= replicas to ensure upgrading a deployment won't change its ips
+			// check unusedSubnetSet.Len() == 0 to ensure during upgrading a deployment if a pool has more ips, the newly created pod could allocate
+			// such unused ips event if it gets replicas nums of ips.
+			if usedCount >= replicas && unusedSubnetSet.Len() == 0 {
 				glog.Warningf("deployment %s has allocate %d ips, but we only want %d, wait to release", dp.Name, usedCount, replicas)
 				return nil, false, nil
 			}
