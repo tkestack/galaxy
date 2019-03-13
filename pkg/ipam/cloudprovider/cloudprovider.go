@@ -34,7 +34,7 @@ func NewGRPCCloudProvider(cloudProviderAddr string) CloudProvider {
 			Duration: 10 * time.Millisecond,
 			Factor:   5.0,
 			Jitter:   0.1},
-		timeout:           time.Second * 5,
+		timeout:           time.Second * 8,
 		cloudProviderAddr: cloudProviderAddr,
 	}
 }
@@ -62,9 +62,11 @@ func (p *GRPCCloudProvider) AssignIP(in *rpc.AssignIPRequest) (reply *rpc.Assign
 		defer cancel()
 		reply, err = p.client.AssignIP(ctx, in)
 		glog.V(4).Infof("reply %v, err %v", reply, err)
-		if err != nil {
-			t.Step(fmt.Sprintf("AssignIP for %v failed: %v", in, err))
-			return false, err
+		if err != nil || reply == nil || !reply.Success {
+			errStr := fmt.Sprintf("AssignIP for %v failed: reply %v, err %v", in, reply, err)
+			t.Step(errStr)
+			glog.Warning(errStr)
+			return false, nil
 		}
 		return true, nil
 	})
@@ -81,10 +83,12 @@ func (p *GRPCCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (reply *rpc.Un
 		defer cancel()
 		reply, err = p.client.UnAssignIP(ctx, in)
 		glog.V(4).Infof("reply %v, err %v", reply, err)
-		if err != nil {
+		if err != nil || reply == nil || !reply.Success {
 			// Expect cloud provider returns success if already unassigned
-			t.Step(fmt.Sprintf("UnAssignIP for %+v failed: %v", in, err))
-			return false, err
+			errStr := fmt.Sprintf("UnAssignIP for %v failed: reply %v, err %v", in, reply, err)
+			t.Step(errStr)
+			glog.Warning(errStr)
+			return false, nil
 		}
 		return true, nil
 	})
