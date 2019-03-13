@@ -98,15 +98,16 @@ func (g *Galaxy) Start() error {
 		return err
 	}
 	g.initk8sClient()
-	g.pm = policy.New(g.client, g.quitChan)
 	gc.NewFlannelGC(g.dockerCli, g.quitChan, g.cleanIPtables).Run()
 	kernel.BridgeNFCallIptables(g.quitChan, g.BridgeNFCallIptables)
 	kernel.IPForward(g.quitChan, g.IPForward)
 	if err := g.setupIPtables(); err != nil {
 		return err
 	}
-	go wait.Until(g.pm.Run, 3*time.Minute, g.quitChan)
-
+	if g.NetworkPolicy {
+		g.pm = policy.New(g.client, g.quitChan)
+		go wait.Until(g.pm.Run, 3*time.Minute, g.quitChan)
+	}
 	if g.RouteENI {
 		kernel.DisableRPFilter(g.quitChan)
 		eni.SetupENIs(g.quitChan)

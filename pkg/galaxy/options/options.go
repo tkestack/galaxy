@@ -12,6 +12,7 @@ type ServerRunOptions struct {
 	IPForward            bool
 	RouteENI             bool
 	JsonConfigPath       string
+	NetworkPolicy        bool
 }
 
 func NewServerRunOptions() *ServerRunOptions {
@@ -20,6 +21,7 @@ func NewServerRunOptions() *ServerRunOptions {
 		BridgeNFCallIptables: true,
 		RouteENI:             false,
 		JsonConfigPath:       "/etc/galaxy/galaxy.json",
+		NetworkPolicy:        false,
 	}
 	return opt
 }
@@ -33,4 +35,5 @@ func (s *ServerRunOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.IPForward, "ip-forward", s.IPForward, "Ensure ip-forward is set/unset")
 	fs.BoolVar(&s.RouteENI, "route-eni", s.RouteENI, "Ensure route-eni is set/unset")
 	fs.StringVar(&s.JsonConfigPath, "json-config-path", s.JsonConfigPath, "The json config file location of galaxy")
+	fs.BoolVar(&s.NetworkPolicy, "network-policy", s.NetworkPolicy, "Enable network policy function")
 }

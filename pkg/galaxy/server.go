@@ -113,10 +113,12 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 					return
 				}
 				pod.Status.PodIP = result020.IP4.IP.IP.String()
-				if err := g.pm.SyncPodChains(pod); err != nil {
-					glog.Warning(err)
+				if g.pm != nil {
+					if err := g.pm.SyncPodChains(pod); err != nil {
+						glog.Warning(err)
+					}
+					g.pm.SyncPodIPInIPSet(pod, true)
 				}
-				g.pm.SyncPodIPInIPSet(pod, true)
 			}
 		}
 	} else if req.Command == cniutil.COMMAND_DEL {
