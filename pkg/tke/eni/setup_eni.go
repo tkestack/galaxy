@@ -18,7 +18,7 @@ const (
 	mainRouteTable = 254
 	devPrefix      = "eth"
 
-	setupPeriod = 30 * time.Second
+	pollPeriod = 2 * time.Minute
 )
 
 type eniMeta struct {
@@ -30,7 +30,17 @@ type eniMeta struct {
 	LocalIpList []string
 }
 
-func SetupENIs(stopChan <-chan struct{}) error {
+func SetupENIs(stopChan <-chan struct{}) {
+	go wait.PollImmediateUntil(pollPeriod, func() (done bool, err error) {
+		err = setupENIs()
+		if err != nil {
+			return false, nil
+		}
+		return true, nil
+	}, stopChan)
+}
+
+func setupENIs() error {
 	// setup eni network
 	log.Infof("setup eni network")
 
@@ -38,45 +48,31 @@ func SetupENIs(stopChan <-chan struct{}) error {
 	metaCli := metadata.NewMetaData(nil)
 
 	log.Infof("wait for eni metadata binding")
-	var eniMetaMap map[string]*eniMeta
-	err := wait.PollUntil(setupPeriod, func() (done bool, err error) {
-		eniMetaMap, err = getENIMetaMap(metaCli)
-		if err != nil {
-			log.Errorf("failed to get eniMetaMap, error %v", err)
-			return false, err
-		}
-		if len(eniMetaMap) == 1 {
-			log.Warning("wait for eni binding")
-			return false, nil
-		}
-		return true, nil
-	}, stopChan)
+	eniMetaMap, err := getENIMetaMap(metaCli)
 	if err != nil {
-		return err
+		log.Errorf("failed to get eniMetaMap, error %v", err)
+		return fmt.Errorf("failed to get eniMetaMap, error %v", err)
+	}
+	if len(eniMetaMap) == 1 {
+		log.Warning("wait for extra eni binding")
+		return fmt.Errorf("failed to setup eni, no extra eni binding")
 	}
 
-	err = wait.PollUntil(setupPeriod, func() (done bool, err error) {
-		retMap := make(map[string]*eniMeta)
-		for mac, eni := range eniMetaMap {
-			retMap[mac] = eni
-		}
-		err = ensureENINetwrok(retMap)
-		if err != nil {
-			return false, nil
-		}
-		return true, nil
-	}, stopChan)
+	retMap := make(map[string]*eniMeta)
+	for mac, eni := range eniMetaMap {
+		retMap[mac] = eni
+	}
+	err = ensureENIsNetwrok(retMap)
 	if err != nil {
+		log.Error(err)
 		return err
 	}
-
 	return nil
 }
 
-func ensureENINetwrok(eniMetaMap map[string]*eniMeta) error {
+func ensureENIsNetwrok(eniMetaMap map[string]*eniMeta) error {
 	linkList, err := netlink.LinkList()
 	if err != nil {
-		log.Errorf("failed to list link: %v", err)
 		return fmt.Errorf("failed to list link: %v", err)
 	}
 	for _, link := range linkList {
@@ -96,14 +92,12 @@ func ensureENINetwrok(eniMetaMap map[string]*eniMeta) error {
 			log.Infof("setup eni %s network", ifName)
 			devIndex, err := getENIIndex(ifName)
 			if err != nil {
-				log.Errorf("failed to get eni %s index: %v", ifName, err)
 				return fmt.Errorf("failed to get eni %s index: %v", ifName, err)
 			}
 			ip := net.IPNet{IP: net.ParseIP(eniMeta.PrimaryIp), Mask: ips.ParseIPv4Mask(eniMeta.Mask)}
 			err = ensureENINetwork(ifName, devIndex, ip)
 			if err != nil {
-				log.Errorf("failed to setup eni %s network: %v", ifName, err)
-				return err
+				return fmt.Errorf("failed to setup eni %s network: %v", ifName, err)
 			}
 		}
 		delete(eniMetaMap, mac)
