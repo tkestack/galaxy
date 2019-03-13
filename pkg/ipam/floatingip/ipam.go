@@ -10,7 +10,6 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	"github.com/golang/glog"
-	"github.com/jinzhu/gorm"
 )
 
 var (
@@ -233,7 +232,7 @@ func (i *ipam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy co
 		err = ErrNoFIPForSubnet
 		return
 	}
-	if err = i.allocateOneInSubnet(key, routableSubnet.String(), uint16(policy), attr); err != nil {
+	if err = i.updateOneInSubnet("", key, routableSubnet.String(), uint16(policy), attr); err != nil {
 		if err == ErrNotUpdated {
 			err = ErrNoEnoughIP
 		}
@@ -336,7 +335,7 @@ func (i *ipam) ByIP(ip net.IP) (database.FloatingIP, error) {
 }
 
 func (i *ipam) AllocateSpecificIP(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
-	return i.updateKey(nets.IPToInt(ip), key, uint16(policy), attr)
+	return i.allocateSpecificIP(nets.IPToInt(ip), key, uint16(policy), attr)
 }
 
 func (i *ipam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
@@ -344,24 +343,9 @@ func (i *ipam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePolicy
 }
 
 func (i *ipam) UpdateKey(oldK, newK string) error {
-	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Table(i.Name()).Where("`key` = ?", oldK).
-			UpdateColumns(map[string]interface{}{
-				"key":  newK,
-				"attr": "",
-			}).Error
-	})
+	return i.updateKey(oldK, newK)
 }
 
 func (i *ipam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error {
-	return i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Table(i.Name()).Where("`key` = ? AND subnet = ?", oldK, subnet).Limit(1).UpdateColumns(map[string]interface{}{`key`: newK, "policy": policy, "attr": attr})
-		if ret.Error != nil {
-			return ret.Error
-		}
-		if ret.RowsAffected != 1 {
-			return ErrNotUpdated
-		}
-		return nil
-	})
+	return i.updateOneInSubnet(oldK, newK, subnet, uint16(policy), attr)
 }

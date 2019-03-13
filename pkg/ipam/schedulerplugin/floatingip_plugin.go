@@ -782,13 +782,11 @@ func parseReleasePolicy(meta *v1.ObjectMeta) constant.ReleasePolicy {
 }
 
 type Attr struct {
-	Time     int64
 	NodeName string // need this attr to send unassign request to cloud provider on resync
 }
 
 func getAttr(pod *corev1.Pod, nodeName string) string {
-	t := time.Now().Unix()
-	obj := Attr{Time: t, NodeName: nodeName}
+	obj := Attr{NodeName: nodeName}
 	attr, err := json.Marshal(obj)
 	if err != nil {
 		glog.Warningf("failed to marshal attr %+v: %v", obj, err)

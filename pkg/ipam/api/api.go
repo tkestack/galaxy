@@ -30,7 +30,7 @@ type FloatingIP struct {
 	PoolName     string `json:"poolName"`
 	Policy       uint16 `json:"policy"`
 	IsDeployment bool   `json:"isDeployment"`
-	Time         int64  `json:"time"`
+	UpdateTime   int64  `json:"updateTime"`
 	Status       string `json:"status"`
 	Releasable   bool   `json:"releasable"`
 	attr         string
@@ -73,6 +73,7 @@ func transform(fips, secondIPs []database.FloatingIP) []FloatingIP {
 				PoolName:     keyObj.PoolName,
 				IsDeployment: keyObj.IsDeployment,
 				Policy:       fip[i].Policy,
+				UpdateTime:   fip[i].UpdatedAt.Unix(),
 				attr:         fip[i].Attr})
 		}
 	}
