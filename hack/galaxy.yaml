@@ -33,6 +33,8 @@ spec:
           mountPath: /run/flannel
         - name: kube-config
           mountPath: /etc/kubernetes/
+        - name: galaxy-log
+          mountPath: /data/galaxy/logs
         - name: galaxy-etc
           mountPath: /etc/galaxy
       terminationGracePeriodSeconds: 30
@@ -46,19 +48,21 @@ spec:
       - name: kube-config
         hostPath:
           path: /etc/kubernetes/
+      - name: galaxy-log
+        emptyDir: {}
       - configMap:
           defaultMode: 420
           name: galaxy-etc
         name: galaxy-etc
 ---
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: galaxy-etc
+  namespace: kube-system
 data:
   galaxy.json: |
     {
       "NetworkConf":[{"cniVersion":"0.2.0","name":"tke-route-eni","type":"tke-route-eni","eni":"eth1","routeTable":1}],
       "DefaultNetworks": ["tke-route-eni"]
     }
-kind: ConfigMap
-metadata:
-  name: galaxy-etc
-  namespace: kube-system
