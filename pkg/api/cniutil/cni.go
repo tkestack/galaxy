@@ -3,8 +3,10 @@ package cniutil
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -115,6 +117,9 @@ func CmdAdd(cmdArgs *skel.CmdArgs, networkInfos []*NetworkInfo) (types.Result, e
 	if len(networkInfos) == 0 {
 		return nil, fmt.Errorf("No network info returned")
 	}
+	if err := saveNetworkInfo(cmdArgs.ContainerID, networkInfos); err != nil {
+		return nil, fmt.Errorf("Error save network info %v for %s: %v", networkInfos, cmdArgs.ContainerID, err)
+	}
 	var (
 		err    error
 		result types.Result
@@ -122,13 +127,11 @@ func CmdAdd(cmdArgs *skel.CmdArgs, networkInfos []*NetworkInfo) (types.Result, e
 	for idx, networkInfo := range networkInfos {
 		//append additional args from network info
 		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(networkInfo.Args))
-		var ifName string
-		ifName = networkInfo.Args["IfName"]
-		result, err = DelegateAdd(networkInfo.Conf, cmdArgs, ifName)
+		result, err = DelegateAdd(networkInfo.Conf, cmdArgs, networkInfo.IfName)
 		if err != nil {
 			//fail to add cni, then delete all established CNIs recursively
-			glog.Errorf("fail to add network %s: %v, then rollback and delete it", networkInfo.Args, err)
-			delErr := CmdDel(cmdArgs, networkInfos, idx)
+			glog.Errorf("fail to add network %s: %v, begin to rollback and delete it", networkInfo.Args, err)
+			delErr := CmdDel(cmdArgs, idx)
 			glog.Warningf("fail to delete cni in rollback %v", delErr)
 			return nil, fmt.Errorf("fail to establish network %s:%v", networkInfo.Args, err)
 		}
@@ -143,27 +146,49 @@ type NetworkInfo struct {
 	NetworkType string
 	Args        map[string]string
 	Conf        map[string]interface{}
+	IfName      string
 }
 
-func NewNetworkInfo(networkType string, args map[string]string, conf map[string]interface{}) *NetworkInfo {
-	return &NetworkInfo{NetworkType: networkType, Args: args, Conf: conf}
+func NewNetworkInfo(networkType string, args map[string]string, conf map[string]interface{}, ifName string) *NetworkInfo {
+	return &NetworkInfo{NetworkType: networkType, Args: args, Conf: conf, IfName: ifName}
 }
 
-func CmdDel(cmdArgs *skel.CmdArgs, networkInfos []*NetworkInfo, lastIdx int) error {
+func reverse(infos []*NetworkInfo) {
+	for i, j := 0, len(infos)-1; i < j; i, j = i+1, j-1 {
+		infos[i], infos[j] = infos[j], infos[i]
+	}
+}
+
+func CmdDel(cmdArgs *skel.CmdArgs, lastIdx int) error {
+	networkInfos, err := consumeNetworkInfo(cmdArgs.ContainerID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Duplicated cmdDel invoked by kubelet
+			return nil
+		}
+		return fmt.Errorf("Error consume network info %v for %s: %v", networkInfos, cmdArgs.ContainerID, err)
+	}
+	if lastIdx == -1 {
+		lastIdx = len(networkInfos) - 1
+	}
 	var errorSet []string
+	var fails []*NetworkInfo
 	for idx := lastIdx; idx >= 0; idx-- {
 		networkInfo := networkInfos[idx]
 		//append additional args from network info
 		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(networkInfo.Args))
-		var ifName string
-		ifName = networkInfo.Args["IfName"]
-		err := DelegateDel(networkInfo.Conf, cmdArgs, ifName)
+		err := DelegateDel(networkInfo.Conf, cmdArgs, networkInfo.IfName)
 		if err != nil {
 			errorSet = append(errorSet, err.Error())
+			fails = append(fails, networkInfo)
 			glog.Errorf("failed to delete network %v: %v", networkInfo.Args, err)
 		}
 	}
 	if len(errorSet) > 0 {
+		reverse(fails)
+		if err := saveNetworkInfo(cmdArgs.ContainerID, fails); err != nil {
+			glog.Warningf("Error save network info %v for %s: %v", fails, cmdArgs.ContainerID, err)
+		}
 		return fmt.Errorf(strings.Join(errorSet, " / "))
 	}
 	return nil
@@ -216,4 +241,35 @@ func ConfigureIface(ifName string, res *t020.Result) error {
 	}
 
 	return nil
+}
+
+const (
+	stateDir = "/var/lib/cni/galaxy"
+)
+
+func saveNetworkInfo(containerID string, infos []*NetworkInfo) error {
+	if err := os.MkdirAll(stateDir, 0700); err != nil {
+		return err
+	}
+	path := filepath.Join(stateDir, containerID)
+	data, err := json.Marshal(infos)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(path, data, 0600)
+}
+
+func consumeNetworkInfo(containerID string) ([]*NetworkInfo, error) {
+	var infos []*NetworkInfo
+	path := filepath.Join(stateDir, containerID)
+	defer os.Remove(path) // nolint: errcheck
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return infos, err
+	}
+	if err := json.Unmarshal(data, &infos); err != nil {
+		return infos, err
+	}
+	return infos, nil
 }
