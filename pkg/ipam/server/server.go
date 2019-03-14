@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
@@ -16,6 +17,7 @@ import (
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -123,6 +125,15 @@ func (s *Server) initk8sClient() {
 	if err != nil {
 		glog.Fatalf("Error building example clientset: %v", err)
 	}
+
+	// Identity used to distinguish between multiple cloud controller manager instances
+	id, err := os.Hostname()
+	if err != nil {
+		glog.Fatalf("Error getting host name: %v", err)
+	}
+	// add a uniquifier so that two processes on the same host don't accidentally both become active
+	id = id + "_" + string(uuid.NewUUID())
+
 	recorder, err := newRecoder(cfg)
 	if err != nil {
 		glog.Fatalf("failed init event recorder: %v", err)
@@ -134,7 +145,7 @@ func (s *Server) initk8sClient() {
 			COMPONENT_NAME,
 			leaderElectionClient.CoreV1(),
 			resourcelock.ResourceLockConfig{
-				Identity:      fmt.Sprintf("%s:%d", s.Bind, s.Port),
+				Identity:      id,
 				EventRecorder: recorder,
 			})
 		if err != nil {
