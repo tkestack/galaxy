@@ -20,7 +20,7 @@ LABEL description="This Dockerfile is written for galaxy"
 WORKDIR /root/
 COPY bin/galaxy-ipam /usr/bin/
 COPY hack/start-ipam.sh /root/
-CMD ["sh", "/root/start-ipam.sh"]
+CMD ["/root/start-ipam.sh"]
 EOF
   docker build -f bin/images/galaxy_ipam.dockerfile -t docker.oa.com:8080/library/galaxy_ipam:${VERSION} .
 }

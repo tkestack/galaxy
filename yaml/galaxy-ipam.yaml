@@ -9,7 +9,7 @@ spec:
   ports:
   - port: 8080
     targetPort: 80
-    nodePort: 9040
+    nodePort: 32760
     protocol: TCP
   selector:
     run: galaxy-ipam

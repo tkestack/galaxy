@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scheduler-policy
+  namespace: kube-system
+data:
+  policy.cfg: |
+    {
+      "kind": "Policy",
+      "apiVersion": "v1",
+      "extenders": [
+        {
+          "urlPrefix": "http://127.0.0.1:9040/v1",
+          "filterVerb": "filter",
+          "prioritizeVerb": "prioritize",
+          "BindVerb": "bind",
+          "weight": 1,
+          "enableHttps": false,
+          "managedResources": [
+            {
+              "name": "tke.cloud.tencent.com/eni-ip",
+              "ignoredByScheduler": false
+            }
+          ]
+        }
+      ]
+    }
