@@ -123,12 +123,7 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 		}
 	} else if req.Command == cniutil.COMMAND_DEL {
 		defer glog.Infof("%v err %v, %s-", req, err, start.Format(time.StampMicro))
-		var pod *corev1.Pod
-		pod, err = g.getPod(req.PodName, req.PodNamespace)
-		if err != nil {
-			return
-		}
-		err = g.cmdDel(req, pod)
+		err = cniutil.CmdDel(req.CmdArgs, -1)
 		if err == nil {
 			err = g.cleanupPortMapping(req)
 		}
@@ -139,15 +134,11 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 }
 
 func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]*cniutil.NetworkInfo, error) {
-	// get extended args from pod's annotations
-	if err := injectExtendedCNIArgs(req, pod); err != nil {
-		return nil, err
-	}
-
 	var networkInfos []*cniutil.NetworkInfo
 	if pod.Annotations == nil || pod.Annotations[constant.MultusCNIAnnotation] == "" {
-		for _, netType := range g.DefaultNetworks {
-			networkInfos = append(networkInfos, cniutil.NewNetworkInfo(netType, map[string]string{}, g.netConf[netType]))
+		for i, netType := range g.DefaultNetworks {
+			networkInfos = append(networkInfos, cniutil.NewNetworkInfo(netType, map[string]string{}, g.netConf[netType],
+				setNetInterface("", i, req.IfName)))
 		}
 	} else {
 		v := pod.Annotations[constant.MultusCNIAnnotation]
@@ -158,19 +149,19 @@ func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]
 		}
 		//init networkInfo
 		for idx, network := range networks {
-			network.InterfaceRequest = setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName)
 			if _, ok := g.netConf[network.Name]; !ok {
 				return nil, fmt.Errorf("pod %s_%s requires network %s which is not configured", pod.Name, pod.Namespace, network.Name)
 			}
-			networkInfo := cniutil.NewNetworkInfo(network.Name, map[string]string{"IfName": network.InterfaceRequest}, g.netConf[network.Name])
+			networkInfo := cniutil.NewNetworkInfo(network.Name, map[string]string{}, g.netConf[network.Name],
+				setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName))
 			networkInfos = append(networkInfos, networkInfo)
 		}
-		if networks[0].InterfaceRequest != "eth0" {
-			glog.Errorf("invalid pod %s_%s network annotation %s: first network interface must be eth0", pod.Name, pod.Namespace, v)
-			return nil, fmt.Errorf("first network interface must be eth0")
-		}
 	}
-	if commonArgs, exist := req.ExtendedCNIArgs[constant.CommonCNIArgsKey]; exist {
+	extendedCNIArgs, err := parseExtendedCNIArgs(pod)
+	if err != nil {
+		return nil, err
+	}
+	if commonArgs, exist := extendedCNIArgs[constant.CommonCNIArgsKey]; exist {
 		for i := range networkInfos {
 			for k, v := range commonArgs {
 				networkInfos[i].Args[k] = string([]byte(v))
@@ -192,29 +183,20 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 	return cniutil.CmdAdd(req.CmdArgs, networkInfos)
 }
 
-func (g *Galaxy) cmdDel(req *galaxyapi.PodRequest, pod *corev1.Pod) error {
-	networkInfos, err := g.resolveNetworks(req, pod)
-	if err != nil {
-		return err
-	}
-	return cniutil.CmdDel(req.CmdArgs, networkInfos, len(networkInfos)-1)
-}
-
-// injectExtendedCNIArgs parses extended cni args from pod's annotation and assign it to req.ExtendedCNIArgs
-func injectExtendedCNIArgs(req *galaxyapi.PodRequest, pod *corev1.Pod) error {
+// parseExtendedCNIArgs parses extended cni args from pod's annotation
+func parseExtendedCNIArgs(pod *corev1.Pod) (map[string]map[string]json.RawMessage, error) {
 	if pod.Annotations == nil {
-		return nil
+		return nil, nil
 	}
 	annotation := pod.Annotations[constant.ExtendedCNIArgsAnnotation]
 	if annotation == "" {
-		return nil
+		return nil, nil
 	}
 	argsMap, err := constant.ParseExtendedCNIArgs(annotation)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	req.ExtendedCNIArgs = argsMap
-	return nil
+	return argsMap, nil
 }
 
 func (g *Galaxy) setupIPtables() error {
@@ -383,11 +365,11 @@ func convertResult(result types.Result) (*t020.Result, error) {
 }
 
 func setNetInterface(netIf string, idx int, argIf string) string {
-	if netIf != "" {
-		return netIf
-	}
 	if idx == 0 {
 		return argIf
+	}
+	if netIf != "" {
+		return netIf
 	}
 	return fmt.Sprintf("eth%d", idx)
 }
