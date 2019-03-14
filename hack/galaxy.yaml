@@ -33,10 +33,14 @@ spec:
           mountPath: /run/flannel
         - name: kube-config
           mountPath: /etc/kubernetes/
+        - mountPath: /opt/cni/bin
+          name: cni-bin-dir
         - name: galaxy-log
           mountPath: /data/galaxy/logs
         - name: galaxy-etc
           mountPath: /etc/galaxy
+        - name: galaxy-cni-etc
+          mountPath: /etc/cni/net.d
       terminationGracePeriodSeconds: 30
       volumes:
       - name: galaxy-run
@@ -48,12 +52,19 @@ spec:
       - name: kube-config
         hostPath:
           path: /etc/kubernetes/
+      - name: cni-bin-dir
+        hostPath:
+          path: /opt/cni/bin
       - name: galaxy-log
         emptyDir: {}
       - configMap:
           defaultMode: 420
           name: galaxy-etc
         name: galaxy-etc
+      - configMap:
+          defaultMode: 420
+          name: galaxy-cni-etc
+        name: galaxy-cni-etc
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -65,4 +76,16 @@ data:
     {
       "NetworkConf":[{"cniVersion":"0.2.0","name":"tke-route-eni","type":"tke-route-eni","eni":"eth1","routeTable":1}],
       "DefaultNetworks": ["tke-route-eni"]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: galaxy-cni-etc
+  namespace: kube-system
+data:
+  galaxy.conf: |
+    {
+      "type": "galaxy-sdn",
+      "capabilities": {"portMappings": true}
     }

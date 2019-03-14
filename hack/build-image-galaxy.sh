@@ -20,7 +20,7 @@ LABEL description="This Dockerfile is written for galaxy"
 WORKDIR /root/
 RUN yum install -y iproute iproute-doc iptables
 COPY bin/galaxy /usr/bin/
-COPY bin/disable-ipv6 bin/galaxy-bridge bin/galaxy-flannel bin/galaxy-k8s-sriov bin/galaxy-k8s-vlan bin/galaxy-veth bin/host-local bin/loopback bin/tke-route-eni /opt/cni/bin/
+COPY bin/disable-ipv6 bin/galaxy-bridge bin/galaxy-flannel bin/galaxy-k8s-sriov bin/galaxy-k8s-vlan bin/galaxy-veth bin/host-local bin/loopback bin/tke-route-eni bin/galaxy-sdn /opt/cni/bin/
 COPY hack/start.sh /root/
 CMD ["sh", "/root/start.sh"]
 EOF
