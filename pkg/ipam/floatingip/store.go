@@ -82,10 +82,17 @@ func (i *ipam) create(fip *database.FloatingIP) error {
 	})
 }
 
-func (i *ipam) releaseIPs(keys []string) error {
+func (i *ipam) releaseIP(key string, ip uint32) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Table(i.TableName).Where("`key` IN (?)", keys).
-			UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": "", `updated_at`: time.Now()}).Error
+		ret := tx.Table(i.Name()).Where("ip = ? AND `key` = ?", ip, key).
+			UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": "", `updated_at`: time.Now()})
+		if ret.Error != nil {
+			return ret.Error
+		}
+		if ret.RowsAffected != 1 {
+			return ErrNotUpdated
+		}
+		return nil
 	})
 }
 
@@ -172,9 +179,9 @@ func (i *ipam) updateKey(oldK, newK string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(i.Name()).Where("`key` = ?", oldK).
 			UpdateColumns(map[string]interface{}{
-				"key":        newK,
-				"attr":       "",
-				`updated_at`: time.Now(),
-			}).Error
+			"key":        newK,
+			"attr":       "",
+			`updated_at`: time.Now(),
+		}).Error
 	})
 }

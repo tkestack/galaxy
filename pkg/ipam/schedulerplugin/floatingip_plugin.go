@@ -368,7 +368,7 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 				glog.Warningf("failed to rollback policy from %v to %d, attr from %s to %s", policy, ipInfo.FIP.Policy, attr, ipInfo.FIP.Attr)
 			}
 		} else {
-			if err := ipam.Release([]string{key}); err != nil {
+			if err := ipam.Release(key, ipInfo.IPInfo.IP.IP); err != nil {
 				glog.Warningf("failed to rollback floating ip %s to %s: %v", ipInfo.IPInfo.IP.IP.String(), key, err)
 			}
 		}
@@ -444,7 +444,7 @@ func releaseIP(ipam floatingip.IPAM, key string, reason string) error {
 		glog.Infof("[%s] release floating ip from %s because of %s, but already been released", ipam.Name(), key, reason)
 		return nil
 	}
-	if err := ipam.Release([]string{key}); err != nil {
+	if err := ipam.Release(key, ipInfo.IPInfo.IP.IP); err != nil {
 		return fmt.Errorf("failed to release floating ip of %s because of %s: %v", key, reason, err)
 	}
 	glog.Infof("[%s] released floating ip %s from %s because of %s", ipam.Name(), ipInfo.IPInfo.IP.String(), key, reason)
@@ -534,7 +534,6 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	glog.Infof("handle unbind pod %s", pod.Name)
 	keyObj := util.FormatKey(pod)
 	key := keyObj.KeyInDB
-	prefixKey := keyObj.PoolPrefix()
 	if p.cloudProvider != nil {
 		if pod.Annotations == nil || pod.Annotations[constant.ExtendedCNIArgsAnnotation] == "" {
 			// If a pod has not been allocated an ip, e.g. ip pool is drained, do nothing
@@ -554,100 +553,112 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		}
 	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)
-	switch policy {
-	case constant.ReleasePolicyNever:
-		if keyObj.IsDeployment {
-			err := p.ipam.UpdateKey(key, prefixKey)
-			if err != nil {
-				glog.Errorf("failed put back pod(%s) ip to deployment %s: %v", pod.Name, keyObj.AppName, err)
-			}
-			if p.enabledSecondIP(pod) {
-				err = p.secondIPAM.UpdateKey(key, prefixKey)
-				if err != nil {
-					glog.Errorf("failed put back pod(%s) ip to deployment %s: %v", pod.Name, keyObj.AppName, err)
-				}
-			}
-		}
-		glog.V(3).Infof("reserved %s for pod %s (never release)", pod.Annotations[constant.ExtendedCNIArgsAnnotation], key)
-		return nil
-	case constant.ReleasePolicyImmutable:
-		break
-	default:
+	if keyObj.IsDeployment {
+		return p.unbindDpPod(pod, keyObj, policy)
+	}
+	// statefulset pod
+	return p.unbindStsPod(pod, keyObj, policy)
+}
+
+func (p *FloatingIPPlugin) unbindStsPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
+	key := keyObj.KeyInDB
+	if policy == constant.ReleasePolicyPodDelete {
 		return p.releaseIP(key, deletedAndIPMutablePod, pod)
-	}
-	var statefulSet []*appv1.StatefulSet
-	var err error
-	// for test
-	if p.StatefulSetLister != nil {
-		statefulSet, err = p.StatefulSetLister.GetPodStatefulSets(pod)
-	} else {
-		err = fmt.Errorf("StatefulSetLister not support")
-	}
-	if err == nil {
-		// it's a statefulset pod
-		if len(statefulSet) > 1 {
-			glog.Warningf("multiple ss found for pod %s", key)
-		}
-		ss := statefulSet[0]
-		index, err := parsePodIndex(pod.Name)
-		if err != nil {
-			return fmt.Errorf("invalid pod name %s of ss %s: %v", key, util.StatefulsetName(ss), err)
-		}
-		if ss.Spec.Replicas != nil && *ss.Spec.Replicas < int32(index)+1 {
-			return p.releaseIP(key, deletedAndScaledDownSSPod, pod)
-		}
-	} else if keyObj.IsDeployment {
-		// release if scale down, or reserve if should be
-		deploy, err := p.getDeployment(keyObj.AppName, pod.Namespace)
-		replicas := 0
-		if err != nil {
-			if !metaErrs.IsNotFound(err) {
-				return err
+	} else if policy == constant.ReleasePolicyNever {
+		glog.V(3).Infof("reserved %s for pod %s, because of never release policy", getIPStrFromAnnotation(pod), key)
+		return nil
+	} else if policy == constant.ReleasePolicyImmutable {
+		// for test
+		if p.StatefulSetLister != nil {
+			statefulSet, err := p.StatefulSetLister.GetPodStatefulSets(pod)
+			if err != nil {
+				return p.releaseIP(key, deletedAndParentAppNotExistPod, pod)
 			}
-		} else {
-			replicas = int(*deploy.Spec.Replicas)
+			// it's a statefulset pod
+			if len(statefulSet) > 1 {
+				glog.Warningf("multiple ss found for pod %s", key)
+			}
+			ss := statefulSet[0]
+			index, err := parsePodIndex(pod.Name)
+			if err != nil {
+				return fmt.Errorf("invalid pod name %s of ss %s: %v", key, util.StatefulsetName(ss), err)
+			}
+			if ss.Spec.Replicas != nil && *ss.Spec.Replicas < int32(index)+1 {
+				return p.releaseIP(key, deletedAndScaledDownSSPod, pod)
+			}
+			glog.V(3).Infof("reserved %s for pod %s, because of never release policy", getIPStrFromAnnotation(pod), key)
 		}
-		fips, err := p.ipam.ByPrefix(prefixKey)
-		if err != nil {
+	}
+	return nil
+}
+
+func getIPStrFromAnnotation(pod *corev1.Pod) string {
+	if pod.Annotations == nil {
+		return ""
+	}
+	cniArgsStr := pod.Annotations[constant.ExtendedCNIArgsAnnotation]
+	if ipInfos, err := constant.ParseIPInfo(cniArgsStr); err != nil || len(ipInfos) == 0 {
+		glog.Warningf("bad IPInfo annotation %s for pod %s", cniArgsStr, util.PodName(pod))
+		return ""
+	} else {
+		var ipInfoStr []string
+		for i := range ipInfos {
+			if ipInfos[i].IP != nil {
+				ipInfoStr = append(ipInfoStr, ipInfos[i].IP.IP.String())
+			}
+		}
+		return strings.Join(ipInfoStr, ",")
+	}
+}
+
+func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
+	key, prefixKey := keyObj.KeyInDB, keyObj.PoolPrefix()
+	dp, err := p.getDeployment(keyObj.AppName, pod.Namespace)
+	replicas := 0
+	if err != nil {
+		if !metaErrs.IsNotFound(err) {
 			return err
 		}
-		if len(fips) > replicas {
-			err = p.ipam.Release([]string{key})
-			if err != nil {
-				return err
-			}
-		} else {
-			err = p.ipam.UpdateKey(key, prefixKey)
-			if err != nil {
-				glog.Errorf("failed reserve ip from pod %s to deploy %s: %v", pod.Name, deploy.Name, err)
-				return err
-			}
-		}
-		if p.enabledSecondIP(pod) {
-			fips, err := p.secondIPAM.ByPrefix(prefixKey)
-			if err != nil {
-				return err
-			}
-			if len(fips) > replicas {
-				err = p.secondIPAM.Release([]string{key})
-				if err != nil {
-					return err
-				}
-			} else {
-				err = p.secondIPAM.UpdateKey(key, prefixKey)
-				if err != nil {
-					glog.Errorf("failed reserve ip from pod %s to deploy %s: %v", pod.Name, deploy.Name, err)
-					return err
-				}
-			}
+	} else {
+		replicas = int(*dp.Spec.Replicas)
+	}
+	if err := unbindDpPod(key, prefixKey, p.ipam, replicas, policy, "unbinding pod"); err != nil {
+		return err
+	}
+	if p.enabledSecondIP(pod) {
+		return unbindDpPod(key, prefixKey, p.secondIPAM, replicas, policy, "unbinding pod")
+	}
+	return nil
+}
+
+func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, replicas int, policy constant.ReleasePolicy, when string) error {
+	if policy == constant.ReleasePolicyPodDelete {
+		return releaseIP(ipam, key, deletedAndIPMutablePod)
+	} else if policy == constant.ReleasePolicyNever {
+		if key != prefixKey {
+			return updateKey(key, prefixKey, ipam, fmt.Sprintf("never release policy %s", when))
 		}
 		return nil
+	}
+	fips, err := ipam.ByPrefix(prefixKey)
+	if err != nil {
+		return err
+	}
+	if len(fips) > replicas {
+		return releaseIP(ipam, key, deletedAndScaledDownDpPod)
 	} else {
-		return p.releaseIP(key, deletedAndParentAppNotExistPod, pod)
+		if key != prefixKey {
+			return updateKey(key, prefixKey, ipam, fmt.Sprintf("allocated %d <= replicas %d %s", len(fips), replicas, when))
+		}
 	}
-	if pod.Annotations != nil {
-		glog.V(3).Infof("reserved %s for pod %s", pod.Annotations[constant.ExtendedCNIArgsAnnotation], key)
+	return nil
+}
+
+func updateKey(key, prefixKey string, ipam floatingip.IPAM, reason string) error {
+	if err := ipam.UpdateKey(key, prefixKey); err != nil {
+		return fmt.Errorf("[%s] failed to reserve ip from pod %s to %s: %v", ipam.Name(), key, prefixKey, err)
 	}
+	glog.Infof("[%s] reserved ip from pod %s to %s, because %s", ipam.Name(), key, prefixKey, reason)
 	return nil
 }
 

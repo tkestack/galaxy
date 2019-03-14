@@ -24,7 +24,7 @@ type IPAM interface {
 	AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error
 	UpdateKey(oldK, newK string) error
 	UpdatePolicy(string, net.IP, constant.ReleasePolicy, string) error
-	Release([]string) error
+	Release(string, net.IP) error
 	First(string) (*FloatingIPInfo, error) // returns nil,nil if key is not found
 	ByIP(net.IP) (database.FloatingIP, error)
 	ByPrefix(string) ([]database.FloatingIP, error)
@@ -166,8 +166,8 @@ func (i *ipam) allocate(keys []string) (allocated []net.IP, err error) {
 	return
 }
 
-func (i *ipam) Release(keys []string) error {
-	return i.releaseIPs(keys)
+func (i *ipam) Release(key string, ip net.IP) error {
+	return i.releaseIP(key, nets.IPToInt(ip))
 }
 
 func (i *ipam) ReleaseByPrefix(keyPrefix string) error {

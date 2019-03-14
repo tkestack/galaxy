@@ -138,7 +138,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		appFullName := util.Join(obj.keyObj.AppName, obj.keyObj.Namespace)
 		// we can't get labels of not exist pod, so get them from it's ss or deployment
 		ss, ok := ssMap[appFullName]
-		if ok && !util.IsDeploymentKey(key) {
+		if ok && !obj.keyObj.IsDeployment {
 			if !p.hasResourceName(&ss.Spec.Template.Spec) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, key, deletedAndLabelMissMatchPod); err != nil {
@@ -167,7 +167,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			continue
 		}
 		dp, ok := dpMap[appFullName]
-		if ok && util.IsDeploymentKey(key) {
+		if ok && obj.keyObj.IsDeployment {
 			if !p.hasResourceName(&dp.Spec.Template.Spec) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, key, deletedAndLabelMissMatchPod); err != nil {
@@ -175,33 +175,12 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				}
 				continue
 			}
-			policy := parseReleasePolicy(&dp.Spec.Template.ObjectMeta)
-			if policy == constant.ReleasePolicyPodDelete {
-				// 2. deleted pods whose parent deployment exist but is not ip immutable
-				if err := releaseIP(ipam, key, deletedAndIPMutablePod); err != nil {
-					glog.Warningf("[%s] %v", ipam.Name(), err)
-				}
-				continue
-			}
-			poolPrefix := obj.keyObj.PoolPrefix()
-			fips, err := ipam.ByPrefix(poolPrefix)
-			if err != nil {
-				glog.Errorf("failed query prefix: %v", err)
-				continue
-			}
-			replicas := int(*dp.Spec.Replicas)
-			if replicas < len(fips) && policy == constant.ReleasePolicyImmutable {
-				if err = releaseIP(ipam, key, deletedAndScaledDownDpPod); err != nil {
-					glog.Errorf("[%s] %v", ipam.Name(), err)
-				}
-			} else if poolPrefix != key {
-				// if this is not a pool key, i.e. a pod key, update it to a pool key
-				if err = ipam.UpdateKey(key, poolPrefix); err != nil {
-					glog.Errorf("failed reserver deployment %s ip: %v", poolPrefix, err)
-				}
+			if err := unbindDpPod(key, obj.keyObj.PoolPrefix(), ipam, int(*dp.Spec.Replicas),
+				parseReleasePolicy(&dp.Spec.Template.ObjectMeta), "resyncing"); err != nil {
+				glog.Error(err)
 			}
 			continue
-		} else if util.IsDeploymentKey(key) {
+		} else if obj.keyObj.IsDeployment {
 			fip, err := ipam.First(key)
 			if err != nil {
 				glog.Errorf("failed get key %s: %v", key, err)
@@ -210,14 +189,9 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				continue
 			}
 			if fip.FIP.Policy == uint16(constant.ReleasePolicyNever) {
-				var attr Attr
-				if err := json.Unmarshal([]byte(obj.attr), &attr); err != nil {
-					glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.attr, key, err)
-					continue
-				}
 				keyObj := util.ParseKey(fip.FIP.Key)
-				if err = ipam.UpdateKey(key, keyObj.PoolPrefix()); err != nil {
-					glog.Errorf("failed reserve fip: %v", err)
+				if err := updateKey(key, keyObj.PoolPrefix(), ipam, "never release policy during resyncing"); err != nil {
+					glog.Error(err)
 				}
 			} else {
 				if err = releaseIP(ipam, key, deletedAndIPMutablePod); err != nil {

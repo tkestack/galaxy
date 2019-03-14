@@ -83,7 +83,7 @@ func TestAllocateRelease(t *testing.T) {
 	if ipInfo != nil {
 		t.Fatal(ipInfo)
 	}
-	if err := ipam.Release([]string{"pod1-2"}); err != nil {
+	if err := ipam.Release("pod1-2", net.ParseIP("10.49.27.216")); err != nil {
 		t.Fatal(err)
 	}
 	ips, err = ipam.allocate([]string{"pod1-2", "pod1-4", "pod2-1"})
@@ -390,7 +390,7 @@ func TestMultipleIPAM(t *testing.T) {
 	check(ip2, "pod2")
 
 	// check release ips
-	if err := secondIPAM.Release([]string{"pod1"}); err != nil {
+	if err := secondIPAM.Release("pod1", ip); err != nil {
 		t.Fatal(err)
 	}
 	if ipInfo, err := secondIPAM.first("pod1"); err != nil || ipInfo != nil {
