@@ -1,5 +1,5 @@
 hash: d7a51d2009e1f02336b2d0d58b48cbc86859afd6a45e58e5a81624fe95d5a970
-updated: 2019-03-08T19:51:59.58808053+08:00
+updated: 2019-03-15T11:54:18.902195+08:00
 imports:
 - name: github.com/containernetworking/cni
   version: a7885cb6f8ab03fba07852ded351e4f5e7a112bf
@@ -84,7 +84,7 @@ imports:
 - name: github.com/go-sql-driver/mysql
   version: ae5a66df4d33ba404d639bd0fc9189cd5ee79bcf
 - name: github.com/godbus/dbus
-  version: 85c1474126142d121b888906ca5a6da61a7aa8e1
+  version: 6985d94ca06887d09055ce7c7d8471a76d897de3
 - name: github.com/gogo/protobuf
   version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
@@ -148,6 +148,8 @@ imports:
   version: bbb17efcb4c0ab986407812a31ba333a7450064c
   subpackages:
   - libcontainer/user
+- name: github.com/pborman/uuid
+  version: ca53cad383cad2479bbba7f7a1a05797ec1386e4
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/Sirupsen/logrus
@@ -341,6 +343,7 @@ imports:
   - pkg/util/runtime
   - pkg/util/sets
   - pkg/util/strategicpatch
+  - pkg/util/uuid
   - pkg/util/validation
   - pkg/util/validation/field
   - pkg/util/wait
@@ -349,10 +352,6 @@ imports:
   - pkg/watch
   - third_party/forked/golang/json
   - third_party/forked/golang/reflect
-- name: k8s.io/apiserver
-  version: 0edeb49d092e08b78add7a3827745c37b6634f3e
-  subpackages:
-  - pkg/util/trace
 - name: k8s.io/client-go
   version: 6bf63545bd0257ed9e701ad95307ffa51b4407c0
   repo: https://github.com/kubernetes/client-go.git
@@ -535,9 +534,10 @@ imports:
   subpackages:
   - pkg/util/proto
 - name: k8s.io/utils
-  version: 982821ea41da7e7c15f3d3738921eb2e7e241ccd
+  version: 21c4ce38f2a793ec01e925ddc31216500183b773
   subpackages:
   - exec
+  - trace
 - name: sigs.k8s.io/yaml
   version: fd68e9863619f6ec2fdd8625fe1f02e7c877e480
 testImports:
@@ -549,7 +549,7 @@ testImports:
   - watch
   - winfile
 - name: github.com/onsi/ginkgo
-  version: 2e1be8f7d90e9d3e3e58b0ce470f2f14d075406f
+  version: eea6ad008b96acdaa524f5b409513bf062b500ad
   subpackages:
   - config
   - extensions/table
@@ -570,7 +570,7 @@ testImports:
   - reporters/stenographer/support/go-isatty
   - types
 - name: github.com/onsi/gomega
-  version: 65fb64232476ad9046e57c26cd0bff3d3a8dc6cd
+  version: 90e289841c1ed79b7a598a7cd9959750cb5e89e2
   subpackages:
   - format
   - gbytes

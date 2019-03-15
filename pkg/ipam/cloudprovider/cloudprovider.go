@@ -11,7 +11,7 @@ import (
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/apiserver/pkg/util/trace"
+	"k8s.io/utils/trace"
 )
 
 type CloudProvider interface {
