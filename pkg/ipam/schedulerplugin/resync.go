@@ -11,6 +11,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin/util"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	"github.com/golang/glog"
 	appv1 "k8s.io/api/apps/v1"
@@ -37,9 +38,8 @@ func (p *FloatingIPPlugin) storeReady() bool {
 }
 
 type resyncObj struct {
-	attr   string
-	ip     uint32
 	keyObj *util.KeyObj
+	fip    database.FloatingIP
 }
 
 // resyncPod releases ips from
@@ -60,7 +60,8 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	}
 	podInDB := make(map[string]resyncObj)
 	assignPodsInDB := make(map[string]resyncObj) // syncing ips with cloudprovider
-	for _, fip := range all {
+	for i := range all {
+		fip := all[i]
 		if fip.Key == "" {
 			continue
 		}
@@ -73,18 +74,18 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			continue
 		}
 		// we send unassign request to cloud provider for any release policy
-		assignPodsInDB[fip.Key] = resyncObj{keyObj: keyObj, attr: fip.Attr, ip: fip.IP}
+		assignPodsInDB[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
 		if fip.Policy == uint16(constant.ReleasePolicyNever) {
 			// never release these ips
 			// for deployment, put back to deployment
 			// we do nothing for statefulset pod, because we preserve ip according to its pod name
 			if keyObj.IsDeployment {
-				podInDB[fip.Key] = resyncObj{keyObj: keyObj, attr: fip.Attr}
+				podInDB[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
 			}
 			// skip if it is a statefulset key and is ReleasePolicyNever
 			continue
 		}
-		podInDB[fip.Key] = resyncObj{keyObj: keyObj, attr: fip.Attr}
+		podInDB[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
 	}
 	pods, err := p.listWantedPods()
 	if err != nil {
@@ -123,8 +124,8 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			continue
 		}
 		var attr Attr
-		if err := json.Unmarshal([]byte(obj.attr), &attr); err != nil {
-			glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.attr, key, err)
+		if err := json.Unmarshal([]byte(obj.fip.Attr), &attr); err != nil {
+			glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.fip.Attr, key, err)
 			continue
 		}
 		if attr.NodeName == "" {
@@ -133,11 +134,11 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		}
 		if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
 			NodeName:  attr.NodeName,
-			IPAddress: nets.IntToIP(obj.ip).String(),
+			IPAddress: nets.IntToIP(obj.fip.IP).String(),
 		}); err != nil {
 			// delete this record from podInDB map to have a retry
 			delete(podInDB, key)
-			glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.ip).String(), key, err)
+			glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.fip.IP).String(), key, err)
 		}
 	}
 	for key, obj := range podInDB {
@@ -149,10 +150,18 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			continue
 		}
 		appFullName := util.Join(obj.keyObj.AppName, obj.keyObj.Namespace)
+		releasePolicy := constant.ReleasePolicy(obj.fip.Policy)
 		// we can't get labels of not exist pod, so get them from it's ss or deployment
-		ss, ok := ssMap[appFullName]
-		// TODO handle statefulset not exist
-		if ok && !obj.keyObj.IsDeployment {
+		if !obj.keyObj.IsDeployment {
+			ss, ok := ssMap[appFullName]
+			if !ok {
+				if releasePolicy != constant.ReleasePolicyNever {
+					if err := releaseIP(ipam, key, deletedAndParentAppNotExistPod); err != nil {
+						glog.Warningf("[%s] %v", ipam.Name(), err)
+					}
+				}
+				continue
+			}
 			if !p.hasResourceName(&ss.Spec.Template.Spec) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, key, deletedAndLabelMissMatchPod); err != nil {
@@ -160,7 +169,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				}
 				continue
 			}
-			if parseReleasePolicy(&ss.Spec.Template.ObjectMeta) != constant.ReleasePolicyImmutable {
+			if releasePolicy != constant.ReleasePolicyImmutable {
 				// 2. deleted pods whose parent statefulset exist but is not ip immutable
 				if err := releaseIP(ipam, key, deletedAndIPMutablePod); err != nil {
 					glog.Warningf("[%s] %v", ipam.Name(), err)
@@ -181,7 +190,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			continue
 		}
 		dp, ok := dpMap[appFullName]
-		if ok && obj.keyObj.IsDeployment {
+		if ok {
 			if !p.hasResourceName(&dp.Spec.Template.Spec) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
 				if err := releaseIP(ipam, key, deletedAndLabelMissMatchPod); err != nil {
@@ -190,11 +199,11 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				continue
 			}
 			if err := unbindDpPod(key, obj.keyObj.PoolPrefix(), ipam, int(*dp.Spec.Replicas),
-				parseReleasePolicy(&dp.Spec.Template.ObjectMeta), "resyncing"); err != nil {
+				releasePolicy, "resyncing"); err != nil {
 				glog.Error(err)
 			}
 			continue
-		} else if obj.keyObj.IsDeployment {
+		} else {
 			fip, err := ipam.First(key)
 			if err != nil {
 				glog.Errorf("failed get key %s: %v", key, err)

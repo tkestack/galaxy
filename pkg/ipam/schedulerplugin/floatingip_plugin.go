@@ -572,6 +572,9 @@ func (p *FloatingIPPlugin) unbindStsPod(pod *corev1.Pod, keyObj *util.KeyObj, po
 		if p.StatefulSetLister != nil {
 			statefulSet, err := p.StatefulSetLister.GetPodStatefulSets(pod)
 			if err != nil {
+				if !metaErrs.IsNotFound(err) {
+					return err
+				}
 				return p.releaseIP(key, deletedAndParentAppNotExistPod, pod)
 			}
 			// it's a statefulset pod
