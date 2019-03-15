@@ -15,6 +15,8 @@ import (
 	"github.com/golang/glog"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metaErrs "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -59,10 +61,13 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	podInDB := make(map[string]resyncObj)
 	assignPodsInDB := make(map[string]resyncObj) // syncing ips with cloudprovider
 	for _, fip := range all {
-		if fip.Key == "" || util.IsIPPoolKey(fip.Key) {
+		if fip.Key == "" {
 			continue
 		}
 		keyObj := util.ParseKey(fip.Key)
+		if keyObj.PodName == "" {
+			continue
+		}
 		if keyObj.AppName == "" {
 			glog.Warningf("unexpected key: %s", fip.Key)
 			continue
@@ -73,7 +78,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			// never release these ips
 			// for deployment, put back to deployment
 			// we do nothing for statefulset pod, because we preserve ip according to its pod name
-			if keyObj.IsDeployment && keyObj.PodName != "" {
+			if keyObj.IsDeployment {
 				podInDB[fip.Key] = resyncObj{keyObj: keyObj, attr: fip.Attr}
 			}
 			// skip if it is a statefulset key and is ReleasePolicyNever
@@ -113,6 +118,10 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		if _, ok := existPods[key]; ok {
 			continue
 		}
+		// check with apiserver to confirm it really not exist
+		if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
+			continue
+		}
 		var attr Attr
 		if err := json.Unmarshal([]byte(obj.attr), &attr); err != nil {
 			glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.attr, key, err)
@@ -135,9 +144,14 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		if _, ok := existPods[key]; ok {
 			continue
 		}
+		// check with apiserver to confirm it really not exist
+		if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
+			continue
+		}
 		appFullName := util.Join(obj.keyObj.AppName, obj.keyObj.Namespace)
 		// we can't get labels of not exist pod, so get them from it's ss or deployment
 		ss, ok := ssMap[appFullName]
+		// TODO handle statefulset not exist
 		if ok && !obj.keyObj.IsDeployment {
 			if !p.hasResourceName(&ss.Spec.Template.Spec) {
 				// 6. deleted pods whose parent app's labels doesn't contain network=floatingip
@@ -202,6 +216,11 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		}
 	}
 	return nil
+}
+
+func (p *FloatingIPPlugin) podExist(podName, namespace string) bool {
+	_, err := p.Client.CoreV1().Pods(namespace).Get(podName, v1.GetOptions{})
+	return metaErrs.IsNotFound(err)
 }
 
 func (p *FloatingIPPlugin) getSSMap() (map[string]*appv1.StatefulSet, error) {
