@@ -151,7 +151,7 @@ func (i *ipam) findByIP(ip uint32) (database.FloatingIP, error) {
 
 func (i *ipam) allocateSpecificIP(ip uint32, key string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Table(i.TableName).Where("ip = ? and `key` = \"\"", ip).
+		ret := tx.Table(i.TableName).Where("ip = ? and `key` = ?", ip, "").
 			UpdateColumns(map[string]interface{}{`key`: key, "policy": policy, "attr": attr, `updated_at`: time.Now()})
 		if ret.Error != nil {
 			return ret.Error

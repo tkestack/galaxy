@@ -213,8 +213,11 @@ func (s *Server) filter(request *restful.Request, response *restful.Response) {
 		_ = response.WriteError(http.StatusInternalServerError, err)
 		return
 	}
-	glog.V(4).Infof("POST filter %v", *args)
+	glog.V(5).Infof("POST filter %v", *args)
+	start := time.Now()
+	glog.V(3).Infof("filtering %s_%s, start at %d+", args.Pod.Name, args.Pod.Namespace, start.UnixNano())
 	filteredNodes, failedNodesMap, err := s.plugin.Filter(&args.Pod, args.Nodes.Items)
+	glog.V(3).Infof("filtering %s_%s, start at %d-", args.Pod.Name, args.Pod.Namespace, start.UnixNano())
 	args.Nodes.Items = filteredNodes
 	errStr := ""
 	if err != nil {
@@ -234,7 +237,7 @@ func (s *Server) priority(request *restful.Request, response *restful.Response) 
 		_ = response.WriteError(http.StatusInternalServerError, err)
 		return
 	}
-	glog.V(4).Infof("POST priority %v", *args)
+	glog.V(5).Infof("POST priority %v", *args)
 	hostPriorityList, err := s.plugin.Prioritize(&args.Pod, args.Nodes.Items)
 	if err != nil {
 		glog.Warningf("prioritize err: %v", err)
@@ -249,8 +252,11 @@ func (s *Server) bind(request *restful.Request, response *restful.Response) {
 		_ = response.WriteError(http.StatusInternalServerError, err)
 		return
 	}
-	glog.V(4).Infof("POST bind %v", *args)
+	glog.V(5).Infof("POST bind %v", *args)
+	start := time.Now()
+	glog.V(3).Infof("binding %s_%s to %s, start at %d+", args.PodName, args.PodNamespace, args.Node, start.UnixNano())
 	err := s.plugin.Bind(args)
+	glog.V(3).Infof("binding %s_%s to %s, start at %d-", args.PodName, args.PodNamespace, args.Node, start.UnixNano())
 	var result schedulerapi.ExtenderBindingResult
 	if err != nil {
 		glog.Warningf("bind err: %v", err)

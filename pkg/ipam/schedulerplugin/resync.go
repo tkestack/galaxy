@@ -53,7 +53,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	if !p.storeReady() {
 		return nil
 	}
-	glog.Infof("resync pods")
+	glog.V(4).Infof("resync pods")
 	all, err := ipam.ByPrefix("")
 	if err != nil {
 		return err
@@ -108,12 +108,12 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	if err != nil {
 		return err
 	}
-	if glog.V(4) {
+	if glog.V(5) {
 		podMap := make(map[string]string, len(existPods))
 		for k, v := range existPods {
 			podMap[k] = util.PodName(v)
 		}
-		glog.V(4).Infof("existPods %v", podMap)
+		glog.V(5).Infof("existPods %v", podMap)
 	}
 	for key, obj := range assignPodsInDB {
 		if _, ok := existPods[key]; ok {
@@ -132,6 +132,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			glog.Errorf("empty nodeName for %s in db", key)
 			continue
 		}
+		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName, nets.IntToIP(obj.fip.IP).String(), key)
 		if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
 			NodeName:  attr.NodeName,
 			IPAddress: nets.IntToIP(obj.fip.IP).String(),
@@ -244,7 +245,7 @@ func (p *FloatingIPPlugin) getSSMap() (map[string]*appv1.StatefulSet, error) {
 		}
 		key2App[util.StatefulsetName(sss[i])] = sss[i]
 	}
-	glog.V(4).Infof("%v", key2App)
+	glog.V(5).Infof("%v", key2App)
 	return key2App, nil
 }
 
@@ -260,7 +261,7 @@ func (p *FloatingIPPlugin) getDPMap() (map[string]*appv1.Deployment, error) {
 		}
 		key2App[util.DeploymentName(dps[i])] = dps[i]
 	}
-	glog.V(4).Infof("%v", key2App)
+	glog.V(5).Infof("%v", key2App)
 	return key2App, nil
 }
 
