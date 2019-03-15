@@ -2,6 +2,7 @@ package floatingip
 
 import (
 	"fmt"
+	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
@@ -48,7 +49,7 @@ func (i *ipam) findByPrefix(prefix string, fips *[]database.FloatingIP) error {
 
 func allocateOp(fip *database.FloatingIP, tableName string) database.ActionFunc {
 	return func(tx *gorm.DB) error {
-		ret := tx.Table(tableName).Model(fip).Where("`key` = \"\"").UpdateColumn(`key`, fip.Key)
+		ret := tx.Table(tableName).Model(fip).Where("`key` = \"\"").UpdateColumn(`key`, fip.Key, `updated_at`, time.Now())
 		if ret.Error != nil {
 			return ret.Error
 		}
@@ -59,10 +60,12 @@ func allocateOp(fip *database.FloatingIP, tableName string) database.ActionFunc 
 	}
 }
 
-func (i *ipam) allocateOneInSubnet(key, subnet string, policy uint16, attr string) error {
+func (i *ipam) updateOneInSubnet(oldK, newK, subnet string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		//update galaxy_floatingip set `key`=? and policy=? and attr=? where `key` = "" AND subnet="192.168.0.0/24" limit 1
-		ret := tx.Table(i.TableName).Where("`key` = \"\" AND subnet = ?", subnet).Limit(1).UpdateColumns(map[string]interface{}{`key`: key, "policy": policy, "attr": attr})
+		// UPDATE `ip_pool` SET `key` = 'newK', `policy` = '0', `attr` = ''  WHERE (`key` = "oldK" AND subnet = '10.180.1.3/32') ORDER BY updated_at desc LIMIT 1
+		ret := tx.Table(i.Name()).Where("`key` = ? AND subnet = ?", oldK, subnet).
+			Order("updated_at desc").Limit(1).
+			UpdateColumns(map[string]interface{}{`key`: newK, "policy": policy, "attr": attr, `updated_at`: time.Now()})
 		if ret.Error != nil {
 			return ret.Error
 		}
@@ -79,15 +82,24 @@ func (i *ipam) create(fip *database.FloatingIP) error {
 	})
 }
 
-func (i *ipam) releaseIPs(keys []string) error {
+func (i *ipam) releaseIP(key string, ip uint32) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Table(i.TableName).Where("`key` IN (?)", keys).UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": ""}).Error
+		ret := tx.Table(i.Name()).Where("ip = ? AND `key` = ?", ip, key).
+			UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": "", `updated_at`: time.Now()})
+		if ret.Error != nil {
+			return ret.Error
+		}
+		if ret.RowsAffected != 1 {
+			return ErrNotUpdated
+		}
+		return nil
 	})
 }
 
 func (i *ipam) releaseByPrefix(prefix string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Table(i.TableName).Where("substr(`key`, 1, length(?)) = ?", prefix, prefix).UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": ""}).Error
+		return tx.Table(i.TableName).Where("substr(`key`, 1, length(?)) = ?", prefix, prefix).
+			UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": "", `updated_at`: time.Now()}).Error
 	})
 }
 
@@ -137,9 +149,10 @@ func (i *ipam) findByIP(ip uint32) (database.FloatingIP, error) {
 	})
 }
 
-func (i *ipam) updateKey(ip uint32, key string, policy uint16, attr string) error {
+func (i *ipam) allocateSpecificIP(ip uint32, key string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Table(i.TableName).Where("ip = ? and `key` = \"\"", ip).UpdateColumns(map[string]interface{}{`key`: key, "policy": policy, "attr": attr})
+		ret := tx.Table(i.TableName).Where("ip = ? and `key` = \"\"", ip).
+			UpdateColumns(map[string]interface{}{`key`: key, "policy": policy, "attr": attr, `updated_at`: time.Now()})
 		if ret.Error != nil {
 			return ret.Error
 		}
@@ -152,11 +165,23 @@ func (i *ipam) updateKey(ip uint32, key string, policy uint16, attr string) erro
 
 func (i *ipam) updatePolicy(ip uint32, key string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Table(i.TableName).Where("ip = ? and `key` = ?", ip, key).UpdateColumns(map[string]interface{}{"policy": policy, "attr": attr})
+		ret := tx.Table(i.TableName).Where("ip = ? and `key` = ?", ip, key).
+			UpdateColumns(map[string]interface{}{"policy": policy, "attr": attr, `updated_at`: time.Now()})
 		if ret.Error != nil {
 			return ret.Error
 		}
 		// don't check RowsAffected != 1 as attr and policy may not be changed
 		return nil
+	})
+}
+
+func (i *ipam) updateKey(oldK, newK string) error {
+	return i.store.Transaction(func(tx *gorm.DB) error {
+		return tx.Table(i.Name()).Where("`key` = ?", oldK).
+			UpdateColumns(map[string]interface{}{
+				"key":        newK,
+				"attr":       "",
+				`updated_at`: time.Now(),
+			}).Error
 	})
 }

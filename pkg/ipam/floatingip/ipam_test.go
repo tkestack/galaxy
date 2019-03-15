@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jinzhu/gorm"
 
@@ -82,7 +83,7 @@ func TestAllocateRelease(t *testing.T) {
 	if ipInfo != nil {
 		t.Fatal(ipInfo)
 	}
-	if err := ipam.Release([]string{"pod1-2"}); err != nil {
+	if err := ipam.Release("pod1-2", net.ParseIP("10.49.27.216")); err != nil {
 		t.Fatal(err)
 	}
 	ips, err = ipam.allocate([]string{"pod1-2", "pod1-4", "pod2-1"})
@@ -389,7 +390,7 @@ func TestMultipleIPAM(t *testing.T) {
 	check(ip2, "pod2")
 
 	// check release ips
-	if err := secondIPAM.Release([]string{"pod1"}); err != nil {
+	if err := secondIPAM.Release("pod1", ip); err != nil {
 		t.Fatal(err)
 	}
 	if ipInfo, err := secondIPAM.first("pod1"); err != nil || ipInfo != nil {
@@ -480,7 +481,8 @@ func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	if err != nil || ipInfo.IPInfo.IP == nil {
 		t.Fatalf("err %v ipInfo %v", err, ipInfo)
 	}
-	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: Key:pod3 Subnet:10.173.13.0/24 Attr: IP:179113218 Policy:0}}" {
+	ipInfo.FIP.UpdatedAt = time.Time{}
+	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: Key:pod3 Subnet:10.173.13.0/24 Attr: IP:179113218 Policy:0 UpdatedAt:0001-01-01 00:00:00 +0000 UTC}}" {
 		t.Error(fmt.Sprintf("%+v", ipInfo))
 	}
 
@@ -491,7 +493,8 @@ func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	if err != nil || ipInfo.IPInfo.IP == nil {
 		t.Fatalf("err %v ipInfo %v", err, ipInfo)
 	}
-	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: Key:pod3 Subnet:10.173.13.0/24 Attr:111 IP:179113218 Policy:2}}" {
+	ipInfo.FIP.UpdatedAt = time.Time{}
+	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: Key:pod3 Subnet:10.173.13.0/24 Attr:111 IP:179113218 Policy:2 UpdatedAt:0001-01-01 00:00:00 +0000 UTC}}" {
 		t.Error(fmt.Sprintf("%+v", ipInfo))
 	}
 }

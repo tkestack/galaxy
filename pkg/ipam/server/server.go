@@ -11,8 +11,11 @@ import (
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/api"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server/options"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/httputil"
+	pageutil "git.code.oa.com/gaiastack/galaxy/pkg/utils/page"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
@@ -195,6 +198,9 @@ func (s *Server) startServer() {
 	health.Route(health.GET("/healthy").To(s.healthy))
 	restful.Add(ws)
 	restful.Add(health)
+	c := api.Controller{DB: s.plugin.GetDB(), PodLister: s.plugin.PodLister}
+	ws.Route(ws.GET("/ip").To(c.ListIPs).Writes(pageutil.Page{}))
+	ws.Route(ws.POST("/ip").To(c.ReleaseIPs).Reads(api.ReleaseIPReq{}).Writes(httputil.Resp{}))
 	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", s.Bind, s.Port), nil); err != nil {
 		glog.Fatalf("unable to listen: %v.", err)
 	}

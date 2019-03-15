@@ -31,7 +31,7 @@ type eniMeta struct {
 }
 
 func SetupENIs(stopChan <-chan struct{}) {
-	go wait.PollImmediateUntil(pollPeriod, func() (done bool, err error) {
+	go wait.PollImmediateUntil(pollPeriod, func() (done bool, err error) { // nolint: errcheck
 		err = setupENIs()
 		if err != nil {
 			return false, nil
