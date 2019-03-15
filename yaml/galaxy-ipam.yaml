@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: galaxy-ipam
   labels:
-    run: galaxy-ipam
+    app: galaxy-ipam
 spec:
   type: NodePort
   ports:
@@ -12,7 +12,52 @@ spec:
     nodePort: 32760
     protocol: TCP
   selector:
-    run: galaxy-ipam
+    app: galaxy-ipam
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# kubernetes versions before 1.8.0 should use rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: galaxy-ipam
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - namespaces
+      - nodes
+      - pods/binding
+    verbs: ["list", "watch", "get", "patch", "create"]
+  - apiGroups: ["apps", "extensions"]
+    resources:
+      - statefulsets
+      - deployments
+    verbs: ["list", "watch"]
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - endpoints
+      - events
+    verbs: ["get", "list", "watch", "update", "create", "patch"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: galaxy-ipam
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# kubernetes versions before 1.8.0 should use rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: galaxy-ipam
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: galaxy-ipam
+subjects:
+  - kind: ServiceAccount
+    name: galaxy-ipam
+    namespace: kube-system
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -41,8 +86,20 @@ spec:
                 values:
                 - galaxy-ipam
             topologyKey: "kubernetes.io/hostname"
+      serviceAccountName: galaxy-ipam
+      hostNetwork: true
       containers:
       - image: docker.oa.com:8080/library/galaxy_ipam:1.0.0-alpha
+        args:
+          - --logtostderr=true
+          - --log-dir=/data/galaxy-ipam/logs
+          - --profiling
+          - --v=4
+          - --config=/etc/galaxy/galaxy-ipam.json
+          - --port=9040
+          - --leader-elect
+        command:
+          - /usr/bin/galaxy-ipam
         imagePullPolicy: Always
         name: galaxy-ipam
         resources:
