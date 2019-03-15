@@ -90,7 +90,7 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		nodeSubnet:        make(map[string]*net.IPNet),
 		PluginFactoryArgs: args,
 		conf:              &conf,
-		unreleased:        make(chan *releaseEvent, 10),
+		unreleased:        make(chan *releaseEvent, 100),
 		db:                db,
 	}
 	plugin.hasSecondIPConf.Store(false)
