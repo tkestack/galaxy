@@ -179,9 +179,9 @@ func (i *ipam) updateKey(oldK, newK string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(i.Name()).Where("`key` = ?", oldK).
 			UpdateColumns(map[string]interface{}{
-			"key":        newK,
-			"attr":       "",
-			`updated_at`: time.Now(),
-		}).Error
+				"key":        newK,
+				"attr":       "",
+				`updated_at`: time.Now(),
+			}).Error
 	})
 }

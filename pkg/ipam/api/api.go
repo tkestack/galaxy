@@ -58,7 +58,7 @@ func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 		httputil.InternalError(resp, err)
 		return
 	}
-	resp.WriteEntity(*pagin)
+	resp.WriteEntity(*pagin) // nolint: errcheck
 }
 
 func transform(fips, secondIPs []database.FloatingIP) []FloatingIP {
