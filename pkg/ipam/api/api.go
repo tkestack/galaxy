@@ -12,6 +12,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	pageutil "git.code.oa.com/gaiastack/galaxy/pkg/utils/page"
 	"github.com/emicklei/go-restful"
+	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/listers/core/v1"
@@ -210,11 +211,13 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	var filteredFIP, filteredSecondIP []database.FloatingIP
+	var logObjs []logObj
 	for i := range fipsInDB {
 		if expectKey, exist := expectIPtoKey[fipsInDB[i].IP]; exist {
 			if expectKey == fipsInDB[i].Key {
 				// check if ip got released and reallocated to another pod, if it does, we should not release it
 				filteredFIP = append(filteredFIP, fipsInDB[i])
+				logObjs = append(logObjs, logObj{IP: nets.IntToIP(fipsInDB[i].IP), Key: expectKey})
 			}
 		}
 	}
@@ -223,6 +226,7 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 			if expectKey == secondFipsInDB[i].Key {
 				// check if ip got released and reallocated to another pod, if it does, we should not release it
 				filteredSecondIP = append(filteredSecondIP, secondFipsInDB[i])
+				logObjs = append(logObjs, logObj{IP: nets.IntToIP(secondFipsInDB[i].IP), Key: expectKey})
 			}
 		}
 	}
@@ -241,5 +245,11 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 		httputil.InternalError(resp, err)
 		return
 	}
+	glog.Infof("released IPs: %v", logObjs)
 	httputil.Ok(resp)
+}
+
+type logObj struct {
+	IP  net.IP
+	Key string
 }
