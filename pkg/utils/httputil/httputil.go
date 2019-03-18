@@ -18,7 +18,8 @@ func NewResp(code int, message string) Resp {
 }
 
 func Ok(resp *restful.Response) {
-	resp.WriteError(http.StatusOK, restful.NewError(http.StatusOK, "")) // nolint: errcheck
+	resp.WriteHeader(http.StatusOK)
+	resp.WriteEntity(NewResp(http.StatusOK, "")) // nolint: errcheck
 }
 
 func InternalError(resp *restful.Response, err error) {

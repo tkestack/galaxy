@@ -60,6 +60,10 @@ func (k *KeyObj) genKey() {
 	var prefix string
 	if k.PoolName != "" {
 		prefix = fmt.Sprintf("%s%s_", poolPrefix, k.PoolName)
+		if k.AppName == "" {
+			k.KeyInDB = prefix
+			return
+		}
 	}
 	appTypePrefix := statefulsetPrefixKey
 	if k.IsDeployment {

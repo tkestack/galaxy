@@ -92,9 +92,9 @@ func (c *Controller) fillReleasableAndStatus(ips []FloatingIP) error {
 			continue
 		}
 		ips[i].Status = string(pod.Status.Phase)
-		if !isFinishedState(ips[i].Status) {
-			ips[i].Releasable = false
-		}
+		// On public cloud, we can't release exist pod's ip, because we need to call unassign ip first
+		// TODO while on private environment, we can
+		ips[i].Releasable = false
 	}
 	return nil
 }
@@ -177,7 +177,7 @@ func sortFunc(sort string) func(a, b int, array []FloatingIP) bool {
 }
 
 type ReleaseIPReq struct {
-	IPs []FloatingIP `json:"floatingip"`
+	IPs []FloatingIP `json:"ips"`
 }
 
 func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
