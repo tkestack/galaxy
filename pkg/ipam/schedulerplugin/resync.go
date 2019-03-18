@@ -199,8 +199,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				}
 				continue
 			}
-			if err := unbindDpPod(key, obj.keyObj.PoolPrefix(), ipam, int(*dp.Spec.Replicas),
-				releasePolicy, "resyncing"); err != nil {
+			if err := unbindDpPod(key, obj.keyObj.PoolPrefix(), ipam, p.dpLockPool, int(*dp.Spec.Replicas), releasePolicy, "resyncing"); err != nil {
 				glog.Error(err)
 			}
 			continue

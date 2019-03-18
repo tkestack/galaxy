@@ -18,6 +18,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/keylock"
 	"github.com/golang/glog"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -61,6 +62,8 @@ type FloatingIPPlugin struct {
 	getDeployment                func(name, namespace string) (*appv1.Deployment, error)
 	db                           *database.DBRecorder
 	cloudProvider                cloudprovider.CloudProvider
+	// protect unbind immutable deployment pod
+	dpLockPool *keylock.Keylock
 }
 
 func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin, error) {
@@ -92,6 +95,7 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		conf:              &conf,
 		unreleased:        make(chan *releaseEvent, 100),
 		db:                db,
+		dpLockPool:        keylock.NewKeylock(),
 	}
 	plugin.hasSecondIPConf.Store(false)
 	plugin.getDeployment = func(name, namespace string) (*appv1.Deployment, error) {
@@ -142,7 +146,9 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 		}
 		p.syncPodIPsIntoDB()
 	}, time.Duration(p.conf.ResyncInterval)*time.Minute, stop)
-	go p.loop(stop)
+	for i := 0; i < 5; i++ {
+		go p.loop(stop)
+	}
 }
 
 // updateConfigMap fetches the newest floatingips configmap and syncs in memory/db config,
@@ -618,16 +624,16 @@ func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, pol
 	} else {
 		replicas = int(*dp.Spec.Replicas)
 	}
-	if err := unbindDpPod(key, prefixKey, p.ipam, replicas, policy, "unbinding pod"); err != nil {
+	if err := unbindDpPod(key, prefixKey, p.ipam, p.dpLockPool, replicas, policy, "unbinding pod"); err != nil {
 		return err
 	}
 	if p.enabledSecondIP(pod) {
-		return unbindDpPod(key, prefixKey, p.secondIPAM, replicas, policy, "unbinding pod")
+		return unbindDpPod(key, prefixKey, p.secondIPAM, p.dpLockPool, replicas, policy, "unbinding pod")
 	}
 	return nil
 }
 
-func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, replicas int, policy constant.ReleasePolicy, when string) error {
+func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keylock.Keylock, replicas int, policy constant.ReleasePolicy, when string) error {
 	if policy == constant.ReleasePolicyPodDelete {
 		return releaseIP(ipam, key, deletedAndIPMutablePod)
 	} else if policy == constant.ReleasePolicyNever {
@@ -636,6 +642,9 @@ func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, replicas int, poli
 		}
 		return nil
 	}
+	lockIndex := dpLockPool.GetLockIndex([]byte(prefixKey))
+	dpLockPool.RawLock(lockIndex)
+	defer dpLockPool.RawUnlock(lockIndex)
 	fips, err := ipam.ByPrefix(prefixKey)
 	if err != nil {
 		return err
