@@ -306,3 +306,20 @@ func createDeploymentPod(name, namespace string, annotation map[string]string) *
 	}}
 	return pod
 }
+
+func TestNewKeyObj(t *testing.T) {
+	keyObj := NewKeyObj(false, "", "", "", "rami")
+	if keyObj.KeyInDB != "pool__rami_" {
+		t.Fatal(keyObj.KeyInDB)
+	}
+
+	keyObj = NewKeyObj(true, "ns1", "rami", "rami-xx-yy", "rami")
+	if keyObj.KeyInDB != "pool__rami_dp_ns1_rami_rami-xx-yy" {
+		t.Fatal(keyObj.KeyInDB)
+	}
+
+	keyObj = NewKeyObj(false, "ns1", "rami", "rami-xx-yy", "rami")
+	if keyObj.KeyInDB != "pool__rami_sts_ns1_rami_rami-xx-yy" {
+		t.Fatal(keyObj.KeyInDB)
+	}
+}

@@ -54,43 +54,49 @@ func (p *GRPCCloudProvider) connect() {
 
 func (p *GRPCCloudProvider) AssignIP(in *rpc.AssignIPRequest) (reply *rpc.AssignIPReply, err error) {
 	p.connect()
-	glog.V(3).Infof("AssignIP %v", in)
+	glog.V(5).Infof("AssignIP %v", in)
 	t := trace.New("AssignIP")
 	defer t.LogIfLong(3 * time.Second)
-	err = wait.ExponentialBackoff(p.backOff, func() (done bool, err error) {
+	var errStr string
+	if err1 := wait.ExponentialBackoff(p.backOff, func() (done bool, err error) {
 		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		defer cancel()
 		reply, err = p.client.AssignIP(ctx, in)
-		glog.V(4).Infof("reply %v, err %v", reply, err)
+		glog.V(5).Infof("reply %v, err %v", reply, err)
 		if err != nil || reply == nil || !reply.Success {
-			errStr := fmt.Sprintf("AssignIP for %v failed: reply %v, err %v", in, reply, err)
+			errStr = fmt.Sprintf("AssignIP for %v failed: reply %v, err %v", in, reply, err)
 			t.Step(errStr)
-			glog.Warning(errStr)
+			glog.V(5).Infof(errStr)
 			return false, nil
 		}
 		return true, nil
-	})
+	}); err1 != nil {
+		err = fmt.Errorf(errStr)
+	}
 	return
 }
 
 func (p *GRPCCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (reply *rpc.UnAssignIPReply, err error) {
 	p.connect()
-	glog.V(3).Infof("UnAssignIP %v", in)
+	glog.V(5).Infof("UnAssignIP %v", in)
 	t := trace.New("UnAssignIP")
 	defer t.LogIfLong(3 * time.Second)
-	err = wait.ExponentialBackoff(p.backOff, func() (done bool, err error) {
+	var errStr string
+	if err1 := wait.ExponentialBackoff(p.backOff, func() (done bool, err error) {
 		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		defer cancel()
 		reply, err = p.client.UnAssignIP(ctx, in)
-		glog.V(4).Infof("reply %v, err %v", reply, err)
+		glog.V(5).Infof("reply %v, err %v", reply, err)
 		if err != nil || reply == nil || !reply.Success {
 			// Expect cloud provider returns success if already unassigned
-			errStr := fmt.Sprintf("UnAssignIP for %v failed: reply %v, err %v", in, reply, err)
+			errStr = fmt.Sprintf("UnAssignIP for %v failed: reply %v, err %v", in, reply, err)
 			t.Step(errStr)
-			glog.Warning(errStr)
+			glog.V(5).Infof(errStr)
 			return false, nil
 		}
 		return true, nil
-	})
+	}); err1 != nil {
+		err = fmt.Errorf(errStr)
+	}
 	return
 }

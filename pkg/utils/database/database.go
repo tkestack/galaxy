@@ -93,8 +93,10 @@ func (db *DBRecorder) Run() (err error) {
 		return
 	}
 
-	// db.conn.LogMode(true)
 	db.conn.SetLogger(new(WrappedLogger))
+	if glog.V(5) {
+		db.conn.LogMode(true)
+	}
 	if db.MaxConn > 0 {
 		db.conn.DB().SetMaxOpenConns(db.MaxConn)
 		idleNum := db.MaxConn >> 3

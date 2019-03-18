@@ -11,6 +11,7 @@ data:
       "extenders": [
         {
           "urlPrefix": "http://127.0.0.1:9040/v1",
+          "httpTimeout": "10s",
           "filterVerb": "filter",
           "prioritizeVerb": "prioritize",
           "BindVerb": "bind",
