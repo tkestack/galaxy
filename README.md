@@ -1,120 +1,18 @@
 [![Build Status](https://api.travis-ci.com/gaiastackorg/galaxy.svg?branch=master)](https://travis-ci.com/gaiastackorg/galaxy)
 [![Codecov branch](https://img.shields.io/codecov/c/github/gaiastackorg/galaxy/master.svg?style=for-the-badge)](https://codecov.io/gh/gaiastackorg/galaxy)
 
-# Build
+Galaxy is a Kubernetes network project designed for providing both common Overlay and high performance Underlay network for pods.
+And it also implements Float IP benefits for running stateful set applications.
 
-hack/dockerbuild.sh(mac) or hack/build.sh(linux)
+Currently, it consists of three components - Galaxy, CNI plugins and Galaxy IPAM.
+Galaxy is a daemon process running on each kubelet node which invokes different kinds of CNI plugins to setup the required networks for pods.
+Galaxy IPAM is a Kubernetes Scheduler plugin which works as a Float IP configuration and allocation manager.
 
-# Development
+# Using Galaxy
 
-Galaxy uses [glide](https://github.com/Masterminds/glide) to manager vendors
-
-Install glide/glide-vc
-
-```
-curl https://glide.sh/get | sh
-```
-
-Add/Update vendor
-
-```
-hack/updatevendor.sh
-```
-
-# Test
-
-## CNI plugin
-
-create a network config
-```
-mkdir -p /etc/cni/net.d
-# vlan config
-cat >/etc/cni/net.d/10-mynet.conf <<EOF
-{
-    "name": "mynet",
-    "type": "galaxy-vlan",
-    "ipam": {
-        "type": "host-local",
-        "subnet": "192.168.33.0/24",
-        "routes": [
-            { "dst": "0.0.0.0/0" }
-        ],
-        "gateway": "192.168.33.1"
-    },
-    "device": "eth1"
-}
-EOF
-# optional loop config
-cat >/etc/cni/net.d/99-loopback.conf <<EOF
-{
-    "cniVersion": "0.2.0",
-    "type": "loopback"
-}
-EOF
-```
-
-Execute plugin via cni script
-```
-CNI_PATH=`pwd`/bin
-cd vendor/github.com/containernetworking/cni
-# cni scripts depends on jq
-apt-get install jq
-cd scripts
-CNI_PATH=$CNI_PATH CNI_ARGS="IPInfo={"ip":"192.168.0.68/26","vlan":0,"gateway":"192.168.0.65","routable_subnet":"192.168.0.64/26"}" ./priv-net-run.sh ip ad
-```
-
-Execute plugin manually
- ```
-export PATH=`pwd`/bin
-CNI_PATH=`pwd`/bin
-ip netns add ctn
-CNI_ARGS="IPInfo={"ip":"192.168.0.68/26","vlan":0,"gateway":"192.168.0.65","routable_subnet":"192.168.0.64/26"}" CNI_COMMAND="ADD" CNI_CONTAINERID=ctn1 CNI_NETNS=/var/run/netns/ctn CNI_IFNAME=eth0 CNI_PATH=$CNI_PATH galaxy-vlan < /etc/cni/net.d/10-mynet.conf
- ```
-
-## Creating Floating IP Pod
-
-Deployment
-
-```
-apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: rami
-spec:
-  replicas: 2
-  template:
-    metadata:
-      labels:
-        app: rami
-        network: FLOATINGIP
-    spec:
-      containers:
-      - name: hello
-        image: docker.oa.com:8080/public/2048:onion
-        resources:
-          requests:
-            galaxy.io/floatingip: 1
-            memory: 30Mi
-            cpu: 100m
-```
-
-Add the following field in pod spec to create floating ip pod
-
-- Labels: {"network": "FLOATINGIP"}
-- Resource requests: {"galaxy.io/floatingip": 1}
-
-Besides the following is optional.
-
-labels | meaning
--------|--------
-galaxy.io/secondip: true | Pod wants two floatingips, the second floatingip will be the default route in container.
-galaxy.io/floatingip: immutable | Release a deleted pod's ip only if the App is deleted or scales down. If pod is evicted, its floating ip is preserved. Supports only StatefulSet/Deployment.
-galaxy.io/floatingip: never | Never release ip from this Pod. Supports only StatefulSet/Deployment.
-
-# Release
-
-hack/build-rpm.sh
-
-# Document
-
-- [Design](doc/design.md)
+- [Getting started](doc/getting-started.md)
+- [Galaxy configuration](doc/galaxy-config.md)
+- [Galaxy-ipam configuration](doc/galaxy-ipam-config.md)
+- [Float IP usage](doc/float-ip.md)
+- [Supported CNI plugins](doc/supported-cnis.md)
+- [Network policy](doc/network-policy.md)

@@ -2,7 +2,7 @@
 
 set -e
 
-# docker run --rm -v `pwd`:/go/src/$package -w /go/src/$package -e BINARY=cmd/galaxy docker.oa.com:8080/gaia/k8s-builder:1.9 bash -c /go/src/$package/hack/build-single.sh
+# docker run --rm -v `pwd`:/go/src/$package -w /go/src/$package -e BINARY=cmd/galaxy golang:1.11.4 bash -c /go/src/$package/hack/build-single.sh
 # we are in the project root dir
 cur_dir=`pwd`
 bin_prefix="galaxy"

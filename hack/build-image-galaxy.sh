@@ -24,7 +24,8 @@ COPY bin/disable-ipv6 bin/galaxy-bridge bin/galaxy-flannel bin/galaxy-k8s-sriov 
 COPY hack/start.sh /root/
 CMD ["/root/start.sh"]
 EOF
-  docker build -f bin/images/galaxy.dockerfile -t ccr.ccs.tencentyun.com/tkeimages/galaxy:${VERSION} .
+  docker build -f bin/images/galaxy.dockerfile -t galaxy:${VERSION} .
+  docker tag galaxy:${VERSION} ccr.ccs.tencentyun.com/tkeimages/galaxy:${VERSION}
 }
 
 echo "begin to build galaxy & cni"

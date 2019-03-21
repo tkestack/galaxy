@@ -22,7 +22,8 @@ COPY bin/galaxy-ipam /usr/bin/
 COPY hack/start-ipam.sh /root/
 CMD ["/root/start-ipam.sh"]
 EOF
-  docker build -f bin/images/galaxy_ipam.dockerfile -t ccr.ccs.tencentyun.com/tkeimages/galaxy-ipam:${VERSION} .
+  docker build -f bin/images/galaxy_ipam.dockerfile -t galaxy_ipam:${VERSION} .
+  docker tag galaxy_ipam:${VERSION} ccr.ccs.tencentyun.com/tkeimages/galaxy-ipam:${VERSION} .
 }
 
 echo "begin to build galaxy-ipam"
