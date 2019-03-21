@@ -229,7 +229,13 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 
 func (p *FloatingIPPlugin) podExist(podName, namespace string) bool {
 	_, err := p.Client.CoreV1().Pods(namespace).Get(podName, v1.GetOptions{})
-	return metaErrs.IsNotFound(err)
+	if err != nil {
+		if metaErrs.IsNotFound(err) {
+			return false
+		}
+		// we cannot figure out whether pod exist or not
+	}
+	return true
 }
 
 func (p *FloatingIPPlugin) getSSMap() (map[string]*appv1.StatefulSet, error) {
