@@ -67,7 +67,7 @@ metadata:
   name: galaxy-ipam
   namespace: kube-system
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: galaxy-ipam
@@ -91,7 +91,7 @@ spec:
       containers:
       - image: docker.oa.com:8080/library/galaxy_ipam:1.0.0-alpha
         args:
-          - --logtostderr=true
+          - --logtostderr=false
           - --log-dir=/data/galaxy-ipam/logs
           - --profiling
           - --v=4
@@ -114,6 +114,10 @@ spec:
         - name: galaxy-ipam-etc
           mountPath: /etc/galaxy
       terminationGracePeriodSeconds: 30
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
       volumes:
       - name: kube-config
         hostPath:

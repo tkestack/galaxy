@@ -92,7 +92,7 @@ metadata:
   name: cni-etc
   namespace: kube-system
 data:
-  000-galaxy.conf: |
+  00-galaxy.conf: |
     {
       "type": "galaxy-sdn",
       "capabilities": {"portMappings": true}
