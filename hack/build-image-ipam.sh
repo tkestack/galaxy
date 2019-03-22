@@ -13,7 +13,7 @@ function build_binary() {
 function build_ipam_image() {
   VERSION=1.0.0-alpha
   cat > "bin/images/galaxy_ipam.dockerfile" << EOF
-FROM docker.oa.com:8080/public/centos-7.2:latest
+FROM centos:7.2.1511
 MAINTAINER louis <louisssgong@tencent.com>
 LABEL version="${VERSION}"
 LABEL description="This Dockerfile is written for galaxy"
@@ -22,7 +22,7 @@ COPY bin/galaxy-ipam /usr/bin/
 COPY hack/start-ipam.sh /root/
 CMD ["/root/start-ipam.sh"]
 EOF
-  docker build -f bin/images/galaxy_ipam.dockerfile -t docker.oa.com:8080/library/galaxy_ipam:${VERSION} .
+  docker build -f bin/images/galaxy_ipam.dockerfile -t ccr.ccs.tencentyun.com/tkeimages/galaxy-ipam:${VERSION} .
 }
 
 echo "begin to build galaxy-ipam"

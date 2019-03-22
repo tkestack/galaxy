@@ -13,7 +13,7 @@ function build_binary() {
 function build_galaxy_image() {
   VERSION=1.0.0-alpha
   cat > "bin/images/galaxy.dockerfile" << EOF
-FROM docker.oa.com:8080/public/centos-7.2:latest
+FROM centos:7.2.1511
 MAINTAINER louis <louisssgong@tencent.com>
 LABEL version="${VERSION}"
 LABEL description="This Dockerfile is written for galaxy"
@@ -24,7 +24,7 @@ COPY bin/disable-ipv6 bin/galaxy-bridge bin/galaxy-flannel bin/galaxy-k8s-sriov 
 COPY hack/start.sh /root/
 CMD ["/root/start.sh"]
 EOF
-  docker build -f bin/images/galaxy.dockerfile -t docker.oa.com:8080/library/galaxy:${VERSION} .
+  docker build -f bin/images/galaxy.dockerfile -t ccr.ccs.tencentyun.com/tkeimages/galaxy:${VERSION} .
 }
 
 echo "begin to build galaxy & cni"
