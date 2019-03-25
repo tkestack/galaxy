@@ -342,10 +342,6 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 	attr := getAttr(pod, nodeName)
 	if ipInfo != nil {
 		how = "reused"
-		glog.Infof("pod %s reused %s, updating policy to %v attr %s", key, ipInfo.IPInfo.IP.String(), policy, attr)
-		if err := ipam.UpdatePolicy(key, ipInfo.IPInfo.IP.IP, policy, attr); err != nil {
-			return nil, fmt.Errorf("failed to update floating ip release policy: %v", err)
-		}
 	} else {
 		subnet, err := p.queryNodeSubnet(nodeName)
 		if err != nil {
@@ -373,6 +369,12 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 	}); err != nil {
 		// do not rollback allocated ip
 		return nil, fmt.Errorf("failed to assign ip %s to %s: %v", ipInfo.IPInfo.IP.IP.String(), key, err)
+	}
+	if how == "reused" {
+		glog.Infof("pod %s reused %s, updating policy to %v attr %s", key, ipInfo.IPInfo.IP.String(), policy, attr)
+		if err := ipam.UpdatePolicy(key, ipInfo.IPInfo.IP.IP, policy, attr); err != nil {
+			return nil, fmt.Errorf("failed to update floating ip release policy: %v", err)
+		}
 	}
 	glog.Infof("[%s] started at %d %s ip %s, policy %v, attr %s for %s", ipam.Name(), started.UnixNano(), how, ipInfo.IPInfo.IP.String(), policy, attr, key)
 	return &ipInfo.IPInfo, nil
