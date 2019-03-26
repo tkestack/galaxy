@@ -2,6 +2,7 @@ package floatingip
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
@@ -183,5 +184,28 @@ func (i *ipam) updateKey(oldK, newK string) error {
 				"attr":       "",
 				`updated_at`: time.Now(),
 			}).Error
+	})
+}
+
+func (i *ipam) getIPsByKeyword(tableName, keyword string) ([]database.FloatingIP, error) {
+	var fips []database.FloatingIP
+	err := i.store.Transaction(func(tx *gorm.DB) error {
+		return tx.Table(tableName).Where("`key` like ?", "%"+keyword+"%").Find(&fips).Error
+	})
+	return fips, err
+}
+
+func (i *ipam) deleteIPs(tableName string, ipToKey map[uint32]string, deleted []string) error {
+	return i.store.Transaction(func(tx *gorm.DB) error {
+		for ip, key := range ipToKey {
+			ret := tx.Table(tableName).Where("ip = ? and `key` = ?", strconv.FormatUint(uint64(ip), 10), key).UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": ""})
+			if ret.Error != nil {
+				return ret.Error
+			}
+			if ret.RowsAffected == 1 {
+				deleted = append(deleted, intToip(ip))
+			}
+		}
+		return nil
 	})
 }

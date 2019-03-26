@@ -30,7 +30,7 @@ type FloatIp struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Spec defines the desired identities of pods in this tapp.
+	// Spec defines the desired identities of FloatIP.
 	Spec FloatIpSpec `json:"spec"`
 }
 

@@ -87,6 +87,7 @@ func (s *Server) init() error {
 		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
 		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 		PoolLister:        poolInformer.Lister(),
+		CrdClient:         s.crdClient,
 	}
 	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
 	if err != nil {
@@ -131,12 +132,13 @@ func (s *Server) initk8sClient() {
 	if err != nil {
 		glog.Fatalf("Error building kubernetes clientset: %v", err)
 	}
-	glog.Infof("connected to apiserver %v", cfg)
-
-	s.crdClient, err = versioned.NewForConfig(cfg)
-	if err != nil {
-		glog.Fatalf("Error building crd clientset: %v", err)
+	if s.JsonConf.SchedulePluginConf.StorageDriver == "k8s-crd" {
+		s.crdClient, err = versioned.NewForConfig(cfg)
+		if err != nil {
+			glog.Fatalf("Error building float ip clientset: %v", err)
+		}
 	}
+	glog.Infof("connected to apiserver %v", cfg)
 
 	// Identity used to distinguish between multiple cloud controller manager instances
 	id, err := os.Hostname()
@@ -207,7 +209,7 @@ func (s *Server) startServer() {
 	health.Route(health.GET("/healthy").To(s.healthy))
 	restful.Add(ws)
 	restful.Add(health)
-	c := api.Controller{DB: s.plugin.GetDB(), PodLister: s.plugin.PodLister}
+	c := api.NewController(s.plugin.GetIpam(), s.plugin.GetSecondIpam(), s.plugin.PodLister)
 	ws.Route(ws.GET("/ip").To(c.ListIPs).Writes(pageutil.Page{}))
 	ws.Route(ws.POST("/ip").To(c.ReleaseIPs).Reads(api.ReleaseIPReq{}).Writes(httputil.Resp{}))
 	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient}

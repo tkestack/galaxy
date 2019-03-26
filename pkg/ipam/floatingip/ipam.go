@@ -1,10 +1,11 @@
 package floatingip
 
 import (
-	"fmt"
 	"net"
 	"sort"
 	"strings"
+	"encoding/binary"
+	"fmt"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
@@ -19,6 +20,8 @@ var (
 
 type IPAM interface {
 	ConfigurePool([]*FloatingIP) error
+	GetAllIPs(string) ([]database.FloatingIP, error)
+	ReleaseIPs(map[uint32]string) ([]string, error)
 	AllocateSpecificIP(string, net.IP, constant.ReleasePolicy, string) error
 	AllocateInSubnet(string, *net.IPNet, constant.ReleasePolicy, string) (net.IP, error)
 	AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error
@@ -208,7 +211,7 @@ func (i *ipam) First(key string) (*FloatingIPInfo, error) {
 			}, nil
 		}
 	}
-	return nil, fmt.Errorf("could not find match floating ip config for ip %s", netIP.String())
+	return nil, nil
 }
 
 func (i *ipam) Shutdown() {
@@ -348,4 +351,27 @@ func (i *ipam) UpdateKey(oldK, newK string) error {
 
 func (i *ipam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error {
 	return i.updateOneInSubnet(oldK, newK, subnet, uint16(policy), attr)
+}
+
+func (i *ipam) GetAllIPs(keyword string) ([]database.FloatingIP, error) {
+	var fips []database.FloatingIP
+	fips, err := i.getIPsByKeyword(i.TableName, keyword)
+	if err != nil {
+		return fips, err
+	}
+	return fips, nil
+}
+
+func (i *ipam) ReleaseIPs(ipToKey map[uint32]string) ([]string, error) {
+	var deleted []string
+	if err := i.deleteIPs(i.TableName, ipToKey, deleted); err != nil {
+		return deleted, err
+	}
+	return deleted, nil
+}
+
+func intToip(nn uint32) string {
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, nn)
+	return ip.String()
 }
