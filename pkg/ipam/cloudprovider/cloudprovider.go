@@ -10,7 +10,14 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
+
+var kacp = keepalive.ClientParameters{
+	Time:                2 * time.Minute, // send pings every 2 minutes if there is no activity
+	Timeout:             time.Minute,     // wait 1 minute for ping ack before considering the connection dead
+	PermitWithoutStream: true,            // send pings even without active streams
+}
 
 type CloudProvider interface {
 	AssignIP(in *rpc.AssignIPRequest) (*rpc.AssignIPReply, error)
@@ -26,7 +33,7 @@ type GRPCCloudProvider struct {
 
 func NewGRPCCloudProvider(cloudProviderAddr string) CloudProvider {
 	return &GRPCCloudProvider{
-		timeout:           time.Second * 40,
+		timeout:           time.Second * 60,
 		cloudProviderAddr: cloudProviderAddr,
 	}
 }
@@ -36,7 +43,7 @@ func (p *GRPCCloudProvider) connect() {
 		glog.V(3).Infof("dial cloud provider with address %s", p.cloudProviderAddr)
 		conn, err := grpc.Dial(p.cloudProviderAddr, grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
 			return net.DialTimeout("tcp", addr, timeout)
-		}), grpc.WithInsecure())
+		}), grpc.WithInsecure(), grpc.WithKeepaliveParams(kacp))
 		if err != nil {
 			glog.Fatalf("failed to connect to cloud provider %s: %v", p.cloudProviderAddr, err)
 		}
