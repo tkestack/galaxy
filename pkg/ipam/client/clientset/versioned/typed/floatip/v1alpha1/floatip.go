@@ -55,7 +55,7 @@ type floatIps struct {
 }
 
 // newFloatIps returns a FloatIps
-func newFloatIps(c *K8sV1alpha1Client, namespace string) *floatIps {
+func newFloatIps(c *GalaxyV1alpha1Client, namespace string) *floatIps {
 	return &floatIps{
 		client: c.RESTClient(),
 		ns:     namespace,

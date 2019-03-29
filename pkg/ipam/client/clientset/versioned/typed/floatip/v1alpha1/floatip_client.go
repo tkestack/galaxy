@@ -25,22 +25,22 @@ import (
 	rest "k8s.io/client-go/rest"
 )
 
-type K8sV1alpha1Interface interface {
+type GalaxyV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	FloatIpsGetter
 }
 
-// K8sV1alpha1Client is used to interact with features provided by the k8s.v1.cni.galaxy.io group.
-type K8sV1alpha1Client struct {
+// GalaxyV1alpha1Client is used to interact with features provided by the galaxy.k8s.io group.
+type GalaxyV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *K8sV1alpha1Client) FloatIps(namespace string) FloatIpInterface {
+func (c *GalaxyV1alpha1Client) FloatIps(namespace string) FloatIpInterface {
 	return newFloatIps(c, namespace)
 }
 
-// NewForConfig creates a new K8sV1alpha1Client for the given config.
-func NewForConfig(c *rest.Config) (*K8sV1alpha1Client, error) {
+// NewForConfig creates a new GalaxyV1alpha1Client for the given config.
+func NewForConfig(c *rest.Config) (*GalaxyV1alpha1Client, error) {
 	config := *c
 	if err := setConfigDefaults(&config); err != nil {
 		return nil, err
@@ -49,12 +49,12 @@ func NewForConfig(c *rest.Config) (*K8sV1alpha1Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &K8sV1alpha1Client{client}, nil
+	return &GalaxyV1alpha1Client{client}, nil
 }
 
-// NewForConfigOrDie creates a new K8sV1alpha1Client for the given config and
+// NewForConfigOrDie creates a new GalaxyV1alpha1Client for the given config and
 // panics if there is an error in the config.
-func NewForConfigOrDie(c *rest.Config) *K8sV1alpha1Client {
+func NewForConfigOrDie(c *rest.Config) *GalaxyV1alpha1Client {
 	client, err := NewForConfig(c)
 	if err != nil {
 		panic(err)
@@ -62,9 +62,9 @@ func NewForConfigOrDie(c *rest.Config) *K8sV1alpha1Client {
 	return client
 }
 
-// New creates a new K8sV1alpha1Client for the given RESTClient.
-func New(c rest.Interface) *K8sV1alpha1Client {
-	return &K8sV1alpha1Client{c}
+// New creates a new GalaxyV1alpha1Client for the given RESTClient.
+func New(c rest.Interface) *GalaxyV1alpha1Client {
+	return &GalaxyV1alpha1Client{c}
 }
 
 func setConfigDefaults(config *rest.Config) error {
@@ -82,7 +82,7 @@ func setConfigDefaults(config *rest.Config) error {
 
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
-func (c *K8sV1alpha1Client) RESTClient() rest.Interface {
+func (c *GalaxyV1alpha1Client) RESTClient() rest.Interface {
 	if c == nil {
 		return nil
 	}

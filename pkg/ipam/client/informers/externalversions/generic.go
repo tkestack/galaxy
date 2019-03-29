@@ -52,9 +52,9 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=k8s.v1.cni.galaxy.io, Version=v1alpha1
+	// Group=galaxy.k8s.io, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("floatips"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.K8s().V1alpha1().FloatIps().Informer()}, nil
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Galaxy().V1alpha1().FloatIps().Informer()}, nil
 
 	}
 

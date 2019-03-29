@@ -61,13 +61,13 @@ func NewFilteredFloatIpInformer(client versioned.Interface, namespace string, re
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.K8sV1alpha1().FloatIps(namespace).List(options)
+				return client.GalaxyV1alpha1().FloatIps(namespace).List(options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.K8sV1alpha1().FloatIps(namespace).Watch(options)
+				return client.GalaxyV1alpha1().FloatIps(namespace).Watch(options)
 			},
 		},
 		&floatipv1alpha1.FloatIp{},
