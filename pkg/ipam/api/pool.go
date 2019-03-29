@@ -29,7 +29,7 @@ func (c *PoolController) Get(req *restful.Request, resp *restful.Response) {
 		httputil.BadRequest(resp, fmt.Errorf("pool name is empty"))
 		return
 	}
-	pool, err := c.PoolLister.Pools("kube-system").Get(name)
+	pool, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Get(name, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			httputil.ItemNotFound(resp, fmt.Errorf("pool %s", name))

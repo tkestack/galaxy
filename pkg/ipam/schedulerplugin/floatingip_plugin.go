@@ -232,20 +232,21 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 	keyObj := util.FormatKey(pod)
 	policy := parseReleasePolicy(&pod.ObjectMeta)
 	var err error
-	var deployment *appv1.Deployment
+	var replicas int
+	var isPoolSizeDefined bool
 	if keyObj.IsDeployment {
-		deployment, err = p.getDeployment(keyObj.AppName, pod.Namespace)
+		replicas, isPoolSizeDefined, err = p.getReplicas(keyObj)
 		if err != nil {
 			return nil, err
 		}
 	}
-	subnets, reserve, err := getAvailableSubnet(p.ipam, p.dpLockPool, keyObj, deployment)
+	subnets, reserve, err := getAvailableSubnet(p.ipam, p.dpLockPool, keyObj, policy, replicas, isPoolSizeDefined)
 	if err != nil {
 		return nil, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
 	subnetSet := sets.NewString(subnets...)
 	if p.enabledSecondIP(pod) {
-		secondSubnets, reserve2, err := getAvailableSubnet(p.secondIPAM, p.dpLockPool, keyObj, deployment)
+		secondSubnets, reserve2, err := getAvailableSubnet(p.secondIPAM, p.dpLockPool, keyObj, policy, replicas, isPoolSizeDefined)
 		if err != nil {
 			return nil, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 		}
@@ -271,7 +272,29 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 	return subnetSet, nil
 }
 
-func getAvailableSubnet(ipam floatingip.IPAM, dpLockPool *keylock.Keylock, keyObj *util.KeyObj, dp *appv1.Deployment) (subnets []string, reserve bool, err error) {
+// getReplicas returns replicas, isPoolSizeDefined, error
+func (p *FloatingIPPlugin) getReplicas(keyObj *util.KeyObj) (int, bool, error) {
+	if keyObj.PoolName != "" {
+		pool, err := p.PoolLister.Pools("kube-system").Get(keyObj.PoolName)
+		if err == nil {
+			glog.V(4).Infof("pool %s size %d", pool.Name, pool.Size)
+			return pool.Size, true, nil
+		} else {
+			if !metaErrs.IsNotFound(err) {
+				return 0, false, err
+			}
+			// pool not found, get replicas from deployment
+		}
+	}
+	deployment, err := p.getDeployment(keyObj.AppName, keyObj.Namespace)
+	if err != nil {
+		return 0, false, err
+	}
+	return int(*deployment.Spec.Replicas), false, nil
+}
+
+func getAvailableSubnet(ipam floatingip.IPAM, dpLockPool *keylock.Keylock, keyObj *util.KeyObj,
+	policy constant.ReleasePolicy, replicas int, isPoolSizeDefined bool) (subnets []string, reserve bool, err error) {
 	// first check if exists an already allocated ip for this pod
 	if subnets, err = ipam.QueryRoutableSubnetByKey(keyObj.KeyInDB); err != nil {
 		err = fmt.Errorf("failed to query by key %s: %v", keyObj.KeyInDB, err)
@@ -280,7 +303,7 @@ func getAvailableSubnet(ipam floatingip.IPAM, dpLockPool *keylock.Keylock, keyOb
 	if len(subnets) != 0 {
 		glog.V(3).Infof("[%s] %s already have an allocated ip in subnets %v", ipam.Name(), keyObj.KeyInDB, subnets)
 	} else {
-		if dp != nil && parseReleasePolicy(&dp.Spec.Template.ObjectMeta) != constant.ReleasePolicyPodDelete { // get label from pod?
+		if keyObj.IsDeployment && policy != constant.ReleasePolicyPodDelete { // get label from pod?
 			var ips []database.FloatingIP
 			poolPrefix := keyObj.PoolPrefix()
 			poolAppPrefix := keyObj.PoolAppPrefix()
@@ -292,26 +315,31 @@ func getAvailableSubnet(ipam floatingip.IPAM, dpLockPool *keylock.Keylock, keyOb
 				err = fmt.Errorf("failed query prefix %s: %s", poolPrefix, err)
 				return
 			}
-			replicas := int(*dp.Spec.Replicas)
 			usedCount := 0
 			unusedSubnetSet := sets.NewString()
 			for _, ip := range ips {
 				if ip.Key != poolPrefix {
-					if strings.HasPrefix(ip.Key, poolAppPrefix) {
-						// Don't counting in other deployments' used ip if sharing pool
+					if isPoolSizeDefined || keyObj.PoolName == "" {
 						usedCount++
+					} else {
+						if strings.HasPrefix(ip.Key, poolAppPrefix) {
+							// Don't counting in other deployments' used ip if sharing pool
+							usedCount++
+						}
 					}
 				} else {
 					unusedSubnetSet.Insert(ip.Subnet)
 				}
 			}
-			glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d", keyObj, unusedSubnetSet, usedCount, replicas)
+			glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d, isPoolSizeDefined %v", keyObj, unusedSubnetSet, usedCount, replicas, isPoolSizeDefined)
 			// check usedCount >= replicas to ensure upgrading a deployment won't change its ips
 			// check unusedSubnetSet.Len() == 0 to ensure during upgrading a deployment if a pool has more ips, the newly created pod could allocate
 			// such unused ips event if it gets replicas nums of ips.
 			if usedCount >= replicas && unusedSubnetSet.Len() == 0 {
-				glog.Warningf("deployment %s has allocate %d ips, but we only want %d, wait to release", dp.Name, usedCount, replicas)
-				return nil, false, nil
+				if isPoolSizeDefined {
+					return nil, false, fmt.Errorf("reached pool %s size limit of %d", keyObj.PoolName, replicas)
+				}
+				return nil, false, fmt.Errorf("deployment %s has allocated %d ips with replicas of %d, wait for releasing", keyObj.AppName, usedCount, replicas)
 			}
 			if unusedSubnetSet.Len() > 0 {
 				return unusedSubnetSet.List(), true, nil

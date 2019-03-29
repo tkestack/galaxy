@@ -1,0 +1,5 @@
+apiVersion: galaxy.k8s.io/v1alpha1
+kind: Pool
+metadata:
+  name: example-pool
+size: 4

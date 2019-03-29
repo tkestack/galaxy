@@ -12,6 +12,8 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/eventhandler"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/api"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
+	crdInformer "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/informers/externalversions"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server/options"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/httputil"
@@ -42,8 +44,10 @@ type Server struct {
 	JsonConf
 	*options.ServerRunOptions
 	client               kubernetes.Interface
+	crdClient            versioned.Interface
 	plugin               *schedulerplugin.FloatingIPPlugin
 	informerFactory      informers.SharedInformerFactory
+	crdInformerFactory   crdInformer.SharedInformerFactory
 	stopChan             chan struct{}
 	leaderElectionConfig *leaderelection.LeaderElectionConfig
 }
@@ -67,11 +71,13 @@ func (s *Server) init() error {
 		return fmt.Errorf("bad config %s: %v", string(data), err)
 	}
 	s.initk8sClient()
-
 	s.informerFactory = informers.NewFilteredSharedInformerFactory(s.client, time.Minute, v1.NamespaceAll, nil)
 	podInformer := s.informerFactory.Core().V1().Pods()
 	statefulsetInformer := s.informerFactory.Apps().V1().StatefulSets()
 	deploymentInformer := s.informerFactory.Apps().V1().Deployments()
+	s.crdInformerFactory = crdInformer.NewSharedInformerFactory(s.crdClient, 0)
+	poolInformer := s.crdInformerFactory.Galaxy().V1alpha1().Pools()
+
 	pluginArgs := &schedulerplugin.PluginFactoryArgs{
 		PodLister:         podInformer.Lister(),
 		StatefulSetLister: statefulsetInformer.Lister(),
@@ -80,6 +86,7 @@ func (s *Server) init() error {
 		PodHasSynced:      podInformer.Informer().HasSynced,
 		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
 		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
+		PoolLister:        poolInformer.Lister(),
 	}
 	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
 	if err != nil {
@@ -106,6 +113,7 @@ func (s *Server) Run() error {
 	}
 	s.plugin.Run(s.stopChan)
 	go s.informerFactory.Start(s.stopChan)
+	go s.crdInformerFactory.Start(s.stopChan)
 	s.startServer()
 	return nil
 }
@@ -125,8 +133,9 @@ func (s *Server) initk8sClient() {
 	}
 	glog.Infof("connected to apiserver %v", cfg)
 
+	s.crdClient, err = versioned.NewForConfig(cfg)
 	if err != nil {
-		glog.Fatalf("Error building example clientset: %v", err)
+		glog.Fatalf("Error building crd clientset: %v", err)
 	}
 
 	// Identity used to distinguish between multiple cloud controller manager instances
@@ -201,6 +210,10 @@ func (s *Server) startServer() {
 	c := api.Controller{DB: s.plugin.GetDB(), PodLister: s.plugin.PodLister}
 	ws.Route(ws.GET("/ip").To(c.ListIPs).Writes(pageutil.Page{}))
 	ws.Route(ws.POST("/ip").To(c.ReleaseIPs).Reads(api.ReleaseIPReq{}).Writes(httputil.Resp{}))
+	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient}
+	ws.Route(ws.GET("/pool/{name}").To(poolController.Get).Writes(httputil.Resp{}))
+	ws.Route(ws.POST("/pool").To(poolController.CreateOrUpdate).Reads(api.Pool{}).Writes(httputil.Resp{}))
+	ws.Route(ws.DELETE("/pool/{name}").To(poolController.Delete).Writes(httputil.Resp{}))
 	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", s.Bind, s.Port), nil); err != nil {
 		glog.Fatalf("unable to listen: %v.", err)
 	}
