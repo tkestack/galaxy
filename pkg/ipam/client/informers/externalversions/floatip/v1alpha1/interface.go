@@ -26,6 +26,8 @@ import (
 type Interface interface {
 	// FloatIps returns a FloatIpInformer.
 	FloatIps() FloatIpInformer
+	// Pools returns a PoolInformer.
+	Pools() PoolInformer
 }
 
 type version struct {
@@ -42,4 +44,9 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // FloatIps returns a FloatIpInformer.
 func (v *version) FloatIps() FloatIpInformer {
 	return &floatIpInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// Pools returns a PoolInformer.
+func (v *version) Pools() PoolInformer {
+	return &poolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
