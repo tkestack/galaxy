@@ -172,9 +172,9 @@ type SharedInformerFactory interface {
 	ForResource(resource schema.GroupVersionResource) (GenericInformer, error)
 	WaitForCacheSync(stopCh <-chan struct{}) map[reflect.Type]bool
 
-	K8s() floatip.Interface
+	Galaxy() floatip.Interface
 }
 
-func (f *sharedInformerFactory) K8s() floatip.Interface {
+func (f *sharedInformerFactory) Galaxy() floatip.Interface {
 	return floatip.New(f, f.namespace, f.tweakListOptions)
 }

@@ -30,13 +30,13 @@ import (
 
 // FakeFloatIps implements FloatIpInterface
 type FakeFloatIps struct {
-	Fake *FakeK8sV1alpha1
+	Fake *FakeGalaxyV1alpha1
 	ns   string
 }
 
-var floatipsResource = schema.GroupVersionResource{Group: "k8s.v1.cni.galaxy.io", Version: "v1alpha1", Resource: "floatips"}
+var floatipsResource = schema.GroupVersionResource{Group: "galaxy.k8s.io", Version: "v1alpha1", Resource: "floatips"}
 
-var floatipsKind = schema.GroupVersionKind{Group: "k8s.v1.cni.galaxy.io", Version: "v1alpha1", Kind: "FloatIp"}
+var floatipsKind = schema.GroupVersionKind{Group: "galaxy.k8s.io", Version: "v1alpha1", Kind: "FloatIp"}
 
 // Get takes name of the floatIp, and returns the corresponding floatIp object, and an error if there is any.
 func (c *FakeFloatIps) Get(name string, options v1.GetOptions) (result *v1alpha1.FloatIp, err error) {

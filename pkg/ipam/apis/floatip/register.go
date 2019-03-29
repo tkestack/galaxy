@@ -17,5 +17,5 @@ limitations under the License.
 package floatip
 
 const (
-	GroupName = "k8s.v1.cni.galaxy.io"
+	GroupName = "galaxy.k8s.io"
 )

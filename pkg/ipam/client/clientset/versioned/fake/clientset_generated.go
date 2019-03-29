@@ -20,8 +20,8 @@ package fake
 
 import (
 	clientset "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
-	k8sv1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned/typed/floatip/v1alpha1"
-	fakek8sv1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned/typed/floatip/v1alpha1/fake"
+	galaxyv1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned/typed/floatip/v1alpha1"
+	fakegalaxyv1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned/typed/floatip/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -71,7 +71,7 @@ func (c *Clientset) Discovery() discovery.DiscoveryInterface {
 
 var _ clientset.Interface = &Clientset{}
 
-// K8sV1alpha1 retrieves the K8sV1alpha1Client
-func (c *Clientset) K8sV1alpha1() k8sv1alpha1.K8sV1alpha1Interface {
-	return &fakek8sv1alpha1.FakeK8sV1alpha1{Fake: &c.Fake}
+// GalaxyV1alpha1 retrieves the GalaxyV1alpha1Client
+func (c *Clientset) GalaxyV1alpha1() galaxyv1alpha1.GalaxyV1alpha1Interface {
+	return &fakegalaxyv1alpha1.FakeGalaxyV1alpha1{Fake: &c.Fake}
 }
