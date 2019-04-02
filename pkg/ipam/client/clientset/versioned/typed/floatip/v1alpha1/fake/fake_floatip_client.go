@@ -32,6 +32,10 @@ func (c *FakeGalaxyV1alpha1) FloatIps(namespace string) v1alpha1.FloatIpInterfac
 	return &FakeFloatIps{c, namespace}
 }
 
+func (c *FakeGalaxyV1alpha1) Pools(namespace string) v1alpha1.PoolInterface {
+	return &FakePools{c, namespace}
+}
+
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
 func (c *FakeGalaxyV1alpha1) RESTClient() rest.Interface {

@@ -28,6 +28,7 @@ import (
 type GalaxyV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	FloatIpsGetter
+	PoolsGetter
 }
 
 // GalaxyV1alpha1Client is used to interact with features provided by the galaxy.k8s.io group.
@@ -37,6 +38,10 @@ type GalaxyV1alpha1Client struct {
 
 func (c *GalaxyV1alpha1Client) FloatIps(namespace string) FloatIpInterface {
 	return newFloatIps(c, namespace)
+}
+
+func (c *GalaxyV1alpha1Client) Pools(namespace string) PoolInterface {
+	return newPools(c, namespace)
 }
 
 // NewForConfig creates a new GalaxyV1alpha1Client for the given config.

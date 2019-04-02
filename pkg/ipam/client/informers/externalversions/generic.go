@@ -55,6 +55,8 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 	// Group=galaxy.k8s.io, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("floatips"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Galaxy().V1alpha1().FloatIps().Informer()}, nil
+	case v1alpha1.SchemeGroupVersion.WithResource("pools"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Galaxy().V1alpha1().Pools().Informer()}, nil
 
 	}
 

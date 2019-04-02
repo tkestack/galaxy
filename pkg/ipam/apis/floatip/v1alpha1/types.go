@@ -31,7 +31,7 @@ type FloatIp struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// Spec defines the desired identities of pods in this tapp.
-	Spec   FloatIpSpec `json:"spec"`
+	Spec FloatIpSpec `json:"spec"`
 }
 
 type FloatIpSpec struct {
@@ -54,3 +54,22 @@ type FloatIpList struct {
 	Items []FloatIp `json:"items"`
 }
 
+// +genclient
+// +genclient:noStatus
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+type Pool struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// The pool size
+	Size int `json:"size"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+type PoolList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []Pool `json:"items"`
+}

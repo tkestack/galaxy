@@ -25,3 +25,11 @@ type FloatIpListerExpansion interface{}
 // FloatIpNamespaceListerExpansion allows custom methods to be added to
 // FloatIpNamespaceLister.
 type FloatIpNamespaceListerExpansion interface{}
+
+// PoolListerExpansion allows custom methods to be added to
+// PoolLister.
+type PoolListerExpansion interface{}
+
+// PoolNamespaceListerExpansion allows custom methods to be added to
+// PoolNamespaceLister.
+type PoolNamespaceListerExpansion interface{}
