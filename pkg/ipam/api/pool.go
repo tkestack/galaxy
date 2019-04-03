@@ -58,6 +58,7 @@ func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Resp
 			if _, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Create(&v1alpha1.Pool{
 				TypeMeta:   v1.TypeMeta{Kind: "Pool", APIVersion: "v1alpha1"},
 				ObjectMeta: v1.ObjectMeta{Name: pool.Name},
+				Size:       pool.Size,
 			}); err != nil {
 				httputil.InternalError(resp, fmt.Errorf("failed to create Pool: %v", err))
 				return
