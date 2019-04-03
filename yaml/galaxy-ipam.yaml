@@ -38,6 +38,10 @@ rules:
       - endpoints
       - events
     verbs: ["get", "list", "watch", "update", "create", "patch"]
+  - apiGroups: ["galaxy.k8s.io"]
+    resources:
+      - pools
+    verbs: ["get", "list", "watch", "update", "create", "patch", "delete"]
 ---
 apiVersion: v1
 kind: ServiceAccount
