@@ -58,8 +58,8 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	if err != nil {
 		return err
 	}
-	podInDB := make(map[string]resyncObj)
-	assignPodsInDB := make(map[string]resyncObj) // syncing ips with cloudprovider
+	allocatedIPs := make(map[string]resyncObj)
+	assignedPods := make(map[string]resyncObj) // syncing ips with cloudprovider
 	for i := range all {
 		fip := all[i]
 		if fip.Key == "" {
@@ -73,19 +73,21 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			glog.Warningf("unexpected key: %s", fip.Key)
 			continue
 		}
-		// we send unassign request to cloud provider for any release policy
-		assignPodsInDB[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
+		if p.cloudProvider != nil {
+			// we send unassign request to cloud provider for any release policy
+			assignedPods[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
+		}
 		if fip.Policy == uint16(constant.ReleasePolicyNever) {
 			// never release these ips
 			// for deployment, put back to deployment
 			// we do nothing for statefulset pod, because we preserve ip according to its pod name
 			if keyObj.IsDeployment {
-				podInDB[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
+				allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
 			}
 			// skip if it is a statefulset key and is ReleasePolicyNever
 			continue
 		}
-		podInDB[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
+		allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
 	}
 	pods, err := p.listWantedPods()
 	if err != nil {
@@ -115,34 +117,36 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		}
 		glog.V(5).Infof("existPods %v", podMap)
 	}
-	for key, obj := range assignPodsInDB {
-		if _, ok := existPods[key]; ok {
-			continue
-		}
-		// check with apiserver to confirm it really not exist
-		if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
-			continue
-		}
-		var attr Attr
-		if err := json.Unmarshal([]byte(obj.fip.Attr), &attr); err != nil {
-			glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.fip.Attr, key, err)
-			continue
-		}
-		if attr.NodeName == "" {
-			glog.Errorf("empty nodeName for %s in db", key)
-			continue
-		}
-		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName, nets.IntToIP(obj.fip.IP).String(), key)
-		if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
-			NodeName:  attr.NodeName,
-			IPAddress: nets.IntToIP(obj.fip.IP).String(),
-		}); err != nil {
-			// delete this record from podInDB map to have a retry
-			delete(podInDB, key)
-			glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.fip.IP).String(), key, err)
+	if p.cloudProvider != nil {
+		for key, obj := range assignedPods {
+			if _, ok := existPods[key]; ok {
+				continue
+			}
+			// check with apiserver to confirm it really not exist
+			if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
+				continue
+			}
+			var attr Attr
+			if err := json.Unmarshal([]byte(obj.fip.Attr), &attr); err != nil {
+				glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.fip.Attr, key, err)
+				continue
+			}
+			if attr.NodeName == "" {
+				glog.Errorf("empty nodeName for %s in db", key)
+				continue
+			}
+			glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName, nets.IntToIP(obj.fip.IP).String(), key)
+			if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
+				NodeName:  attr.NodeName,
+				IPAddress: nets.IntToIP(obj.fip.IP).String(),
+			}); err != nil {
+				// delete this record from allocatedIPs map to have a retry
+				delete(allocatedIPs, key)
+				glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.fip.IP).String(), key, err)
+			}
 		}
 	}
-	for key, obj := range podInDB {
+	for key, obj := range allocatedIPs {
 		if _, ok := existPods[key]; ok {
 			continue
 		}

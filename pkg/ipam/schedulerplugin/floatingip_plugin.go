@@ -20,7 +20,6 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/keylock"
 	"github.com/golang/glog"
-	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,7 +59,6 @@ type FloatingIPPlugin struct {
 	conf                         *Conf
 	unreleased                   chan *releaseEvent
 	hasSecondIPConf              atomic.Value
-	getDeployment                func(name, namespace string) (*appv1.Deployment, error)
 	db                           *database.DBRecorder
 	cloudProvider                cloudprovider.CloudProvider
 	// protect unbind immutable deployment pod
@@ -109,9 +107,6 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		return nil, fmt.Errorf("unknown storage driver %s", conf.StorageDriver)
 	}
 	plugin.hasSecondIPConf.Store(false)
-	plugin.getDeployment = func(name, namespace string) (*appv1.Deployment, error) {
-		return plugin.DeploymentLister.Deployments(namespace).Get(name)
-	}
 	if conf.CloudProviderGRPCAddr != "" {
 		plugin.cloudProvider = cloudprovider.NewGRPCCloudProvider(conf.CloudProviderGRPCAddr)
 	}
@@ -347,7 +342,7 @@ func (p *FloatingIPPlugin) getReplicas(keyObj *util.KeyObj) (int, bool, error) {
 			// pool not found, get replicas from deployment
 		}
 	}
-	deployment, err := p.getDeployment(keyObj.AppName, keyObj.Namespace)
+	deployment, err := p.DeploymentLister.Deployments(keyObj.Namespace).Get(keyObj.AppName)
 	if err != nil {
 		return 0, false, err
 	}
@@ -693,7 +688,7 @@ func getIPStrFromAnnotation(pod *corev1.Pod) string {
 
 func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
 	key, prefixKey := keyObj.KeyInDB, keyObj.PoolPrefix()
-	dp, err := p.getDeployment(keyObj.AppName, pod.Namespace)
+	dp, err := p.DeploymentLister.Deployments(keyObj.Namespace).Get(keyObj.AppName)
 	replicas := 0
 	if err != nil {
 		if !metaErrs.IsNotFound(err) {
