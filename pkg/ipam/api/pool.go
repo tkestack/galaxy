@@ -19,8 +19,8 @@ type PoolController struct {
 }
 
 type Pool struct {
-	Name string
-	Size int
+	Name string `json:"name"`
+	Size int    `json:"size"`
 }
 
 func (c *PoolController) Get(req *restful.Request, resp *restful.Response) {
