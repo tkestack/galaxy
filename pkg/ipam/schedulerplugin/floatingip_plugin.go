@@ -230,8 +230,17 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 
 func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 	keyObj := util.FormatKey(pod)
+	// first check if exists an already allocated ip for this pod
+	subnets, err := p.ipam.QueryRoutableSubnetByKey(keyObj.KeyInDB)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query by key %s: %v", keyObj.KeyInDB, err)
+	}
+	if len(subnets) > 0 {
+		// assure second IPAM gets the same subnets
+		glog.V(3).Infof("%s already have an allocated ip in subnets %v", keyObj.KeyInDB, subnets)
+		return sets.NewString(subnets...), nil
+	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)
-	var err error
 	var replicas int
 	var isPoolSizeDefined bool
 	if keyObj.IsDeployment {
@@ -257,23 +266,60 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		subnetSet = subnetSet.Intersection(sets.NewString(secondSubnets...))
 		reserve = reserve || reserve2
 	}
-	if reserve && subnetSet.Len() > 0 {
+	if (reserve || isPoolSizeDefined) && subnetSet.Len() > 0 {
 		// Since bind is in a different goroutine than filter in scheduler, we can't ensure the first pod got binded before the next one got filtered.
 		// We'd better do the allocate in filter for reserve situation.
 		reserveSubnet := subnetSet.List()[0]
 		subnetSet = sets.NewString(reserveSubnet)
 		// we can't get nodename on filter, update attr on bind
 		attr := getAttr(pod, "")
-		if err := p.ipam.AllocateInSubnetWithKey(keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr); err != nil {
-			return nil, err
-		}
-		if p.enabledSecondIP(pod) {
-			if err := p.secondIPAM.AllocateInSubnetWithKey(keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr); err != nil {
+		if reserve {
+			if err := allocateInSubnetWithKey(p.ipam, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr); err != nil {
 				return nil, err
+			}
+			if p.enabledSecondIP(pod) {
+				if err := allocateInSubnetWithKey(p.secondIPAM, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr); err != nil {
+					return nil, err
+				}
+			}
+		} else if isPoolSizeDefined {
+			// if pool size defined and we got no reserved IP, we need to allocate IP from empty key
+			_, ipNet, err := net.ParseCIDR(reserveSubnet)
+			if err != nil {
+				return nil, err
+			}
+			if err := allocateInSubnet(p.ipam, keyObj.KeyInDB, ipNet, policy, attr, "filter"); err != nil {
+				return nil, err
+			}
+			if p.enabledSecondIP(pod) {
+				if err := allocateInSubnet(p.secondIPAM, keyObj.KeyInDB, ipNet, policy, attr, "filter"); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
 	return subnetSet, nil
+}
+
+func allocateInSubnet(ipam floatingip.IPAM, key string, subnet *net.IPNet, policy constant.ReleasePolicy, attr, when string) error {
+	ip, err := ipam.AllocateInSubnet(key, subnet, policy, attr)
+	if err != nil {
+		return err
+	}
+	glog.Infof("[%s] allocated ip %s to pod %s during %s", ipam.Name(), ip.String(), key, when)
+	return nil
+}
+
+func allocateInSubnetWithKey(ipam floatingip.IPAM, oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error {
+	if err := ipam.AllocateInSubnetWithKey(oldK, newK, subnet, policy, attr); err != nil {
+		return err
+	}
+	fip, err := ipam.First(newK)
+	if err != nil {
+		return err
+	}
+	glog.Infof("[%s] allocated ip %s to %s from %s", ipam.Name(), fip.IPInfo.IP.String(), newK, oldK)
+	return nil
 }
 
 // getReplicas returns replicas, isPoolSizeDefined, error
@@ -298,57 +344,48 @@ func (p *FloatingIPPlugin) getReplicas(keyObj *util.KeyObj) (int, bool, error) {
 }
 
 func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy constant.ReleasePolicy, replicas int, isPoolSizeDefined bool) (subnets []string, reserve bool, err error) {
-	// first check if exists an already allocated ip for this pod
-	if subnets, err = ipam.QueryRoutableSubnetByKey(keyObj.KeyInDB); err != nil {
-		err = fmt.Errorf("failed to query by key %s: %v", keyObj.KeyInDB, err)
-		return
-	}
-	if len(subnets) != 0 {
-		glog.V(3).Infof("[%s] %s already have an allocated ip in subnets %v", ipam.Name(), keyObj.KeyInDB, subnets)
-	} else {
-		if keyObj.IsDeployment && policy != constant.ReleasePolicyPodDelete { // get label from pod?
-			var ips []database.FloatingIP
-			poolPrefix := keyObj.PoolPrefix()
-			poolAppPrefix := keyObj.PoolAppPrefix()
-			ips, err = ipam.ByPrefix(poolPrefix)
-			if err != nil {
-				err = fmt.Errorf("failed query prefix %s: %s", poolPrefix, err)
-				return
-			}
-			usedCount := 0
-			unusedSubnetSet := sets.NewString()
-			for _, ip := range ips {
-				if ip.Key != poolPrefix {
-					if isPoolSizeDefined || keyObj.PoolName == "" {
-						usedCount++
-					} else {
-						if strings.HasPrefix(ip.Key, poolAppPrefix) {
-							// Don't counting in other deployments' used ip if sharing pool
-							usedCount++
-						}
-					}
-				} else {
-					unusedSubnetSet.Insert(ip.Subnet)
-				}
-			}
-			glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d, isPoolSizeDefined %v", keyObj, unusedSubnetSet, usedCount, replicas, isPoolSizeDefined)
-			// check usedCount >= replicas to ensure upgrading a deployment won't change its ips
-			// check unusedSubnetSet.Len() == 0 to ensure during upgrading a deployment if a pool has more ips, the newly created pod could allocate
-			// such unused ips event if it gets replicas nums of ips.
-			if usedCount >= replicas && unusedSubnetSet.Len() == 0 {
-				if isPoolSizeDefined {
-					return nil, false, fmt.Errorf("reached pool %s size limit of %d", keyObj.PoolName, replicas)
-				}
-				return nil, false, fmt.Errorf("deployment %s has allocated %d ips with replicas of %d, wait for releasing", keyObj.AppName, usedCount, replicas)
-			}
-			if unusedSubnetSet.Len() > 0 {
-				return unusedSubnetSet.List(), true, nil
-			}
-		}
-		if subnets, err = ipam.QueryRoutableSubnetByKey(""); err != nil {
-			err = fmt.Errorf("failed to query allocatable subnet: %v", err)
+	if keyObj.IsDeployment && policy != constant.ReleasePolicyPodDelete {
+		var ips []database.FloatingIP
+		poolPrefix := keyObj.PoolPrefix()
+		poolAppPrefix := keyObj.PoolAppPrefix()
+		ips, err = ipam.ByPrefix(poolPrefix)
+		if err != nil {
+			err = fmt.Errorf("failed query prefix %s: %s", poolPrefix, err)
 			return
 		}
+		usedCount := 0
+		unusedSubnetSet := sets.NewString()
+		for _, ip := range ips {
+			if ip.Key != poolPrefix {
+				if isPoolSizeDefined || keyObj.PoolName == "" {
+					usedCount++
+				} else {
+					if strings.HasPrefix(ip.Key, poolAppPrefix) {
+						// Don't counting in other deployments' used ip if sharing pool
+						usedCount++
+					}
+				}
+			} else {
+				unusedSubnetSet.Insert(ip.Subnet)
+			}
+		}
+		glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d, isPoolSizeDefined %v", keyObj, unusedSubnetSet, usedCount, replicas, isPoolSizeDefined)
+		// check usedCount >= replicas to ensure upgrading a deployment won't change its ips
+		// check unusedSubnetSet.Len() == 0 to ensure during upgrading a deployment if a pool has more ips, the newly created pod could allocate
+		// such unused ips event if it gets replicas nums of ips.
+		if usedCount >= replicas && unusedSubnetSet.Len() == 0 {
+			if isPoolSizeDefined {
+				return nil, false, fmt.Errorf("reached pool %s size limit of %d", keyObj.PoolName, replicas)
+			}
+			return nil, false, fmt.Errorf("deployment %s has allocated %d ips with replicas of %d, wait for releasing", keyObj.AppName, usedCount, replicas)
+		}
+		if unusedSubnetSet.Len() > 0 {
+			return unusedSubnetSet.List(), true, nil
+		}
+	}
+	if subnets, err = ipam.QueryRoutableSubnetByKey(""); err != nil {
+		err = fmt.Errorf("failed to query allocatable subnet: %v", err)
+		return
 	}
 	return
 }
@@ -378,9 +415,7 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 		if err != nil {
 			return nil, err
 		}
-		_, err = ipam.AllocateInSubnet(key, subnet, policy, attr)
-		if err != nil {
-			// return this error directly, invokers depend on the error type if it is ErrNoEnoughIP
+		if err := allocateInSubnet(ipam, key, subnet, policy, attr, "bind"); err != nil {
 			return nil, err
 		}
 		how = "allocated"
@@ -391,7 +426,6 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 		if ipInfo == nil {
 			return nil, fmt.Errorf("nil floating ip for key %s: %v", key, err)
 		}
-		glog.Infof("allocated ip %s for pod %s", ipInfo.IPInfo.IP.IP.String(), key)
 	}
 	glog.Infof("AssignIP nodeName %s, ip %s, key %s", nodeName, ipInfo.IPInfo.IP.IP.String(), key)
 	if err := p.cloudProviderAssignIP(&rpc.AssignIPRequest{
