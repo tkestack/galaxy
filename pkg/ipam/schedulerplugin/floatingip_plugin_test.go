@@ -12,6 +12,8 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s/schedulerapi"
+	fakeGalaxyCli "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned/fake"
+	crdInformer "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/informers/externalversions"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin/util"
@@ -203,10 +205,7 @@ func TestFilterForDeployment(t *testing.T) {
 	}
 	// because deployment ip is allocated to deadPod, check if pod gets none available subnets
 	filtered, failed, err := fipPlugin.Filter(pod, nodes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := checkFilterResult(filtered, failed, []string{}, []string{drainedNode, nodeHasNoIP, node3, node4}); err != nil {
+	if err == nil || !strings.Contains(err.Error(), "wait for releasing") {
 		t.Fatal(err)
 	}
 	// because replicas = 1, ip will be reserved
@@ -507,15 +506,17 @@ func createNode(name string, labels map[string]string, address string) corev1.No
 }
 
 func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFactoryArgs, chan struct{}) {
+	galaxyCli := fakeGalaxyCli.NewSimpleClientset()
+	crdInformerFactory := crdInformer.NewSharedInformerFactory(galaxyCli, 0)
+	poolInformer := crdInformerFactory.Galaxy().V1alpha1().Pools()
 	client := fake.NewSimpleClientset(objs...)
 	informerFactory := informers.NewFilteredSharedInformerFactory(client, time.Minute, v1.NamespaceAll, nil)
 	podInformer := informerFactory.Core().V1().Pods()
 	statefulsetInformer := informerFactory.Apps().V1().StatefulSets()
 	deploymentInformer := informerFactory.Apps().V1().Deployments()
 	stopChan := make(chan struct{})
-	go func() {
-		informerFactory.Start(stopChan)
-	}()
+	go informerFactory.Start(stopChan)
+	go crdInformerFactory.Start(stopChan)
 	pluginArgs := &PluginFactoryArgs{
 		PodLister:         podInformer.Lister(),
 		StatefulSetLister: statefulsetInformer.Lister(),
@@ -524,6 +525,7 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 		PodHasSynced:      podInformer.Informer().HasSynced,
 		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
 		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
+		PoolLister:        poolInformer.Lister(),
 	}
 	if err := wait.PollImmediate(time.Millisecond*100, 20*time.Second, func() (done bool, err error) {
 		return pluginArgs.PodHasSynced(), nil
