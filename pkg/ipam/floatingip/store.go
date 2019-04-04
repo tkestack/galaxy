@@ -110,7 +110,7 @@ type Result struct {
 func (i *ipam) queryByKeyGroupBySubnet(key string) ([]string, error) {
 	var results []Result
 	if err := i.store.Transaction(func(tx *gorm.DB) error {
-		ret := tx.Table(i.TableName).Select("subnet").Where("`key` = ?", key).Group("subnet").Order("subnet").Scan(&results)
+		ret := tx.Table(i.TableName).Select("DISTINCT subnet").Where("`key` = ?", key).Scan(&results)
 		if ret.RecordNotFound() {
 			return nil
 		}
