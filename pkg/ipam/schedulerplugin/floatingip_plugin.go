@@ -239,14 +239,18 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Lock to make checking available subnets and allocating reserved ip atomic
+		lockIndex := p.dpLockPool.GetLockIndex([]byte(keyObj.PoolPrefix()))
+		p.dpLockPool.RawLock(lockIndex)
+		defer p.dpLockPool.RawUnlock(lockIndex)
 	}
-	subnets, reserve, err := getAvailableSubnet(p.ipam, p.dpLockPool, keyObj, policy, replicas, isPoolSizeDefined)
+	subnets, reserve, err := getAvailableSubnet(p.ipam, keyObj, policy, replicas, isPoolSizeDefined)
 	if err != nil {
 		return nil, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
 	subnetSet := sets.NewString(subnets...)
 	if p.enabledSecondIP(pod) {
-		secondSubnets, reserve2, err := getAvailableSubnet(p.secondIPAM, p.dpLockPool, keyObj, policy, replicas, isPoolSizeDefined)
+		secondSubnets, reserve2, err := getAvailableSubnet(p.secondIPAM, keyObj, policy, replicas, isPoolSizeDefined)
 		if err != nil {
 			return nil, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 		}
@@ -293,8 +297,7 @@ func (p *FloatingIPPlugin) getReplicas(keyObj *util.KeyObj) (int, bool, error) {
 	return int(*deployment.Spec.Replicas), false, nil
 }
 
-func getAvailableSubnet(ipam floatingip.IPAM, dpLockPool *keylock.Keylock, keyObj *util.KeyObj,
-	policy constant.ReleasePolicy, replicas int, isPoolSizeDefined bool) (subnets []string, reserve bool, err error) {
+func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy constant.ReleasePolicy, replicas int, isPoolSizeDefined bool) (subnets []string, reserve bool, err error) {
 	// first check if exists an already allocated ip for this pod
 	if subnets, err = ipam.QueryRoutableSubnetByKey(keyObj.KeyInDB); err != nil {
 		err = fmt.Errorf("failed to query by key %s: %v", keyObj.KeyInDB, err)
@@ -307,9 +310,6 @@ func getAvailableSubnet(ipam floatingip.IPAM, dpLockPool *keylock.Keylock, keyOb
 			var ips []database.FloatingIP
 			poolPrefix := keyObj.PoolPrefix()
 			poolAppPrefix := keyObj.PoolAppPrefix()
-			lockIndex := dpLockPool.GetLockIndex([]byte(poolPrefix))
-			dpLockPool.RawLock(lockIndex)
-			defer dpLockPool.RawUnlock(lockIndex)
 			ips, err = ipam.ByPrefix(poolPrefix)
 			if err != nil {
 				err = fmt.Errorf("failed query prefix %s: %s", poolPrefix, err)
