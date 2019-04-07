@@ -31,7 +31,7 @@ func (t *Type) String() (string, error) {
 	return "", fmt.Errorf("unknown ip type %v", *t)
 }
 
-type FloatIPObj struct {
+type FloatingIPObj struct {
 	key    string
 	att    string
 	policy constant.ReleasePolicy
@@ -42,8 +42,8 @@ type FloatIPObj struct {
 //value(FloatIPObj) stores FloatIPSpec in FloatIP CRD
 type FIPCache struct {
 	cacheLock       *sync.RWMutex
-	allocatedFIPs   map[string]*FloatIPObj
-	unallocatedFIPs map[string]*FloatIPObj
+	allocatedFIPs   map[string]*FloatingIPObj
+	unallocatedFIPs map[string]*FloatingIPObj
 }
 
 type crdIpam struct {
@@ -336,7 +336,7 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 		return err
 	}
 	var toBeDelete []uint32
-	tmpCacheAllocated := make(map[string]*FloatIPObj)
+	tmpCacheAllocated := make(map[string]*FloatingIPObj)
 	//delete no longer available floating ips stored in etcd first
 	for _, ip := range ips.Items {
 		ipInt, err := strconv.ParseUint(ip.Name, 10, 32)
@@ -353,7 +353,7 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 					toBeDelete = append(toBeDelete, uint32(ipInt))
 				} else {
 					//ip in config, insert it into cache
-					tmpFip := &FloatIPObj{
+					tmpFip := &FloatingIPObj{
 						key:    ip.Spec.Key,
 						att:    ip.Spec.Attribute,
 						policy: ip.Spec.Policy,
@@ -382,7 +382,7 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 		glog.Infof("expect to delete %d ips from %v", len(toBeDelete), toBeDelete)
 	}
 	// fresh unallocated floatIP
-	tmpCacheUnallocated := make(map[string]*FloatIPObj)
+	tmpCacheUnallocated := make(map[string]*FloatingIPObj)
 	for _, fipConf := range fipMap {
 		subnet := fipConf.RoutableSubnet.String()
 		for _, ipr := range fipConf.IPRanges {
@@ -390,7 +390,7 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 			last := nets.IPToInt(ipr.Last)
 			for ; first <= last; first++ {
 				if _, contain := ci.caches.allocatedFIPs[strconv.FormatUint(uint64(first), 10)]; !contain {
-					tmpFip := &FloatIPObj{
+					tmpFip := &FloatingIPObj{
 						key:    "",
 						att:    "",
 						policy: constant.ReleasePolicyPodDelete,
@@ -415,7 +415,7 @@ func (ci *crdIpam) toFIPSubnet(routableSubnet *net.IPNet) *net.IPNet {
 }
 
 func (ci *crdIpam) syncCacheAfterCreate(ip string, key string, att string, policy constant.ReleasePolicy, subnet string) {
-	tmp := &FloatIPObj{
+	tmp := &FloatingIPObj{
 		key:    key,
 		att:    att,
 		policy: policy,
@@ -427,7 +427,7 @@ func (ci *crdIpam) syncCacheAfterCreate(ip string, key string, att string, polic
 }
 
 func (ci *crdIpam) syncCacheAfterDel(ip string) {
-	tmp := &FloatIPObj{
+	tmp := &FloatingIPObj{
 		key:    "",
 		att:    "",
 		policy: constant.ReleasePolicyPodDelete,

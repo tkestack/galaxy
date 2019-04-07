@@ -1,14 +1,14 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: floatips.galaxy.k8s.io
+  name: floatingips.galaxy.k8s.io
 spec:
   group: galaxy.k8s.io
   version: v1alpha1
   names:
-    kind: FloatIp
-    plural: floatips
-  scope: Namespaced
+    kind: FloatingIP
+    plural: floatingips
+  scope: Cluster
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition

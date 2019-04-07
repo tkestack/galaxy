@@ -19,7 +19,7 @@ limitations under the License.
 package scheme
 
 import (
-	galaxyv1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/floatip/v1alpha1"
+	galaxyv1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

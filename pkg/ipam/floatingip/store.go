@@ -15,20 +15,20 @@ var (
 	ErrNotUpdated = fmt.Errorf("not updated")
 )
 
-func (i *ipam) findAll() (floatingips []database.FloatingIP, err error) {
+func (i *dbIpam) findAll() (floatingips []database.FloatingIP, err error) {
 	err = i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(i.TableName).Find(&floatingips).Error
 	})
 	return
 }
 
-func (i *ipam) findAvailable(limit int, fip *[]database.FloatingIP) error {
+func (i *dbIpam) findAvailable(limit int, fip *[]database.FloatingIP) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(i.TableName).Limit(limit).Where("`key` = \"\"").Find(fip).Error
 	})
 }
 
-func (i *ipam) findByKey(key string, fip *database.FloatingIP) error {
+func (i *dbIpam) findByKey(key string, fip *database.FloatingIP) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		db := tx.Table(i.TableName).Where("`key` = ?", key).Find(fip)
 		if db.RecordNotFound() {
@@ -38,7 +38,7 @@ func (i *ipam) findByKey(key string, fip *database.FloatingIP) error {
 	})
 }
 
-func (i *ipam) findByPrefix(prefix string, fips *[]database.FloatingIP) error {
+func (i *dbIpam) findByPrefix(prefix string, fips *[]database.FloatingIP) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		db := tx.Table(i.TableName).Where("substr(`key`, 1, length(?)) = ?", prefix, prefix).Find(fips)
 		if db.RecordNotFound() {
@@ -61,7 +61,7 @@ func allocateOp(fip *database.FloatingIP, tableName string) database.ActionFunc 
 	}
 }
 
-func (i *ipam) updateOneInSubnet(oldK, newK, subnet string, policy uint16, attr string) error {
+func (i *dbIpam) updateOneInSubnet(oldK, newK, subnet string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		// UPDATE `ip_pool` SET `key` = 'newK', `policy` = '0', `attr` = ''  WHERE (`key` = "oldK" AND subnet = '10.180.1.3/32') ORDER BY updated_at desc LIMIT 1
 		ret := tx.Table(i.Name()).Where("`key` = ? AND subnet = ?", oldK, subnet).
@@ -77,13 +77,13 @@ func (i *ipam) updateOneInSubnet(oldK, newK, subnet string, policy uint16, attr 
 	})
 }
 
-func (i *ipam) create(fip *database.FloatingIP) error {
+func (i *dbIpam) create(fip *database.FloatingIP) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(i.TableName).Create(&fip).Error
 	})
 }
 
-func (i *ipam) releaseIP(key string, ip uint32) error {
+func (i *dbIpam) releaseIP(key string, ip uint32) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		ret := tx.Table(i.Name()).Where("ip = ? AND `key` = ?", ip, key).
 			UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": "", `updated_at`: time.Now()})
@@ -97,7 +97,7 @@ func (i *ipam) releaseIP(key string, ip uint32) error {
 	})
 }
 
-func (i *ipam) releaseByPrefix(prefix string) error {
+func (i *dbIpam) releaseByPrefix(prefix string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(i.TableName).Where("substr(`key`, 1, length(?)) = ?", prefix, prefix).
 			UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": "", `updated_at`: time.Now()}).Error
@@ -108,7 +108,7 @@ type Result struct {
 	Subnet string
 }
 
-func (i *ipam) queryByKeyGroupBySubnet(key string) ([]string, error) {
+func (i *dbIpam) queryByKeyGroupBySubnet(key string) ([]string, error) {
 	var results []Result
 	if err := i.store.Transaction(func(tx *gorm.DB) error {
 		ret := tx.Table(i.TableName).Select("subnet").Where("`key` = ?", key).Group("subnet").Order("subnet").Scan(&results)
@@ -126,7 +126,7 @@ func (i *ipam) queryByKeyGroupBySubnet(key string) ([]string, error) {
 	return ret, nil
 }
 
-func (i *ipam) deleteUnScoped(ips []uint32) (int, error) {
+func (i *dbIpam) deleteUnScoped(ips []uint32) (int, error) {
 	if glog.V(4) {
 		for _, ip := range ips {
 			glog.V(4).Infof("will delete unscoped ip: %v", nets.IntToIP(ip))
@@ -143,14 +143,14 @@ func (i *ipam) deleteUnScoped(ips []uint32) (int, error) {
 	})
 }
 
-func (i *ipam) findByIP(ip uint32) (database.FloatingIP, error) {
+func (i *dbIpam) findByIP(ip uint32) (database.FloatingIP, error) {
 	var fip database.FloatingIP
 	return fip, i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(i.TableName).Where(fmt.Sprintf("ip=%d", ip)).First(&fip).Error
 	})
 }
 
-func (i *ipam) allocateSpecificIP(ip uint32, key string, policy uint16, attr string) error {
+func (i *dbIpam) allocateSpecificIP(ip uint32, key string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		ret := tx.Table(i.TableName).Where("ip = ? and `key` = ?", ip, "").
 			UpdateColumns(map[string]interface{}{`key`: key, "policy": policy, "attr": attr, `updated_at`: time.Now()})
@@ -164,7 +164,7 @@ func (i *ipam) allocateSpecificIP(ip uint32, key string, policy uint16, attr str
 	})
 }
 
-func (i *ipam) updatePolicy(ip uint32, key string, policy uint16, attr string) error {
+func (i *dbIpam) updatePolicy(ip uint32, key string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		ret := tx.Table(i.TableName).Where("ip = ? and `key` = ?", ip, key).
 			UpdateColumns(map[string]interface{}{"policy": policy, "attr": attr, `updated_at`: time.Now()})
@@ -176,7 +176,7 @@ func (i *ipam) updatePolicy(ip uint32, key string, policy uint16, attr string) e
 	})
 }
 
-func (i *ipam) updateKey(oldK, newK string) error {
+func (i *dbIpam) updateKey(oldK, newK string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(i.Name()).Where("`key` = ?", oldK).
 			UpdateColumns(map[string]interface{}{
@@ -187,7 +187,7 @@ func (i *ipam) updateKey(oldK, newK string) error {
 	})
 }
 
-func (i *ipam) getIPsByKeyword(tableName, keyword string) ([]database.FloatingIP, error) {
+func (i *dbIpam) getIPsByKeyword(tableName, keyword string) ([]database.FloatingIP, error) {
 	var fips []database.FloatingIP
 	err := i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(tableName).Where("`key` like ?", "%"+keyword+"%").Find(&fips).Error
@@ -195,7 +195,7 @@ func (i *ipam) getIPsByKeyword(tableName, keyword string) ([]database.FloatingIP
 	return fips, err
 }
 
-func (i *ipam) deleteIPs(tableName string, ipToKey map[uint32]string, deleted []string) error {
+func (i *dbIpam) deleteIPs(tableName string, ipToKey map[uint32]string, deleted []string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		for ip, key := range ipToKey {
 			ret := tx.Table(tableName).Where("ip = ? and `key` = ?", strconv.FormatUint(uint64(ip), 10), key).UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": ""})

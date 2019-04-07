@@ -21,7 +21,7 @@ package externalversions
 import (
 	"fmt"
 
-	v1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/floatip/v1alpha1"
+	v1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -53,8 +53,8 @@ func (f *genericInformer) Lister() cache.GenericLister {
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
 	// Group=galaxy.k8s.io, Version=v1alpha1
-	case v1alpha1.SchemeGroupVersion.WithResource("floatips"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Galaxy().V1alpha1().FloatIps().Informer()}, nil
+	case v1alpha1.SchemeGroupVersion.WithResource("floatingips"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Galaxy().V1alpha1().FloatingIPs().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("pools"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Galaxy().V1alpha1().Pools().Informer()}, nil
 

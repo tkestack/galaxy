@@ -19,7 +19,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/floatip/v1alpha1"
+	v1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned/scheme"
 	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	rest "k8s.io/client-go/rest"
@@ -27,7 +27,7 @@ import (
 
 type GalaxyV1alpha1Interface interface {
 	RESTClient() rest.Interface
-	FloatIpsGetter
+	FloatingIPsGetter
 	PoolsGetter
 }
 
@@ -36,8 +36,8 @@ type GalaxyV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *GalaxyV1alpha1Client) FloatIps(namespace string) FloatIpInterface {
-	return newFloatIps(c, namespace)
+func (c *GalaxyV1alpha1Client) FloatingIPs() FloatingIPInterface {
+	return newFloatingIPs(c)
 }
 
 func (c *GalaxyV1alpha1Client) Pools(namespace string) PoolInterface {

@@ -1,7 +1,7 @@
 apiVersion: galaxy.k8s.io/v1alpha1
-kind: Floatip
+kind: FloatingIP
 metadata:
-  name: example-floatip
+  name: example-floatingip
 spec:
   key: pool1_sts_demo_test_test-0
   attribute: 10.0.12.1

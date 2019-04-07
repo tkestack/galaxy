@@ -24,17 +24,18 @@ import (
 
 // +genclient
 // +genclient:noStatus
+// +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-type FloatIp struct {
+type FloatingIP struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// Spec defines the desired identities of FloatIP.
-	Spec FloatIpSpec `json:"spec"`
+	Spec FloatingIPSpec `json:"spec"`
 }
 
-type FloatIpSpec struct {
+type FloatingIPSpec struct {
 	//key can be resolved as pool, namespace name, app name, app type and pod name
 	Key string `json:"key"`
 	//attribute used as node ip
@@ -47,11 +48,11 @@ type FloatIpSpec struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-type FloatIpList struct {
+type FloatingIPList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
 
-	Items []FloatIp `json:"items"`
+	Items []FloatingIP `json:"items"`
 }
 
 // +genclient

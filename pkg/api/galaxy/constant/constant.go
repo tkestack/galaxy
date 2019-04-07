@@ -94,7 +94,7 @@ func ConvertReleasePolicy(policyStr string) ReleasePolicy {
 }
 
 const (
-	ResourceKind = "Floatip"
+	ResourceKind = "FloatingIP"
 	ApiVersion   = "galaxy.k8s.io/v1alpha1"
 	NameSpace    = "floating-ip"
 	IpType       = "ipType"
