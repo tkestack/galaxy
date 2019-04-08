@@ -1,7 +1,6 @@
 package floatingip
 
 import (
-	"encoding/binary"
 	"fmt"
 	"net"
 	"sort"
@@ -368,10 +367,4 @@ func (i *dbIpam) ReleaseIPs(ipToKey map[uint32]string) ([]string, error) {
 		return deleted, err
 	}
 	return deleted, nil
-}
-
-func intToip(nn uint32) string {
-	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, nn)
-	return ip.String()
 }

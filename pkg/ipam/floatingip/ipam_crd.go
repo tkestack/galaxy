@@ -83,10 +83,14 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIP) error {
 
 func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
 	ipStr := strconv.FormatUint(uint64(nets.IPToInt(ip)), 10)
-	if err := ci.createFloatIP(ipStr, key, policy, attr, ""); err != nil {
+	spec, find := ci.caches.allocatedFIPs[ipStr]
+	if !find {
+		return fmt.Errorf("failed to find floating ip by %s in cache", ipStr)
+	}
+	if err := ci.createFloatIP(ipStr, key, policy, attr, spec.subnet); err != nil {
 		return err
 	}
-	ci.syncCacheAfterCreate(ipStr, key, attr, policy, "")
+	ci.syncCacheAfterCreate(ipStr, key, attr, policy, spec.subnet)
 	return nil
 }
 
@@ -535,10 +539,12 @@ func (ci *crdIpam) ReleaseIPs(ipToKey map[uint32]string) ([]string, error) {
 			if v.key == key {
 				if err := ci.deleteFloatIP(strconv.FormatUint(uint64(ip), 10)); err != nil {
 					undeleted = append(undeleted, ip)
+					glog.Errorf("failed to delete %v", ip)
+					continue
 				}
 				ci.syncCacheAfterDel(strconv.FormatUint(uint64(ip), 10))
 				glog.Infof("%v has been deleted", ip)
-				deleted = append(deleted, intToip(ip))
+				deleted = append(deleted, nets.IntToIP(ip).String())
 			} else {
 				glog.Warningf("for %v, key is %s, not %s, without deleting it", ip, v.key, key)
 			}

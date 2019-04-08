@@ -203,7 +203,7 @@ func (i *dbIpam) deleteIPs(tableName string, ipToKey map[uint32]string, deleted 
 				return ret.Error
 			}
 			if ret.RowsAffected == 1 {
-				deleted = append(deleted, intToip(ip))
+				deleted = append(deleted, nets.IntToIP(ip).String())
 			}
 		}
 		return nil

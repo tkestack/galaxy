@@ -13,10 +13,10 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	pageutil "git.code.oa.com/gaiastack/galaxy/pkg/utils/page"
 	"github.com/emicklei/go-restful"
+	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/listers/core/v1"
-	"k8s.io/klog/glog"
 )
 
 type Controller struct {
