@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (ci *crdIpam) listFloatIPs() (*v1alpha1.FloatingIPList, error) {
+func (ci *crdIpam) listFloatingIPs() (*v1alpha1.FloatingIPList, error) {
 	val, err := ci.ipType.String()
 	if err != nil {
 		return nil, err
@@ -24,8 +24,8 @@ func (ci *crdIpam) listFloatIPs() (*v1alpha1.FloatingIPList, error) {
 	return fips, nil
 }
 
-func (ci *crdIpam) createFloatIP(name string, key string, policy constant.ReleasePolicy, attr string, subnet string) error {
-	glog.V(4).Infof("create floatIP name %s, key %s, subnet %s, policy %v", name, key, subnet, policy)
+func (ci *crdIpam) createFloatingIP(name string, key string, policy constant.ReleasePolicy, attr string, subnet string) error {
+	glog.V(4).Infof("create floatingIP name %s, key %s, subnet %s, policy %v", name, key, subnet, policy)
 	fip := &v1alpha1.FloatingIP{}
 	fip.Kind = constant.ResourceKind
 	fip.APIVersion = constant.ApiVersion
@@ -47,18 +47,18 @@ func (ci *crdIpam) createFloatIP(name string, key string, policy constant.Releas
 	return nil
 }
 
-func (ci *crdIpam) deleteFloatIP(ip string) error {
-	glog.V(4).Infof("delete floatIP name %s", ip)
-	return ci.client.GalaxyV1alpha1().FloatingIPs().Delete(ip, &metav1.DeleteOptions{})
+func (ci *crdIpam) deleteFloatingIP(name string) error {
+	glog.V(4).Infof("delete floatingIP name %s", name)
+	return ci.client.GalaxyV1alpha1().FloatingIPs().Delete(name, &metav1.DeleteOptions{})
 }
 
-func (ci *crdIpam) getFloatIP(name string) error {
+func (ci *crdIpam) getFloatingIP(name string) error {
 	_, err := ci.client.GalaxyV1alpha1().FloatingIPs().Get(name, metav1.GetOptions{})
 	return err
 }
 
-func (ci *crdIpam) updateFloatIP(name, key, subnet string, policy constant.ReleasePolicy, attr string) error {
-	glog.V(4).Infof("update floatIP name %s, key %s, subnet %s, policy %v", name, key, subnet, policy)
+func (ci *crdIpam) updateFloatingIP(name, key, subnet string, policy constant.ReleasePolicy, attr string) error {
+	glog.V(4).Infof("update floatingIP name %s, key %s, subnet %s, policy %v", name, key, subnet, policy)
 	fip, err := ci.client.GalaxyV1alpha1().FloatingIPs().Get(name, metav1.GetOptions{})
 	if err != nil {
 		return err

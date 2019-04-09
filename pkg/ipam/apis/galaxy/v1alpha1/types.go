@@ -31,7 +31,7 @@ type FloatingIP struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Spec defines the desired identities of FloatIP.
+	// Spec defines the desired identities of FloatingIP.
 	Spec FloatingIPSpec `json:"spec"`
 }
 
