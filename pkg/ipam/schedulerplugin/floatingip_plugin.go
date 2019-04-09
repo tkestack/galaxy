@@ -45,6 +45,7 @@ type Conf struct {
 	FloatingIPKey         string                   `json:"floatingipKey"`       // configmap floatingip data key
 	SecondFloatingIPKey   string                   `json:"secondFloatingipKey"` // configmap second floatingip data key
 	CloudProviderGRPCAddr string                   `json:"cloudProviderGrpcAddr"`
+	StorageDriver         string                   `json:"storageDriver"`
 }
 
 // FloatingIPPlugin Allocates Floating IP for deployments
@@ -82,20 +83,30 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 	if conf.SecondFloatingIPKey == "" {
 		conf.SecondFloatingIPKey = "second_floatingips"
 	}
-	glog.Infof("floating ip config: %v", conf)
-	db := database.NewDBRecorder(conf.DBConfig)
-	if err := db.Run(); err != nil {
-		return nil, err
+	if conf.StorageDriver == "" {
+		conf.StorageDriver = "mysql"
 	}
+	glog.Infof("floating ip config: %v", conf)
 	plugin := &FloatingIPPlugin{
-		ipam:              floatingip.NewIPAM(db),
-		secondIPAM:        floatingip.NewIPAMWithTableName(db, database.SecondFloatingipTableName),
 		nodeSubnet:        make(map[string]*net.IPNet),
 		PluginFactoryArgs: args,
 		conf:              &conf,
 		unreleased:        make(chan *releaseEvent, 100),
-		db:                db,
 		dpLockPool:        keylock.NewKeylock(),
+	}
+	if conf.StorageDriver == "mysql" {
+		db := database.NewDBRecorder(conf.DBConfig)
+		if err := db.Run(); err != nil {
+			return nil, err
+		}
+		plugin.db = db
+		plugin.ipam = floatingip.NewIPAM(db)
+		plugin.secondIPAM = floatingip.NewIPAMWithTableName(db, database.SecondFloatingipTableName)
+	} else if conf.StorageDriver == "k8s-crd" {
+		plugin.ipam = floatingip.NewCrdIPAM(args.CrdClient, floatingip.InternalIp)
+		plugin.secondIPAM = floatingip.NewCrdIPAM(args.CrdClient, floatingip.ExternalIp)
+	} else {
+		return nil, fmt.Errorf("unknown storage driver %s", conf.StorageDriver)
 	}
 	plugin.hasSecondIPConf.Store(false)
 	plugin.getDeployment = func(name, namespace string) (*appv1.Deployment, error) {
@@ -879,4 +890,12 @@ func getAttr(pod *corev1.Pod, nodeName string) string {
 
 func (p *FloatingIPPlugin) GetDB() *database.DBRecorder {
 	return p.db
+}
+
+func (p *FloatingIPPlugin) GetIpam() floatingip.IPAM {
+	return p.ipam
+}
+
+func (p *FloatingIPPlugin) GetSecondIpam() floatingip.IPAM {
+	return p.secondIPAM
 }

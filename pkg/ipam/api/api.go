@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin/util"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/httputil"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	pageutil "git.code.oa.com/gaiastack/galaxy/pkg/utils/page"
@@ -19,8 +20,16 @@ import (
 )
 
 type Controller struct {
-	DB        *database.DBRecorder
-	PodLister v1.PodLister
+	ipam, secondIpam floatingip.IPAM
+	podLister        v1.PodLister
+}
+
+func NewController(ipam, secondIpam floatingip.IPAM, lister v1.PodLister) *Controller {
+	return &Controller{
+		ipam:       ipam,
+		secondIpam: secondIpam,
+		podLister:  lister,
+	}
 }
 
 type FloatingIP struct {
@@ -39,55 +48,28 @@ type FloatingIP struct {
 
 func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 	keyword := req.QueryParameter("keyword")
-	fips, err := database.FloatingIPsByKeyword(c.DB, database.DefaultFloatingipTableName, keyword)
+
+	ret, err := listIPs(keyword, c.ipam, c.secondIpam)
 	if err != nil {
 		httputil.InternalError(resp, err)
 		return
 	}
-	secondIPs, err := database.FloatingIPsByKeyword(c.DB, database.SecondFloatingipTableName, keyword)
-	if err != nil {
-		if !(strings.Contains(err.Error(), "Table") && strings.Contains(err.Error(), "doesn't exist")) {
-			httputil.InternalError(resp, err)
-			return
-		}
-	}
-	ret := transform(fips, secondIPs)
 	sortParam, page, size := pageutil.PagingParams(req)
 	pagin := format(sortParam, page, size, ret)
-	// filling other fields after paging benefits api performance
-	if err := c.fillReleasableAndStatus(ret); err != nil {
+	if err := fillReleasableAndStatus(c.podLister, ret); err != nil {
 		httputil.InternalError(resp, err)
 		return
 	}
 	resp.WriteEntity(*pagin) // nolint: errcheck
 }
 
-func transform(fips, secondIPs []database.FloatingIP) []FloatingIP {
-	var ret []FloatingIP
-	for _, fip := range [][]database.FloatingIP{fips, secondIPs} {
-		for i := range fip {
-			keyObj := util.ParseKey(fip[i].Key)
-			ret = append(ret, FloatingIP{IP: nets.IntToIP(fip[i].IP).String(),
-				Namespace:    keyObj.Namespace,
-				AppName:      keyObj.AppName,
-				PodName:      keyObj.PodName,
-				PoolName:     keyObj.PoolName,
-				IsDeployment: keyObj.IsDeployment,
-				Policy:       fip[i].Policy,
-				UpdateTime:   fip[i].UpdatedAt.Unix(),
-				attr:         fip[i].Attr})
-		}
-	}
-	return ret
-}
-
-func (c *Controller) fillReleasableAndStatus(ips []FloatingIP) error {
+func fillReleasableAndStatus(lister v1.PodLister, ips []FloatingIP) error {
 	for i := range ips {
 		ips[i].Releasable = true
 		if ips[i].PodName == "" {
 			continue
 		}
-		pod, err := c.PodLister.Pods(ips[i].Namespace).Get(ips[i].PodName)
+		pod, err := lister.Pods(ips[i].Namespace).Get(ips[i].PodName)
 		if err != nil || pod == nil {
 			ips[i].Status = "Deleted"
 			continue
@@ -188,7 +170,6 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	expectIPtoKey := make(map[uint32]string)
-	allIPs := make([]uint32, len(releaseIPReq.IPs))
 	for i := range releaseIPReq.IPs {
 		temp := releaseIPReq.IPs[i]
 		ip := net.ParseIP(temp.IP)
@@ -196,60 +177,93 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 			httputil.BadRequest(resp, fmt.Errorf("%q is not a valid ip", temp.IP))
 			return
 		}
-		allIPs[i] = nets.IPToInt(ip)
+		ipInt := nets.IPToInt(ip)
 		keyObj := util.NewKeyObj(temp.IsDeployment, temp.Namespace, temp.AppName, temp.PodName, temp.PoolName)
-		expectIPtoKey[allIPs[i]] = keyObj.KeyInDB
+		expectIPtoKey[ipInt] = keyObj.KeyInDB
 	}
-	fipsInDB, err := database.FloatingIPsByIPS(c.DB, database.DefaultFloatingipTableName, allIPs)
-	if err != nil {
-		httputil.InternalError(resp, err)
+	if err := fillReleasableAndStatus(c.podLister, releaseIPReq.IPs); err != nil {
+		httputil.BadRequest(resp, err)
 		return
 	}
-	secondFipsInDB, err := database.FloatingIPsByIPS(c.DB, database.SecondFloatingipTableName, allIPs)
-	if err != nil {
-		httputil.InternalError(resp, err)
-		return
-	}
-	var filteredFIP, filteredSecondIP []database.FloatingIP
-	var logObjs []logObj
-	for i := range fipsInDB {
-		if expectKey, exist := expectIPtoKey[fipsInDB[i].IP]; exist {
-			if expectKey == fipsInDB[i].Key {
-				// check if ip got released and reallocated to another pod, if it does, we should not release it
-				filteredFIP = append(filteredFIP, fipsInDB[i])
-				logObjs = append(logObjs, logObj{IP: nets.IntToIP(fipsInDB[i].IP), Key: expectKey})
-			}
-		}
-	}
-	for i := range secondFipsInDB {
-		if expectKey, exist := expectIPtoKey[secondFipsInDB[i].IP]; exist {
-			if expectKey == secondFipsInDB[i].Key {
-				// check if ip got released and reallocated to another pod, if it does, we should not release it
-				filteredSecondIP = append(filteredSecondIP, secondFipsInDB[i])
-				logObjs = append(logObjs, logObj{IP: nets.IntToIP(secondFipsInDB[i].IP), Key: expectKey})
-			}
-		}
-	}
-	transformed := transform(filteredFIP, filteredSecondIP)
-	if err := c.fillReleasableAndStatus(transformed); err != nil {
-		httputil.InternalError(resp, err)
-		return
-	}
-	for i := range transformed {
-		if !transformed[i].Releasable {
-			httputil.BadRequest(resp, fmt.Errorf("%s is unreleasable, status %s", transformed[i].IP, transformed[i].Status))
+	for _, ip := range releaseIPReq.IPs {
+		if !ip.Releasable {
+			httputil.BadRequest(resp, fmt.Errorf("%s is not releasable", ip.IP))
 			return
 		}
 	}
-	if err := database.ReleaseFloatingIPs(c.DB, filteredFIP, filteredSecondIP); err != nil {
-		httputil.InternalError(resp, err)
+	if err := batchDeleteIPs(expectIPtoKey, c.ipam, c.secondIpam); err != nil {
+		httputil.BadRequest(resp, err)
 		return
 	}
-	glog.Infof("released IPs: %v", logObjs)
 	httputil.Ok(resp)
 }
 
 type logObj struct {
 	IP  net.IP
 	Key string
+}
+
+func listIPs(keyword string, ipam floatingip.IPAM, secondIpam floatingip.IPAM) ([]FloatingIP, error) {
+	var resp []FloatingIP
+	fips, err := ipam.GetAllIPs(keyword)
+	if err != nil {
+		return resp, err
+	}
+	for _, fip := range fips {
+		keyObj := util.ParseKey(fip.Key)
+		tmp := FloatingIP{
+			IP:           strconv.FormatUint(uint64(fip.IP), 10),
+			Namespace:    keyObj.Namespace,
+			AppName:      keyObj.AppName,
+			PodName:      keyObj.PodName,
+			PoolName:     keyObj.PoolName,
+			IsDeployment: keyObj.IsDeployment,
+			Policy:       fip.Policy,
+			attr:         fip.Attr,
+		}
+		resp = append(resp, tmp)
+	}
+	if secondIpam != nil {
+		secondFips, err := secondIpam.GetAllIPs(keyword)
+		if err != nil {
+			return resp, err
+		}
+		for _, fip := range secondFips {
+			keyObj := util.ParseKey(fip.Key)
+			tmp := FloatingIP{
+				IP:           strconv.FormatUint(uint64(fip.IP), 10),
+				Namespace:    keyObj.Namespace,
+				AppName:      keyObj.AppName,
+				PodName:      keyObj.PodName,
+				PoolName:     keyObj.PoolName,
+				IsDeployment: keyObj.IsDeployment,
+				Policy:       fip.Policy,
+				attr:         fip.Attr,
+			}
+			resp = append(resp, tmp)
+		}
+	}
+	return resp, nil
+}
+
+func batchDeleteIPs(ipToKey map[uint32]string, ipam floatingip.IPAM, secondIpam floatingip.IPAM) error {
+	deletedIP, err := ipam.ReleaseIPs(ipToKey)
+	if len(deletedIP) > 0 {
+		glog.Infof("releaseIPs %v", deletedIP)
+	}
+	if err != nil {
+		return err
+	}
+	if secondIpam != nil {
+		deletedIP2, err := secondIpam.ReleaseIPs(ipToKey)
+		if len(deletedIP2) > 0 {
+			glog.Infof("releaseIPs in second IPAM %v", deletedIP2)
+		}
+		if err != nil {
+			if !(strings.Contains(err.Error(), "Table") && strings.Contains(err.Error(), "doesn't exist")) {
+				return err
+			}
+		}
+	}
+	return nil
 }

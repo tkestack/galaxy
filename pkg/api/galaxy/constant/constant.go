@@ -92,3 +92,10 @@ func ConvertReleasePolicy(policyStr string) ReleasePolicy {
 		return ReleasePolicyPodDelete
 	}
 }
+
+const (
+	ResourceKind = "FloatingIP"
+	ApiVersion   = "galaxy.k8s.io/v1alpha1"
+	NameSpace    = "floating-ip"
+	IpType       = "ipType"
+)

@@ -15,11 +15,11 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 )
 
-func Start(t *testing.T) *ipam {
+func Start(t *testing.T) *dbIpam {
 	return CreateIPAMWithTableName(t, database.DefaultFloatingipTableName)
 }
 
-func CreateIPAMWithTableName(t *testing.T, tableName string) *ipam {
+func CreateIPAMWithTableName(t *testing.T, tableName string) *dbIpam {
 	var err error
 	db, err := database.NewTestDB()
 	if err != nil {
@@ -47,7 +47,7 @@ func CreateIPAMWithTableName(t *testing.T, tableName string) *ipam {
 	if m, err := i.ByPrefix(""); err != nil || len(m) != 14 {
 		t.Fatalf("map %v, err %v", m, err)
 	}
-	return i.(*ipam)
+	return i.(*dbIpam)
 }
 
 func TestAllocateRelease(t *testing.T) {
@@ -165,7 +165,7 @@ func TestApplyFloatingIPs(t *testing.T) {
 }
 
 func TestRaceCondition(t *testing.T) {
-	var ipams []*ipam
+	var ipams []*dbIpam
 	for i := 0; i < 7; i++ {
 		ipam := Start(t)
 		defer ipam.Shutdown()
@@ -177,7 +177,7 @@ func TestRaceCondition(t *testing.T) {
 	for i, m := range ipams {
 		wg.Add(1)
 		j := i
-		go func(m *ipam) {
+		go func(m *dbIpam) {
 			defer wg.Done()
 			keys := []string{fmt.Sprintf("pod%d", j*2), fmt.Sprintf("pod%d", j*2+1)}
 			allocated, err := m.allocate(keys)
@@ -409,7 +409,7 @@ func TestGetRoutableSubnet(t *testing.T) {
 	if err := json.Unmarshal([]byte(`[{"routableSubnet":"10.239.228.0/22","ips":["10.239.238.3~10.239.238.6","10.239.238.11","10.239.238.26~10.239.238.61","10.239.238.115~10.239.238.116","10.239.238.164","10.239.238.166","10.239.238.207","10.239.238.226","10.239.238.236"],"subnet":"10.239.236.0/22","gateway":"10.239.236.1","vlan":13}]`), &fips); err != nil {
 		t.Fatal(err)
 	}
-	ipam := &ipam{FloatingIPs: fips}
+	ipam := &dbIpam{FloatingIPs: fips}
 	ipnet := ipam.RoutableSubnet(net.ParseIP("10.239.229.142"))
 	if ipnet == nil {
 		t.Fatal()

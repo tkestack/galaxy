@@ -19,7 +19,7 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned/typed/floatip/v1alpha1"
+	v1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned/typed/galaxy/v1alpha1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
 )
@@ -28,8 +28,8 @@ type FakeGalaxyV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeGalaxyV1alpha1) FloatIps(namespace string) v1alpha1.FloatIpInterface {
-	return &FakeFloatIps{c, namespace}
+func (c *FakeGalaxyV1alpha1) FloatingIPs() v1alpha1.FloatingIPInterface {
+	return &FakeFloatingIPs{c}
 }
 
 func (c *FakeGalaxyV1alpha1) Pools(namespace string) v1alpha1.PoolInterface {

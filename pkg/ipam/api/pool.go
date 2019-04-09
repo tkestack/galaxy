@@ -3,9 +3,9 @@ package api
 import (
 	"fmt"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/floatip/v1alpha1"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
-	list "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/listers/floatip/v1alpha1"
+	list "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/httputil"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"

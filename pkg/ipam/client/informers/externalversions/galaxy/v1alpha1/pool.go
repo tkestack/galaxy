@@ -21,69 +21,69 @@ package v1alpha1
 import (
 	time "time"
 
-	floatipv1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/floatip/v1alpha1"
+	galaxyv1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 	versioned "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
 	internalinterfaces "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/listers/floatip/v1alpha1"
+	v1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
 )
 
-// FloatIpInformer provides access to a shared informer and lister for
-// FloatIps.
-type FloatIpInformer interface {
+// PoolInformer provides access to a shared informer and lister for
+// Pools.
+type PoolInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.FloatIpLister
+	Lister() v1alpha1.PoolLister
 }
 
-type floatIpInformer struct {
+type poolInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
 }
 
-// NewFloatIpInformer constructs a new informer for FloatIp type.
+// NewPoolInformer constructs a new informer for Pool type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFloatIpInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredFloatIpInformer(client, namespace, resyncPeriod, indexers, nil)
+func NewPoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredPoolInformer(client, namespace, resyncPeriod, indexers, nil)
 }
 
-// NewFilteredFloatIpInformer constructs a new informer for FloatIp type.
+// NewFilteredPoolInformer constructs a new informer for Pool type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredFloatIpInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredPoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.GalaxyV1alpha1().FloatIps(namespace).List(options)
+				return client.GalaxyV1alpha1().Pools(namespace).List(options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.GalaxyV1alpha1().FloatIps(namespace).Watch(options)
+				return client.GalaxyV1alpha1().Pools(namespace).Watch(options)
 			},
 		},
-		&floatipv1alpha1.FloatIp{},
+		&galaxyv1alpha1.Pool{},
 		resyncPeriod,
 		indexers,
 	)
 }
 
-func (f *floatIpInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredFloatIpInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+func (f *poolInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+	return NewFilteredPoolInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *floatIpInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&floatipv1alpha1.FloatIp{}, f.defaultInformer)
+func (f *poolInformer) Informer() cache.SharedIndexInformer {
+	return f.factory.InformerFor(&galaxyv1alpha1.Pool{}, f.defaultInformer)
 }
 
-func (f *floatIpInformer) Lister() v1alpha1.FloatIpLister {
-	return v1alpha1.NewFloatIpLister(f.Informer().GetIndexer())
+func (f *poolInformer) Lister() v1alpha1.PoolLister {
+	return v1alpha1.NewPoolLister(f.Informer().GetIndexer())
 }

@@ -27,7 +27,7 @@ CODEGEN_PKG=${CODEGEN_PKG:-$(cd ${SCRIPT_ROOT}; ls -d -1 ./vendor/k8s.io/code-ge
 #                  instead of the $GOPATH directly. For normal projects this can be dropped.
 ${CODEGEN_PKG}/generate-groups.sh "deepcopy,client,informer,lister" \
   git.code.oa.com/gaiastack/galaxy/pkg/ipam/client git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis \
-  floatip:v1alpha1 \
+  galaxy:v1alpha1 \
   --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.."
 
 # To use your own boilerplate text append:
