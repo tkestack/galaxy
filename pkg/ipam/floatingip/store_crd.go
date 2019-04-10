@@ -24,7 +24,7 @@ func (ci *crdIpam) listFloatingIPs() (*v1alpha1.FloatingIPList, error) {
 	return fips, nil
 }
 
-func (ci *crdIpam) createFloatingIP(name string, key string, policy constant.ReleasePolicy, attr string, subnet string) error {
+func (ci *crdIpam) createFloatingIP(name string, key string, policy constant.ReleasePolicy, attr string, subnet string, updateTime int64) error {
 	glog.V(4).Infof("create floatingIP name %s, key %s, subnet %s, policy %v", name, key, subnet, policy)
 	fip := &v1alpha1.FloatingIP{}
 	fip.Kind = constant.ResourceKind
@@ -34,6 +34,7 @@ func (ci *crdIpam) createFloatingIP(name string, key string, policy constant.Rel
 	fip.Spec.Policy = policy
 	fip.Spec.Attribute = attr
 	fip.Spec.Subnet = subnet
+	fip.Spec.UpdateTime = updateTime
 	ipTypeVal, err := ci.ipType.String()
 	if err != nil {
 		return err
@@ -57,7 +58,7 @@ func (ci *crdIpam) getFloatingIP(name string) error {
 	return err
 }
 
-func (ci *crdIpam) updateFloatingIP(name, key, subnet string, policy constant.ReleasePolicy, attr string) error {
+func (ci *crdIpam) updateFloatingIP(name, key, subnet string, policy constant.ReleasePolicy, attr string, updateTime int64) error {
 	glog.V(4).Infof("update floatingIP name %s, key %s, subnet %s, policy %v", name, key, subnet, policy)
 	fip, err := ci.client.GalaxyV1alpha1().FloatingIPs().Get(name, metav1.GetOptions{})
 	if err != nil {
@@ -67,6 +68,7 @@ func (ci *crdIpam) updateFloatingIP(name, key, subnet string, policy constant.Re
 	fip.Spec.Policy = policy
 	fip.Spec.Subnet = subnet
 	fip.Spec.Attribute = attr
+	fip.Spec.UpdateTime = updateTime
 	_, err = ci.client.GalaxyV1alpha1().FloatingIPs().Update(fip)
 	return err
 }

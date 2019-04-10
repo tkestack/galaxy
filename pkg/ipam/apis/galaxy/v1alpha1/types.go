@@ -44,6 +44,8 @@ type FloatingIPSpec struct {
 	Policy constant.ReleasePolicy `json:"policy"`
 	//subnet used as node's subnet
 	Subnet string `json:"subnet"`
+	//FloatingIP update(allocate, release or update) timestamp
+	UpdateTime int64 `json:"updateTime"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
