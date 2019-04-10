@@ -17,8 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
+	"time"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -45,7 +46,7 @@ type FloatingIPSpec struct {
 	//subnet used as node's subnet
 	Subnet string `json:"subnet"`
 	//FloatingIP update(allocate, release or update) timestamp
-	UpdateTime int64 `json:"updateTime"`
+	UpdateTime time.Time `json:"updateTime"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

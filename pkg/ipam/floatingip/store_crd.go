@@ -2,6 +2,7 @@ package floatingip
 
 import (
 	"fmt"
+	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
@@ -24,7 +25,7 @@ func (ci *crdIpam) listFloatingIPs() (*v1alpha1.FloatingIPList, error) {
 	return fips, nil
 }
 
-func (ci *crdIpam) createFloatingIP(name string, key string, policy constant.ReleasePolicy, attr string, subnet string, updateTime int64) error {
+func (ci *crdIpam) createFloatingIP(name string, key string, policy constant.ReleasePolicy, attr string, subnet string, updateTime time.Time) error {
 	glog.V(4).Infof("create floatingIP name %s, key %s, subnet %s, policy %v", name, key, subnet, policy)
 	fip := &v1alpha1.FloatingIP{}
 	fip.Kind = constant.ResourceKind
@@ -58,7 +59,7 @@ func (ci *crdIpam) getFloatingIP(name string) error {
 	return err
 }
 
-func (ci *crdIpam) updateFloatingIP(name, key, subnet string, policy constant.ReleasePolicy, attr string, updateTime int64) error {
+func (ci *crdIpam) updateFloatingIP(name, key, subnet string, policy constant.ReleasePolicy, attr string, updateTime time.Time) error {
 	glog.V(4).Infof("update floatingIP name %s, key %s, subnet %s, policy %v", name, key, subnet, policy)
 	fip, err := ci.client.GalaxyV1alpha1().FloatingIPs().Get(name, metav1.GetOptions{})
 	if err != nil {
