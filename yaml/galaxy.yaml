@@ -17,7 +17,7 @@ spec:
       hostNetwork: true
       hostPID: true
       containers:
-      - image: docker.oa.com:8080/library/galaxy:1.0.0-alpha
+      - image: galaxy:1.0.0-alpha
         imagePullPolicy: Always
         name: galaxy
         resources:
@@ -82,8 +82,13 @@ metadata:
 data:
   galaxy.json: |
     {
-      "NetworkConf":[{"cniVersion":"0.2.0","name":"tke-route-eni","type":"tke-route-eni","eni":"eth1","routeTable":1}],
-      "DefaultNetworks": ["tke-route-eni"]
+      "NetworkConf":[
+        {"type":"tke-route-eni","eni":"eth1","routeTable":1},
+        {"type":"galaxy-flannel", "delegate":{"type":"galaxy-veth"},"subnetFile":"/run/flannel/subnet.env"},
+        {"type":"galaxy-k8s-vlan", "device":"eth1", "default_bridge_name": "br0"},
+        {"type": "galaxy-k8s-sriov", "device": "eth1", "vf_num": 10}
+      ],
+      "DefaultNetworks": ["galaxy-flannel"]
     }
 ---
 apiVersion: v1
