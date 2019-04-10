@@ -90,9 +90,12 @@ func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.Rel
 		return fmt.Errorf("failed to find floating ip by %s in cache", ipStr)
 	}
 	if err := ci.createFloatingIP(ipStr, key, policy, attr, spec.subnet); err != nil {
+		glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
 		return err
 	}
+	ci.caches.cacheLock.Lock()
 	ci.syncCacheAfterCreate(ipStr, key, attr, policy, spec.subnet)
+	ci.caches.cacheLock.Unlock()
 	return nil
 }
 
@@ -118,6 +121,7 @@ func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, polic
 		ipStr = k
 		if v.subnet == routableSubnet.String() {
 			if err = ci.createFloatingIP(ipStr, key, policy, attr, v.subnet); err != nil {
+				glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
 				ci.caches.cacheLock.Unlock()
 				return
 			}
@@ -147,6 +151,7 @@ func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy con
 	for k, v := range ci.caches.allocatedFIPs {
 		if v.key == oldK && v.subnet == subnet {
 			if err := ci.updateFloatingIP(k, newK, subnet, policy, attr); err != nil {
+				glog.Errorf("failed to update floatingIP %s: %v", k, err)
 				return err
 			}
 			v.key = newK
@@ -162,6 +167,7 @@ func (ci *crdIpam) UpdateKey(oldK, newK string) error {
 	for k, v := range ci.caches.allocatedFIPs {
 		if v.key == oldK {
 			if err := ci.updateFloatingIP(k, newK, v.subnet, v.policy, v.att); err != nil {
+				glog.Errorf("failed to update floatingIP %s: %v", k, err)
 				return err
 			}
 			v.key = newK
@@ -180,6 +186,7 @@ func (ci *crdIpam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePo
 		return fmt.Errorf("failed to find floatIP in cache by IP %s", ipStr)
 	}
 	if err := ci.updateFloatingIP(ipStr, key, v.subnet, policy, attr); err != nil {
+		glog.Errorf("failed to update floatingIP %s: %v", ipStr, err)
 		return err
 	}
 	v.policy = policy
@@ -420,6 +427,8 @@ func (ci *crdIpam) toFIPSubnet(routableSubnet *net.IPNet) *net.IPNet {
 	return nil
 }
 
+//cacheLock is used when the function called,
+//don't use lock in the function, otherwise deadlock will be caused
 func (ci *crdIpam) syncCacheAfterCreate(ip string, key string, att string, policy constant.ReleasePolicy, subnet string) {
 	tmp := &FloatingIPObj{
 		key:    key,
@@ -427,13 +436,13 @@ func (ci *crdIpam) syncCacheAfterCreate(ip string, key string, att string, polic
 		policy: policy,
 		subnet: subnet,
 	}
-	ci.caches.cacheLock.Lock()
-	defer ci.caches.cacheLock.Unlock()
 	ci.caches.allocatedFIPs[ip] = tmp
 	delete(ci.caches.unallocatedFIPs, ip)
 	return
 }
 
+//cacheLock is used when the function called,
+//don't use lock in the function, otherwise deadlock will be caused
 func (ci *crdIpam) syncCacheAfterDel(ip string) {
 	tmp := &FloatingIPObj{
 		key:    "",
@@ -441,8 +450,6 @@ func (ci *crdIpam) syncCacheAfterDel(ip string) {
 		policy: constant.ReleasePolicyPodDelete,
 		subnet: ci.caches.allocatedFIPs[ip].subnet,
 	}
-	ci.caches.cacheLock.Lock()
-	defer ci.caches.cacheLock.Unlock()
 	delete(ci.caches.allocatedFIPs, ip)
 	ci.caches.unallocatedFIPs[ip] = tmp
 	return
