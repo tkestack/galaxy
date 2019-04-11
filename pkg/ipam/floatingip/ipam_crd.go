@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	crd_clientset "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
@@ -32,10 +33,11 @@ func (t *Type) String() (string, error) {
 }
 
 type FloatingIPObj struct {
-	key    string
-	att    string
-	policy constant.ReleasePolicy
-	subnet string
+	key        string
+	att        string
+	policy     constant.ReleasePolicy
+	subnet     string
+	updateTime time.Time
 }
 
 //in FIP cache, key is FloatingIP name (ip typed as uint32)
@@ -89,12 +91,13 @@ func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.Rel
 	if !find {
 		return fmt.Errorf("failed to find floating ip by %s in cache", ipStr)
 	}
-	if err := ci.createFloatingIP(ipStr, key, policy, attr, spec.subnet); err != nil {
+	date := time.Now()
+	if err := ci.createFloatingIP(ipStr, key, policy, attr, spec.subnet, date); err != nil {
 		glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
 		return err
 	}
 	ci.caches.cacheLock.Lock()
-	ci.syncCacheAfterCreate(ipStr, key, attr, policy, spec.subnet)
+	ci.syncCacheAfterCreate(ipStr, key, attr, policy, spec.subnet, date)
 	ci.caches.cacheLock.Unlock()
 	return nil
 }
@@ -120,13 +123,14 @@ func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, polic
 		//find an unallocated fip, then use it
 		ipStr = k
 		if v.subnet == routableSubnet.String() {
-			if err = ci.createFloatingIP(ipStr, key, policy, attr, v.subnet); err != nil {
+			date := time.Now()
+			if err = ci.createFloatingIP(ipStr, key, policy, attr, v.subnet, date); err != nil {
 				glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
 				ci.caches.cacheLock.Unlock()
 				return
 			}
 			//sync cache when crd create success
-			ci.syncCacheAfterCreate(ipStr, key, attr, policy, v.subnet)
+			ci.syncCacheAfterCreate(ipStr, key, attr, policy, v.subnet, date)
 			break
 		}
 	}
@@ -148,15 +152,33 @@ func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, polic
 func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error {
 	ci.caches.cacheLock.Lock()
 	defer ci.caches.cacheLock.Unlock()
+	var (
+		recordTs int64
+		recordIP string
+		latest   *FloatingIPObj
+	)
+	//find latest floatingIP by updateTime
 	for k, v := range ci.caches.allocatedFIPs {
 		if v.key == oldK && v.subnet == subnet {
-			if err := ci.updateFloatingIP(k, newK, subnet, policy, attr); err != nil {
-				glog.Errorf("failed to update floatingIP %s: %v", k, err)
-				return err
+			if v.updateTime.Unix() > recordTs {
+				recordIP = k
+				latest = v
+				recordTs = v.updateTime.Unix()
 			}
-			v.key = newK
-			return nil
 		}
+	}
+	if latest != nil {
+		date := time.Now()
+		if err := ci.updateFloatingIP(recordIP, newK, subnet, policy, attr, date); err != nil {
+			glog.Errorf("failed to update floatingIP %s: %v", recordIP, err)
+			return err
+		}
+		latest.key = newK
+		latest.updateTime = date
+		latest.subnet = subnet
+		latest.policy = policy
+		latest.att = attr
+		return nil
 	}
 	return fmt.Errorf("failed to find floatIP by key %s", oldK)
 }
@@ -166,11 +188,13 @@ func (ci *crdIpam) UpdateKey(oldK, newK string) error {
 	defer ci.caches.cacheLock.Unlock()
 	for k, v := range ci.caches.allocatedFIPs {
 		if v.key == oldK {
-			if err := ci.updateFloatingIP(k, newK, v.subnet, v.policy, v.att); err != nil {
+			date := time.Now()
+			if err := ci.updateFloatingIP(k, newK, v.subnet, v.policy, v.att, date); err != nil {
 				glog.Errorf("failed to update floatingIP %s: %v", k, err)
 				return err
 			}
 			v.key = newK
+			v.updateTime = date
 			return nil
 		}
 	}
@@ -185,11 +209,14 @@ func (ci *crdIpam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePo
 	if !find {
 		return fmt.Errorf("failed to find floatIP in cache by IP %s", ipStr)
 	}
-	if err := ci.updateFloatingIP(ipStr, key, v.subnet, policy, attr); err != nil {
+	date := time.Now()
+	if err := ci.updateFloatingIP(ipStr, key, v.subnet, policy, attr, date); err != nil {
 		glog.Errorf("failed to update floatingIP %s: %v", ipStr, err)
 		return err
 	}
 	v.policy = policy
+	v.att = attr
+	v.updateTime = date
 	return nil
 }
 
@@ -367,10 +394,11 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 				} else {
 					//ip in config, insert it into cache
 					tmpFip := &FloatingIPObj{
-						key:    ip.Spec.Key,
-						att:    ip.Spec.Attribute,
-						policy: ip.Spec.Policy,
-						subnet: ip.Spec.Subnet,
+						key:        ip.Spec.Key,
+						att:        ip.Spec.Attribute,
+						policy:     ip.Spec.Policy,
+						subnet:     ip.Spec.Subnet,
+						updateTime: ip.Spec.UpdateTime.Time,
 					}
 					tmpCacheAllocated[ip.Name] = tmpFip
 				}
@@ -429,12 +457,13 @@ func (ci *crdIpam) toFIPSubnet(routableSubnet *net.IPNet) *net.IPNet {
 
 //cacheLock is used when the function called,
 //don't use lock in the function, otherwise deadlock will be caused
-func (ci *crdIpam) syncCacheAfterCreate(ip string, key string, att string, policy constant.ReleasePolicy, subnet string) {
+func (ci *crdIpam) syncCacheAfterCreate(ip string, key string, att string, policy constant.ReleasePolicy, subnet string, date time.Time) {
 	tmp := &FloatingIPObj{
-		key:    key,
-		att:    att,
-		policy: policy,
-		subnet: subnet,
+		key:        key,
+		att:        att,
+		policy:     policy,
+		subnet:     subnet,
+		updateTime: date,
 	}
 	ci.caches.allocatedFIPs[ip] = tmp
 	delete(ci.caches.unallocatedFIPs, ip)

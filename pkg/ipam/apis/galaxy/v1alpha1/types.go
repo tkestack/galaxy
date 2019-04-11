@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -44,6 +43,8 @@ type FloatingIPSpec struct {
 	Policy constant.ReleasePolicy `json:"policy"`
 	//subnet used as node's subnet
 	Subnet string `json:"subnet"`
+	//FloatingIP update(allocate, release or update) timestamp
+	UpdateTime metav1.Time `json:"updateTime"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
