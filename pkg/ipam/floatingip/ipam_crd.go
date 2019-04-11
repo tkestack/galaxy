@@ -398,7 +398,7 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 						att:        ip.Spec.Attribute,
 						policy:     ip.Spec.Policy,
 						subnet:     ip.Spec.Subnet,
-						updateTime: ip.Spec.UpdateTime,
+						updateTime: ip.Spec.UpdateTime.Time,
 					}
 					tmpCacheAllocated[ip.Name] = tmpFip
 				}

@@ -35,7 +35,7 @@ func (ci *crdIpam) createFloatingIP(name string, key string, policy constant.Rel
 	fip.Spec.Policy = policy
 	fip.Spec.Attribute = attr
 	fip.Spec.Subnet = subnet
-	fip.Spec.UpdateTime = updateTime
+	fip.Spec.UpdateTime = metav1.NewTime(updateTime)
 	ipTypeVal, err := ci.ipType.String()
 	if err != nil {
 		return err
@@ -69,7 +69,7 @@ func (ci *crdIpam) updateFloatingIP(name, key, subnet string, policy constant.Re
 	fip.Spec.Policy = policy
 	fip.Spec.Subnet = subnet
 	fip.Spec.Attribute = attr
-	fip.Spec.UpdateTime = updateTime
+	fip.Spec.UpdateTime = metav1.NewTime(updateTime)
 	_, err = ci.client.GalaxyV1alpha1().FloatingIPs().Update(fip)
 	return err
 }
