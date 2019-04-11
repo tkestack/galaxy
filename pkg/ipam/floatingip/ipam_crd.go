@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -84,7 +83,7 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIP) error {
 }
 
 func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
-	ipStr := strconv.FormatUint(uint64(nets.IPToInt(ip)), 10)
+	ipStr := ip.String()
 	ci.caches.cacheLock.RLock()
 	spec, find := ci.caches.allocatedFIPs[ipStr]
 	ci.caches.cacheLock.RUnlock()
@@ -141,11 +140,7 @@ func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, polic
 	if err = ci.getFloatingIP(ipStr); err != nil {
 		return
 	}
-	ipInt, err := strconv.ParseUint(ipStr, 10, 32)
-	if err != nil {
-		return allocated, err
-	}
-	allocated = nets.IntToIP(uint32(ipInt))
+	allocated = net.ParseIP(ipStr)
 	return
 }
 
@@ -202,7 +197,7 @@ func (ci *crdIpam) UpdateKey(oldK, newK string) error {
 }
 
 func (ci *crdIpam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
-	ipStr := strconv.FormatUint(uint64(nets.IPToInt(ip)), 10)
+	ipStr := ip.String()
 	ci.caches.cacheLock.Lock()
 	defer ci.caches.cacheLock.Unlock()
 	v, find := ci.caches.allocatedFIPs[ipStr]
@@ -221,7 +216,7 @@ func (ci *crdIpam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePo
 }
 
 func (ci *crdIpam) Release(key string, ip net.IP) error {
-	ipStr := strconv.FormatUint(uint64(nets.IPToInt(ip)), 10)
+	ipStr := ip.String()
 	ci.caches.cacheLock.Lock()
 	defer ci.caches.cacheLock.Unlock()
 	v, find := ci.caches.allocatedFIPs[ipStr]
@@ -270,7 +265,7 @@ func (ci *crdIpam) First(key string) (*FloatingIPInfo, error) {
 func (ci *crdIpam) ByIP(ip net.IP) (database.FloatingIP, error) {
 	fip := database.FloatingIP{}
 
-	ipStr := strconv.FormatUint(uint64(nets.IPToInt(ip)), 10)
+	ipStr := ip.String()
 	ci.caches.cacheLock.RLock()
 	defer ci.caches.cacheLock.RUnlock()
 	v, find := ci.caches.allocatedFIPs[ipStr]
@@ -300,32 +295,24 @@ func (ci *crdIpam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
 	defer ci.caches.cacheLock.RUnlock()
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if strings.Contains(spec.key, prefix) {
-			ipInt, err := strconv.ParseUint(ip, 10, 32)
-			if err != nil {
-				return fips, err
-			}
 			tmp := database.FloatingIP{
 				Key:    spec.key,
 				Subnet: spec.subnet,
 				Attr:   spec.att,
 				Policy: uint16(spec.policy),
-				IP:     uint32(ipInt),
+				IP:     nets.IPToInt(net.ParseIP(ip)),
 			}
 			fips = append(fips, tmp)
 		}
 	}
 	if prefix == "" {
 		for ip, spec := range ci.caches.unallocatedFIPs {
-			ipInt, err := strconv.ParseUint(ip, 10, 32)
-			if err != nil {
-				return fips, err
-			}
 			tmp := database.FloatingIP{
 				Key:    spec.key,
 				Subnet: spec.subnet,
 				Attr:   spec.att,
 				Policy: uint16(spec.policy),
-				IP:     uint32(ipInt),
+				IP:     nets.IPToInt(net.ParseIP(ip)),
 			}
 			fips = append(fips, tmp)
 		}
@@ -375,22 +362,17 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 		glog.Errorf("fail to list floatIP %v", err)
 		return err
 	}
-	var toBeDelete []uint32
+	var deletingIPs []string
 	tmpCacheAllocated := make(map[string]*FloatingIPObj)
 	//delete no longer available floating ips stored in etcd first
 	for _, ip := range ips.Items {
-		ipInt, err := strconv.ParseUint(ip.Name, 10, 32)
-		if err != nil {
-			glog.Errorf("invalid FloatingIP name %s", ip.Name)
-			return err
-		}
-		netIP := nets.IntToIP(uint32(ipInt))
+		netIP := net.ParseIP(ip.Name)
 		found := false
 		for _, fipConf := range fipMap {
 			if fipConf.IPNet().Contains(netIP) {
 				found = true
 				if !fipConf.Contains(netIP) {
-					toBeDelete = append(toBeDelete, uint32(ipInt))
+					deletingIPs = append(deletingIPs, ip.Name)
 				} else {
 					//ip in config, insert it into cache
 					tmpFip := &FloatingIPObj{
@@ -406,21 +388,21 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 			}
 		}
 		if !found {
-			toBeDelete = append(toBeDelete, uint32(ipInt))
+			deletingIPs = append(deletingIPs, ip.Name)
 		}
 	}
 	ci.caches.cacheLock.Lock()
 	defer ci.caches.cacheLock.Unlock()
 	ci.caches.allocatedFIPs = tmpCacheAllocated
-	if len(toBeDelete) > 0 {
-		for _, del := range toBeDelete {
-			if err := ci.deleteFloatingIP(strconv.FormatUint(uint64(del), 10)); err != nil {
+	if len(deletingIPs) > 0 {
+		for _, ip := range deletingIPs {
+			if err := ci.deleteFloatingIP(ip); err != nil {
 				//if a FloatingIP crd in etcd can't be deleted, every freshCache will produce an error
 				//it won't return error when error happens in deletion
-				glog.Errorf("failed to delete ip %v: %v", del, err)
+				glog.Errorf("failed to delete ip %v: %v", ip, err)
 			}
 		}
-		glog.Infof("expect to delete %d ips from %v", len(toBeDelete), toBeDelete)
+		glog.Infof("expect to delete %d ips from %v", len(deletingIPs), deletingIPs)
 	}
 	// fresh unallocated floatIP
 	tmpCacheUnallocated := make(map[string]*FloatingIPObj)
@@ -430,14 +412,15 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 			first := nets.IPToInt(ipr.First)
 			last := nets.IPToInt(ipr.Last)
 			for ; first <= last; first++ {
-				if _, contain := ci.caches.allocatedFIPs[strconv.FormatUint(uint64(first), 10)]; !contain {
+				ipStr := nets.IntToIP(first).String()
+				if _, contain := ci.caches.allocatedFIPs[ipStr]; !contain {
 					tmpFip := &FloatingIPObj{
 						key:    "",
 						att:    "",
 						policy: constant.ReleasePolicyPodDelete,
 						subnet: subnet,
 					}
-					tmpCacheUnallocated[strconv.FormatUint(uint64(first), 10)] = tmpFip
+					tmpCacheUnallocated[ipStr] = tmpFip
 				}
 			}
 		}
@@ -490,11 +473,7 @@ func (ci *crdIpam) findFloatingIPByKey(key string) (database.FloatingIP, error) 
 	defer ci.caches.cacheLock.RUnlock()
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if spec.key == key {
-			ipInt, err := strconv.ParseUint(ip, 10, 32)
-			if err != nil {
-				return fip, err
-			}
-			fip.IP = uint32(ipInt)
+			fip.IP = nets.IPToInt(net.ParseIP(ip))
 			fip.Key = key
 			fip.Attr = spec.att
 			fip.Subnet = spec.subnet
@@ -547,13 +526,8 @@ func (ci *crdIpam) GetAllIPs(keyword string) ([]database.FloatingIP, error) {
 	}
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if strings.Contains(spec.key, keyword) {
-			ipInt, err := strconv.ParseUint(ip, 10, 32)
-			if err != nil {
-				glog.Errorf("invalid FloatingIP name %s", ip)
-				return fips, err
-			}
 			tmp := database.FloatingIP{
-				IP:     uint32(ipInt),
+				IP:     nets.IPToInt(net.ParseIP(ip)),
 				Key:    spec.key,
 				Subnet: spec.subnet,
 				Attr:   spec.att,
@@ -567,7 +541,7 @@ func (ci *crdIpam) GetAllIPs(keyword string) ([]database.FloatingIP, error) {
 
 func (ci *crdIpam) ReleaseIPs(ipToKey map[uint32]string) ([]string, error) {
 	var (
-		undeleted []uint32
+		undeleted []string
 		deleted   []string
 	)
 	ci.caches.cacheLock.Lock()
@@ -577,14 +551,15 @@ func (ci *crdIpam) ReleaseIPs(ipToKey map[uint32]string) ([]string, error) {
 		return deleted, nil
 	}
 	for ip, key := range ipToKey {
-		if v, find := ci.caches.allocatedFIPs[strconv.FormatUint(uint64(ip), 10)]; find {
+		ipStr := nets.IntToIP(ip).String()
+		if v, find := ci.caches.allocatedFIPs[ipStr]; find {
 			if v.key == key {
-				if err := ci.deleteFloatingIP(strconv.FormatUint(uint64(ip), 10)); err != nil {
-					undeleted = append(undeleted, ip)
+				if err := ci.deleteFloatingIP(ipStr); err != nil {
+					undeleted = append(undeleted, ipStr)
 					glog.Errorf("failed to delete %v", ip)
 					continue
 				}
-				ci.syncCacheAfterDel(strconv.FormatUint(uint64(ip), 10))
+				ci.syncCacheAfterDel(ipStr)
 				glog.Infof("%v has been deleted", ip)
 				deleted = append(deleted, nets.IntToIP(ip).String())
 			} else {
