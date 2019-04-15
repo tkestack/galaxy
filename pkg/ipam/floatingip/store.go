@@ -176,12 +176,12 @@ func (i *dbIpam) updatePolicy(ip uint32, key string, policy uint16, attr string)
 	})
 }
 
-func (i *dbIpam) updateKey(oldK, newK string) error {
+func (i *dbIpam) updateKey(oldK, newK, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(i.Name()).Where("`key` = ?", oldK).
 			UpdateColumns(map[string]interface{}{
 				"key":        newK,
-				"attr":       "",
+				"attr":       attr,
 				`updated_at`: time.Now(),
 			}).Error
 	})

@@ -283,7 +283,7 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		reserveSubnet := subnetSet.List()[0]
 		subnetSet = sets.NewString(reserveSubnet)
 		// we can't get nodename on filter, update attr on bind
-		attr := getAttr(pod, "")
+		attr := getAttr("")
 		if reserve {
 			if err := allocateInSubnetWithKey(p.ipam, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr); err != nil {
 				return nil, err
@@ -418,7 +418,7 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 	}
 	started := time.Now()
 	policy := parseReleasePolicy(&pod.ObjectMeta)
-	attr := getAttr(pod, nodeName)
+	attr := getAttr(nodeName)
 	if ipInfo != nil {
 		how = "reused"
 	} else {
@@ -639,10 +639,19 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 
 func (p *FloatingIPPlugin) unbindStsPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
 	key := keyObj.KeyInDB
+	attr := getAttr("")
 	if policy == constant.ReleasePolicyPodDelete {
 		return p.releaseIP(key, deletedAndIPMutablePod, pod)
 	} else if policy == constant.ReleasePolicyNever {
 		glog.V(3).Infof("reserved %s for pod %s, because of never release policy", getIPStrFromAnnotation(pod), key)
+		if err := p.ipam.ReserveIP(key, key, attr); err != nil {
+			return err
+		}
+		if p.enabledSecondIP(pod) {
+			if err := p.ipam.ReserveIP(key, key, attr); err != nil {
+				return err
+			}
+		}
 		return nil
 	} else if policy == constant.ReleasePolicyImmutable {
 		// for test
@@ -667,6 +676,7 @@ func (p *FloatingIPPlugin) unbindStsPod(pod *corev1.Pod, keyObj *util.KeyObj, po
 				return p.releaseIP(key, deletedAndScaledDownSSPod, pod)
 			}
 			glog.V(3).Infof("reserved %s for pod %s, because of never release policy", getIPStrFromAnnotation(pod), key)
+
 		}
 	}
 	return nil
@@ -716,7 +726,7 @@ func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keyloc
 		return releaseIP(ipam, key, deletedAndIPMutablePod)
 	} else if policy == constant.ReleasePolicyNever {
 		if key != prefixKey {
-			return updateKey(key, prefixKey, ipam, fmt.Sprintf("never release policy %s", when))
+			return reserveIP(key, prefixKey, ipam, fmt.Sprintf("never release policy %s", when))
 		}
 		return nil
 	}
@@ -731,14 +741,14 @@ func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keyloc
 		return releaseIP(ipam, key, deletedAndScaledDownDpPod)
 	} else {
 		if key != prefixKey {
-			return updateKey(key, prefixKey, ipam, fmt.Sprintf("allocated %d <= replicas %d %s", len(fips), replicas, when))
+			return reserveIP(key, prefixKey, ipam, fmt.Sprintf("allocated %d <= replicas %d %s", len(fips), replicas, when))
 		}
 	}
 	return nil
 }
 
-func updateKey(key, prefixKey string, ipam floatingip.IPAM, reason string) error {
-	if err := ipam.UpdateKey(key, prefixKey); err != nil {
+func reserveIP(key, prefixKey string, ipam floatingip.IPAM, reason string) error {
+	if err := ipam.ReserveIP(key, prefixKey, getAttr("")); err != nil {
 		return fmt.Errorf("[%s] failed to reserve ip from pod %s to %s: %v", ipam.Name(), key, prefixKey, err)
 	}
 	glog.Infof("[%s] reserved ip from pod %s to %s, because %s", ipam.Name(), key, prefixKey, reason)
@@ -879,7 +889,7 @@ type Attr struct {
 	NodeName string // need this attr to send unassign request to cloud provider on resync
 }
 
-func getAttr(pod *corev1.Pod, nodeName string) string {
+func getAttr(nodeName string) string {
 	obj := Attr{NodeName: nodeName}
 	attr, err := json.Marshal(obj)
 	if err != nil {

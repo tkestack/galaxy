@@ -468,7 +468,7 @@ func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	if allocatedIP.String() != "10.173.13.2" {
 		t.Error(allocatedIP.String())
 	}
-	if err := ipam.UpdateKey("pod2", "pod3"); err != nil {
+	if err := ipam.ReserveIP("pod2", "pod3", ""); err != nil {
 		t.Fatal(err)
 	}
 

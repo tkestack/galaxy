@@ -4,7 +4,7 @@ metadata:
   name: 10.0.0.1
 spec:
   key: pool1_sts_demo_test_test-0
-  attribute: {"NodeName":"10.0.12.14","Occupied":true}
+  attribute: {"NodeName":"10.0.12.14"}
   policy: 0
   subnet: 10.0.0.0/16
   updateTime: 2019-04-11T01:50:33.820742017Z

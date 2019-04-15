@@ -178,18 +178,19 @@ func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy con
 	return fmt.Errorf("failed to find floatIP by key %s", oldK)
 }
 
-func (ci *crdIpam) UpdateKey(oldK, newK string) error {
+func (ci *crdIpam) ReserveIP(oldK, newK, attr string) error {
 	ci.caches.cacheLock.Lock()
 	defer ci.caches.cacheLock.Unlock()
 	for k, v := range ci.caches.allocatedFIPs {
 		if v.key == oldK {
 			date := time.Now()
-			if err := ci.updateFloatingIP(k, newK, v.subnet, v.policy, v.att, date); err != nil {
+			if err := ci.updateFloatingIP(k, newK, v.subnet, v.policy, attr, date); err != nil {
 				glog.Errorf("failed to update floatingIP %s: %v", k, err)
 				return err
 			}
 			v.key = newK
 			v.updateTime = date
+			v.att = attr
 			return nil
 		}
 	}
