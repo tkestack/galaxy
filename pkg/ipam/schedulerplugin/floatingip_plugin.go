@@ -130,6 +130,11 @@ func (p *FloatingIPPlugin) Init() error {
 			return fmt.Errorf("failed to get floatingip config from configmap: %v", err)
 		}
 	}
+	wait.PollInfinite(time.Second, func() (done bool, err error) {
+		glog.Infof("waiting store ready")
+		return p.storeReady(), nil
+	})
+	glog.Infof("store is ready, plugin init done")
 	return nil
 }
 

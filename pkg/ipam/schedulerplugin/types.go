@@ -17,5 +17,6 @@ type PluginFactoryArgs struct {
 	PodHasSynced      func() bool
 	StatefulSetSynced func() bool
 	DeploymentSynced  func() bool
+	PoolSynced        func() bool
 	CrdClient         crd_clientset.Interface
 }

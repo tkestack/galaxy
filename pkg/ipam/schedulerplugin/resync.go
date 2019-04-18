@@ -34,6 +34,10 @@ func (p *FloatingIPPlugin) storeReady() bool {
 		glog.V(3).Infof("the deployment store has not been synced yet")
 		return false
 	}
+	if !p.PoolSynced() {
+		glog.V(3).Infof("the pool store has not been synced yet")
+		return false
+	}
 	return true
 }
 

@@ -519,6 +519,7 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
 		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 		PoolLister:        poolInformer.Lister(),
+		PoolSynced:        poolInformer.Informer().HasSynced,
 	}
 	go informerFactory.Start(stopChan)
 	go crdInformerFactory.Start(stopChan)
