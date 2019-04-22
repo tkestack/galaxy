@@ -67,6 +67,8 @@ import:
   - metadata
 - package: google.golang.org/grpc
   version: v1.19.0
+- package: github.com/emicklei/go-restful-swagger12
+  version: 1.0.1
 testImport:
 - package: github.com/onsi/ginkgo
   version: ^1.4.0

@@ -1,5 +1,5 @@
-hash: 03f36601f5f4a61e5975177f7a11c4887f383a86632a409a96201cad7711d516
-updated: 2019-04-22T13:38:54.373798+08:00
+hash: 23e96619f89dfd65b5052d9496e048db558c35f463a928cbf9124d8c225d5263
+updated: 2019-04-22T15:43:15.977577+08:00
 imports:
 - name: github.com/containernetworking/cni
   version: a7885cb6f8ab03fba07852ded351e4f5e7a112bf
@@ -79,6 +79,8 @@ imports:
   version: ff4f55a206334ef123e4f79bbf348980da81ca46
   subpackages:
   - log
+- name: github.com/emicklei/go-restful-swagger12
+  version: dcef7f55730566d41eae5db10e7d6981829720f6
 - name: github.com/evanphx/json-patch
   version: 36442dbdb585210f8d5a1b45e67aa323c197d5c4
 - name: github.com/go-sql-driver/mysql

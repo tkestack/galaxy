@@ -20,6 +20,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/httputil"
 	pageutil "git.code.oa.com/gaiastack/galaxy/pkg/utils/page"
 	"github.com/emicklei/go-restful"
+	"github.com/emicklei/go-restful-swagger12"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -122,6 +123,7 @@ func (s *Server) Run() error {
 		return err
 	}
 	s.plugin.Run(s.stopChan)
+	go s.startAPIServer()
 	s.startServer()
 	return nil
 }
@@ -216,8 +218,20 @@ func (s *Server) startServer() {
 	ws.Route(ws.POST("/bind").To(s.bind).Reads(schedulerapi.ExtenderBindingArgs{}).Writes(schedulerapi.ExtenderBindingResult{}))
 	health := new(restful.WebService)
 	health.Route(health.GET("/healthy").To(s.healthy))
-	restful.Add(ws)
-	restful.Add(health)
+	container := restful.NewContainer()
+	container.Add(ws)
+	container.Add(health)
+	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", s.Bind, s.Port), container); err != nil {
+		glog.Fatalf("unable to listen: %v.", err)
+	}
+}
+
+func (s *Server) startAPIServer() {
+	ws := new(restful.WebService)
+	ws.
+		Path("/v1").
+		Consumes(restful.MIME_JSON).
+		Produces(restful.MIME_JSON)
 	c := api.NewController(s.plugin.GetIpam(), s.plugin.GetSecondIpam(), s.plugin.PodLister)
 	ws.Route(ws.GET("/ip").To(c.ListIPs).Writes(pageutil.Page{}))
 	ws.Route(ws.POST("/ip").To(c.ReleaseIPs).Reads(api.ReleaseIPReq{}).Writes(httputil.Resp{}))
@@ -225,9 +239,22 @@ func (s *Server) startServer() {
 	ws.Route(ws.GET("/pool/{name}").To(poolController.Get).Writes(httputil.Resp{}))
 	ws.Route(ws.POST("/pool").To(poolController.CreateOrUpdate).Reads(api.Pool{}).Writes(httputil.Resp{}))
 	ws.Route(ws.DELETE("/pool/{name}").To(poolController.Delete).Writes(httputil.Resp{}))
-	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", s.Bind, s.Port), nil); err != nil {
+	restful.Add(ws)
+	addSwaggerUISupport(restful.DefaultContainer)
+	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", s.Bind, s.APIPort), nil); err != nil {
 		glog.Fatalf("unable to listen: %v.", err)
 	}
+}
+
+func addSwaggerUISupport(container *restful.Container) {
+	config := swagger.Config{
+		WebServices:     restful.RegisteredWebServices(),
+		ApiPath:         "/apidocs.json",
+		SwaggerPath:     "/apidocs/",
+		SwaggerFilePath: "/etc/swagger-ui/dist",
+	}
+
+	swagger.RegisterSwaggerService(config, container)
 }
 
 func (s *Server) filter(request *restful.Request, response *restful.Response) {
