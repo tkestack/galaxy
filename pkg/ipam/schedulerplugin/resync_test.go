@@ -12,8 +12,6 @@ func TestResyncAppNotExist(t *testing.T) {
 	pod2 := createDeploymentPod("dp2-aaa-bbb", "ns2", immutableAnnotation)
 	fipPlugin, stopChan, _ := createPluginTestNodes(t)
 	defer func() { stopChan <- struct{}{} }()
-	var replicas int32 = 1
-	fipPlugin.getDeployment = getDeploymentFunc(pod1.ObjectMeta, &replicas)
 	pod1Key, pod2Key := util.FormatKey(pod1), util.FormatKey(pod2)
 
 	if err := fipPlugin.ipam.AllocateSpecificIP(pod1Key.KeyInDB, net.ParseIP("10.49.27.205"), parseReleasePolicy(&pod1.ObjectMeta), ""); err != nil {

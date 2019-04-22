@@ -27,4 +27,3 @@ func (f FloatingIP) TableName() string {
 		return f.Table
 	}
 }
-

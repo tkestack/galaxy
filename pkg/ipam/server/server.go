@@ -87,6 +87,7 @@ func (s *Server) init() error {
 		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
 		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 		PoolLister:        poolInformer.Lister(),
+		PoolSynced:        poolInformer.Informer().HasSynced,
 		CrdClient:         s.crdClient,
 	}
 	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
@@ -109,12 +110,12 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Run() error {
+	go s.informerFactory.Start(s.stopChan)
+	go s.crdInformerFactory.Start(s.stopChan)
 	if err := s.plugin.Init(); err != nil {
 		return err
 	}
 	s.plugin.Run(s.stopChan)
-	go s.informerFactory.Start(s.stopChan)
-	go s.crdInformerFactory.Start(s.stopChan)
 	s.startServer()
 	return nil
 }

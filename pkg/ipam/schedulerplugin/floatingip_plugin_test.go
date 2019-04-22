@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	fakeV1 "k8s.io/client-go/kubernetes/typed/core/v1/fake"
@@ -191,14 +190,13 @@ func TestFilter(t *testing.T) {
 }
 
 func TestFilterForDeployment(t *testing.T) {
-	fipPlugin, stopChan, nodes := createPluginTestNodes(t)
-	defer func() { stopChan <- struct{}{} }()
-	// pre-allocate ip in filter for deployment pod
 	deadPod := createDeploymentPod("dp-aaa-bbb", "ns1", immutableAnnotation)
 	pod := createDeploymentPod("dp-xxx-yyy", "ns1", immutableAnnotation)
+	dp := createDeployment("dp", "ns1", pod.ObjectMeta, 1)
+	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, deadPod, dp)
+	defer func() { stopChan <- struct{}{} }()
+	// pre-allocate ip in filter for deployment pod
 	podKey, deadPodKey := util.FormatKey(pod), util.FormatKey(deadPod)
-	var replicas int32 = 1
-	fipPlugin.getDeployment = getDeploymentFunc(pod.ObjectMeta, &replicas)
 	fip, err := fipPlugin.allocateIP(fipPlugin.ipam, deadPodKey.KeyInDB, node3, deadPod)
 	if err != nil {
 		t.Fatal(err)
@@ -228,11 +226,11 @@ func TestFilterForDeployment(t *testing.T) {
 	pod.Annotations = neverAnnotation
 	deadPod.Annotations = immutableAnnotation
 	// when replicas = 0 and never release policy, ip will be reserved
-	replicas = 0
+	*dp.Spec.Replicas = 0
 	if err := fipPlugin.unbind(pod); err != nil {
 		t.Fatal(err)
 	}
-	replicas = 1
+	*dp.Spec.Replicas = 1
 	if filtered, failed, err = fipPlugin.Filter(deadPod, nodes); err != nil {
 		t.Fatal(err)
 	}
@@ -261,20 +259,18 @@ func poolAnnotation(poolName string) map[string]string {
 	return map[string]string{constant.IPPoolAnnotation: poolName}
 }
 
-func getDeploymentFunc(meta v1.ObjectMeta, replicas *int32) func(name, namespace string) (*appv1.Deployment, error) {
-	return func(name, namespace string) (*appv1.Deployment, error) {
-		return &appv1.Deployment{
-			ObjectMeta: v1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
+func createDeployment(name, namespace string, podMeta v1.ObjectMeta, replicas int32) *appv1.Deployment {
+	return &appv1.Deployment{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: podMeta,
 			},
-			Spec: appv1.DeploymentSpec{
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: meta,
-				},
-				Replicas: replicas,
-			},
-		}, nil
+			Replicas: &replicas,
+		},
 	}
 }
 
@@ -318,10 +314,9 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 	pod2 := createDeploymentPod("dp2-abc-def", "ns2", poolAnnotation("pool1"))
 	pod3 := createDeploymentPod("dp2-abc-xyz", "ns2", poolAnnotation("pool1"))
 	podKey, pod2Key := util.FormatKey(pod), util.FormatKey(pod2)
-	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2, pod3)
+	dp1, dp2 := createDeployment("dp", "ns1", pod.ObjectMeta, 1), createDeployment("dp2", "ns2", pod2.ObjectMeta, 1)
+	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2, pod3, dp1, dp2)
 	defer func() { stopChan <- struct{}{} }()
-	var replicas int32 = 1
-	fipPlugin.getDeployment = getDeploymentFunc(pod.ObjectMeta, &replicas)
 	testCases := []filterCase{
 		{
 			// test normal filter gets all good nodes
@@ -515,8 +510,6 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 	statefulsetInformer := informerFactory.Apps().V1().StatefulSets()
 	deploymentInformer := informerFactory.Apps().V1().Deployments()
 	stopChan := make(chan struct{})
-	go informerFactory.Start(stopChan)
-	go crdInformerFactory.Start(stopChan)
 	pluginArgs := &PluginFactoryArgs{
 		PodLister:         podInformer.Lister(),
 		StatefulSetLister: statefulsetInformer.Lister(),
@@ -526,12 +519,10 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
 		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 		PoolLister:        poolInformer.Lister(),
+		PoolSynced:        poolInformer.Informer().HasSynced,
 	}
-	if err := wait.PollImmediate(time.Millisecond*100, 20*time.Second, func() (done bool, err error) {
-		return pluginArgs.PodHasSynced(), nil
-	}); err != nil {
-		t.Fatal(err)
-	}
+	go informerFactory.Start(stopChan)
+	go crdInformerFactory.Start(stopChan)
 	return pluginArgs, stopChan
 }
 
@@ -750,10 +741,9 @@ func TestUnBind(t *testing.T) {
 func TestAllocateRecentIPs(t *testing.T) {
 	pod := createDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
 	pod2 := createDeploymentPod("dp2-aaa-bbb", "ns2", immutableAnnotation)
-	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2)
+	dp := createDeployment("dp", "ns1", pod.ObjectMeta, 1)
+	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2, dp)
 	defer func() { stopChan <- struct{}{} }()
-	var replicas int32 = 1
-	fipPlugin.getDeployment = getDeploymentFunc(pod.ObjectMeta, &replicas)
 	podKey, pod2Key := util.FormatKey(pod), util.FormatKey(pod2)
 	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.PoolPrefix(), net.ParseIP("10.49.27.205"), constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
