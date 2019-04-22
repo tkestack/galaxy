@@ -148,6 +148,9 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				delete(allocatedIPs, key)
 				glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.fip.IP).String(), key, err)
 			}
+			if err := ipam.ReserveIP(key, key, getAttr("")); err != nil {
+				glog.Errorf("failed to reserve %s ip: %v", key, err)
+			}
 		}
 	}
 	for key, obj := range allocatedIPs {
@@ -221,7 +224,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 			}
 			if fip.FIP.Policy == uint16(constant.ReleasePolicyNever) {
 				keyObj := util.ParseKey(fip.FIP.Key)
-				if err := updateKey(key, keyObj.PoolPrefix(), ipam, "never release policy during resyncing"); err != nil {
+				if err := reserveIP(key, keyObj.PoolPrefix(), ipam, "never release policy during resyncing"); err != nil {
 					glog.Error(err)
 				}
 			} else {
@@ -357,7 +360,7 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, p
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
 		}
 	} else {
-		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta), getAttr(pod, pod.Spec.NodeName)); err != nil {
+		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta), getAttr(pod.Spec.NodeName)); err != nil {
 			return err
 		}
 		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)

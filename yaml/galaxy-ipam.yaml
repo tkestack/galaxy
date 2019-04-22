@@ -41,6 +41,7 @@ rules:
   - apiGroups: ["galaxy.k8s.io"]
     resources:
       - pools
+      - floatingips
     verbs: ["get", "list", "watch", "update", "create", "patch", "delete"]
 ---
 apiVersion: v1

@@ -24,7 +24,7 @@ type IPAM interface {
 	AllocateSpecificIP(string, net.IP, constant.ReleasePolicy, string) error
 	AllocateInSubnet(string, *net.IPNet, constant.ReleasePolicy, string) (net.IP, error)
 	AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error
-	UpdateKey(oldK, newK string) error
+	ReserveIP(oldK, newK, attr string) error
 	UpdatePolicy(string, net.IP, constant.ReleasePolicy, string) error
 	Release(string, net.IP) error
 	First(string) (*FloatingIPInfo, error) // returns nil,nil if key is not found
@@ -344,8 +344,8 @@ func (i *dbIpam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePoli
 	return i.updatePolicy(nets.IPToInt(ip), key, uint16(policy), attr)
 }
 
-func (i *dbIpam) UpdateKey(oldK, newK string) error {
-	return i.updateKey(oldK, newK)
+func (i *dbIpam) ReserveIP(oldK, newK, attr string) error {
+	return i.updateKey(oldK, newK, attr)
 }
 
 func (i *dbIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error {
