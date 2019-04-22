@@ -14,6 +14,7 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/api"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
 	crdInformer "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/informers/externalversions"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/crd"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server/options"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/httputil"
@@ -21,6 +22,7 @@ import (
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
+	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
@@ -45,6 +47,7 @@ type Server struct {
 	*options.ServerRunOptions
 	client               kubernetes.Interface
 	crdClient            versioned.Interface
+	extensionClient      extensionClient.Interface
 	plugin               *schedulerplugin.FloatingIPPlugin
 	informerFactory      informers.SharedInformerFactory
 	crdInformerFactory   crdInformer.SharedInformerFactory
@@ -112,6 +115,9 @@ func (s *Server) Start() error {
 func (s *Server) Run() error {
 	go s.informerFactory.Start(s.stopChan)
 	go s.crdInformerFactory.Start(s.stopChan)
+	if err := crd.EnsureCRDCreated(s.extensionClient); err != nil {
+		return err
+	}
 	if err := s.plugin.Init(); err != nil {
 		return err
 	}
@@ -133,11 +139,13 @@ func (s *Server) initk8sClient() {
 	if err != nil {
 		glog.Fatalf("Error building kubernetes clientset: %v", err)
 	}
-	if s.JsonConf.SchedulePluginConf.StorageDriver == "k8s-crd" {
-		s.crdClient, err = versioned.NewForConfig(cfg)
-		if err != nil {
-			glog.Fatalf("Error building float ip clientset: %v", err)
-		}
+	s.crdClient, err = versioned.NewForConfig(cfg)
+	if err != nil {
+		glog.Fatalf("Error building float ip clientset: %v", err)
+	}
+	s.extensionClient, err = extensionClient.NewForConfig(cfg)
+	if err != nil {
+		glog.Fatalf("Error building float ip clientset: %v", err)
 	}
 	glog.Infof("connected to apiserver %v", cfg)
 

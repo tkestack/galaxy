@@ -33,6 +33,8 @@ import:
   repo: https://github.com/kubernetes/client-go.git
 - package: k8s.io/api
   version: kubernetes-1.13.2
+- package: k8s.io/apiextensions-apiserver
+  version: kubernetes-1.13.2
 - package: k8s.io/apimachinery
   version: kubernetes-1.13.2
 - package: k8s.io/kube-openapi
