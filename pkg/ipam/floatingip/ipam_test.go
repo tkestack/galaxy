@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -269,7 +270,7 @@ func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// result in string order
+	sort.Strings(subnets)
 	if fmt.Sprintf("%v", subnets) != "[10.173.13.0/24 10.180.1.2/32 10.180.1.3/32 10.49.27.0/24]" {
 		t.Fatal(subnets)
 	}
@@ -497,4 +498,22 @@ func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: Key:pod3 Subnet:10.173.13.0/24 Attr:111 IP:179113218 Policy:2 UpdatedAt:0001-01-01 00:00:00 +0000 UTC}}" {
 		t.Error(fmt.Sprintf("%+v", ipInfo))
 	}
+}
+
+func TestDBReleaseIPs(t *testing.T) {
+	ipam := Start(t)
+	defer ipam.Shutdown()
+	testReleaseIPs(t, ipam)
+}
+
+func TestDBByKeyword(t *testing.T) {
+	ipam := Start(t)
+	defer ipam.Shutdown()
+	testByKeyword(t, ipam)
+}
+
+func TestDBByPrefix(t *testing.T) {
+	ipam := Start(t)
+	defer ipam.Shutdown()
+	testByPrefix(t, ipam)
 }

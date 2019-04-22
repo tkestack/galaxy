@@ -19,8 +19,10 @@ var (
 
 type IPAM interface {
 	ConfigurePool([]*FloatingIP) error
-	GetAllIPs(string) ([]database.FloatingIP, error)
-	ReleaseIPs(map[uint32]string) ([]string, error)
+	// ReleaseIPs releases given ips as long as their keys match and returned released and unreleased map
+	// released and unreleased map are guaranteed to be none nil even if err is not nil
+	// unreleased map stores ip with its latest key if key changed
+	ReleaseIPs(map[string]string) (map[string]string, map[string]string, error)
 	AllocateSpecificIP(string, net.IP, constant.ReleasePolicy, string) error
 	AllocateInSubnet(string, *net.IPNet, constant.ReleasePolicy, string) (net.IP, error)
 	AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error
@@ -30,6 +32,7 @@ type IPAM interface {
 	First(string) (*FloatingIPInfo, error) // returns nil,nil if key is not found
 	ByIP(net.IP) (database.FloatingIP, error)
 	ByPrefix(string) ([]database.FloatingIP, error)
+	ByKeyword(string) ([]database.FloatingIP, error)
 	RoutableSubnet(net.IP) *net.IPNet
 	QueryRoutableSubnetByKey(key string) ([]string, error)
 	Shutdown()
@@ -352,7 +355,7 @@ func (i *dbIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy const
 	return i.updateOneInSubnet(oldK, newK, subnet, uint16(policy), attr)
 }
 
-func (i *dbIpam) GetAllIPs(keyword string) ([]database.FloatingIP, error) {
+func (i *dbIpam) ByKeyword(keyword string) ([]database.FloatingIP, error) {
 	var fips []database.FloatingIP
 	fips, err := i.getIPsByKeyword(i.TableName, keyword)
 	if err != nil {
@@ -361,10 +364,6 @@ func (i *dbIpam) GetAllIPs(keyword string) ([]database.FloatingIP, error) {
 	return fips, nil
 }
 
-func (i *dbIpam) ReleaseIPs(ipToKey map[uint32]string) ([]string, error) {
-	var deleted []string
-	if err := i.deleteIPs(i.TableName, ipToKey, deleted); err != nil {
-		return deleted, err
-	}
-	return deleted, nil
+func (i *dbIpam) ReleaseIPs(ipToKey map[string]string) (map[string]string, map[string]string, error) {
+	return i.deleteIPs(i.TableName, ipToKey)
 }

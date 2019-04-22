@@ -17,6 +17,18 @@ type Page struct {
 	Number           int         `json:"number"`
 }
 
+func (Page) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"last":             "if this is the last page",
+		"totalElements":    "total number of elements",
+		"totalPages":       "total number of pages",
+		"first":            "if this is the first page",
+		"numberOfElements": "number of elements in this page",
+		"size":             "page size",
+		"number":           "page index starting from 0",
+	}
+}
+
 const (
 	DefaultSize = 10
 )

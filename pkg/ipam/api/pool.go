@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"net/http"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
@@ -23,6 +24,18 @@ type Pool struct {
 	Size int    `json:"size"`
 }
 
+func (Pool) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"name": "pool name",
+		"size": "pool size",
+	}
+}
+
+type GetPoolResp struct {
+	httputil.Resp
+	Pool Pool `json:"pool"`
+}
+
 func (c *PoolController) Get(req *restful.Request, resp *restful.Response) {
 	name := req.PathParameter("name")
 	if name == "" {
@@ -38,7 +51,7 @@ func (c *PoolController) Get(req *restful.Request, resp *restful.Response) {
 		httputil.InternalError(resp, err)
 		return
 	}
-	resp.WriteEntity(Pool{Name: pool.Name, Size: pool.Size})
+	resp.WriteEntity(GetPoolResp{Resp: httputil.NewResp(http.StatusOK, ""), Pool: Pool{Name: pool.Name, Size: pool.Size}})
 }
 
 func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Response) {
