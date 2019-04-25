@@ -1,5 +1,5 @@
-hash: d7a51d2009e1f02336b2d0d58b48cbc86859afd6a45e58e5a81624fe95d5a970
-updated: 2019-03-15T11:54:18.902195+08:00
+hash: 23e96619f89dfd65b5052d9496e048db558c35f463a928cbf9124d8c225d5263
+updated: 2019-04-22T15:43:15.977577+08:00
 imports:
 - name: github.com/containernetworking/cni
   version: a7885cb6f8ab03fba07852ded351e4f5e7a112bf
@@ -30,7 +30,7 @@ imports:
   subpackages:
   - iptables
 - name: github.com/coreos/go-systemd
-  version: 2688e91251d9d8e404e86dd8f096e23b2f086958
+  version: 48702e0da86bd25e76cfef347e2adeb434a0d0a6
   subpackages:
   - activation
 - name: github.com/d2g/dhcp4
@@ -79,12 +79,14 @@ imports:
   version: ff4f55a206334ef123e4f79bbf348980da81ca46
   subpackages:
   - log
+- name: github.com/emicklei/go-restful-swagger12
+  version: dcef7f55730566d41eae5db10e7d6981829720f6
 - name: github.com/evanphx/json-patch
   version: 36442dbdb585210f8d5a1b45e67aa323c197d5c4
 - name: github.com/go-sql-driver/mysql
   version: ae5a66df4d33ba404d639bd0fc9189cd5ee79bcf
 - name: github.com/godbus/dbus
-  version: 6985d94ca06887d09055ce7c7d8471a76d897de3
+  version: 8e900ab0295c2569ce43c79276e714f1d84e543a
 - name: github.com/gogo/protobuf
   version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
@@ -306,6 +308,14 @@ imports:
   - storage/v1
   - storage/v1alpha1
   - storage/v1beta1
+- name: k8s.io/apiextensions-apiserver
+  version: 7d26de67f177df719a36756e658973478df68485
+  subpackages:
+  - pkg/apis/apiextensions
+  - pkg/apis/apiextensions/v1beta1
+  - pkg/client/clientset/clientset
+  - pkg/client/clientset/clientset/scheme
+  - pkg/client/clientset/clientset/typed/apiextensions/v1beta1
 - name: k8s.io/apimachinery
   version: 2b1284ed4c93a43499e781493253e2ac5959c4fd
   subpackages:
@@ -537,7 +547,6 @@ imports:
   version: 21c4ce38f2a793ec01e925ddc31216500183b773
   subpackages:
   - exec
-  - trace
 - name: sigs.k8s.io/yaml
   version: fd68e9863619f6ec2fdd8625fe1f02e7c877e480
 testImports:

@@ -2,7 +2,8 @@ package floatingip
 
 import (
 	"fmt"
-	"strconv"
+	"net"
+	"strings"
 	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
@@ -189,23 +190,39 @@ func (i *dbIpam) updateKey(oldK, newK, attr string) error {
 
 func (i *dbIpam) getIPsByKeyword(tableName, keyword string) ([]database.FloatingIP, error) {
 	var fips []database.FloatingIP
+	// _ matches every single char in mysql
+	keyword = strings.Replace(keyword, "_", `\_`, -1)
 	err := i.store.Transaction(func(tx *gorm.DB) error {
 		return tx.Table(tableName).Where("`key` like ?", "%"+keyword+"%").Find(&fips).Error
 	})
 	return fips, err
 }
 
-func (i *dbIpam) deleteIPs(tableName string, ipToKey map[uint32]string, deleted []string) error {
-	return i.store.Transaction(func(tx *gorm.DB) error {
-		for ip, key := range ipToKey {
-			ret := tx.Table(tableName).Where("ip = ? and `key` = ?", strconv.FormatUint(uint64(ip), 10), key).UpdateColumns(map[string]interface{}{`key`: "", "policy": 0, "attr": ""})
-			if ret.Error != nil {
-				return ret.Error
+func (i *dbIpam) deleteIPs(tableName string, ipToKey map[string]string) (map[string]string, map[string]string, error) {
+	deleted, undeleted := map[string]string{}, map[string]string{}
+	for ipStr, key := range ipToKey {
+		undeleted[ipStr] = key
+	}
+	for ipStr, key := range ipToKey {
+		ipUint := nets.IPToInt(net.ParseIP(ipStr))
+		err := i.releaseIP(key, ipUint)
+		if err == nil {
+			deleted[ipStr] = key
+			delete(undeleted, ipStr)
+		} else {
+			if err != ErrNotUpdated {
+				return deleted, undeleted, err
 			}
-			if ret.RowsAffected == 1 {
-				deleted = append(deleted, nets.IntToIP(ip).String())
+			// try to update key
+			fip, err := i.findByIP(ipUint)
+			if err != nil {
+				if err == gorm.ErrRecordNotFound {
+					continue
+				}
+				return deleted, undeleted, err
 			}
+			undeleted[ipStr] = fip.Key
 		}
-		return nil
-	})
+	}
+	return deleted, undeleted, nil
 }

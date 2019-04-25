@@ -85,7 +85,7 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIP) error {
 func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
 	ipStr := ip.String()
 	ci.caches.cacheLock.RLock()
-	spec, find := ci.caches.allocatedFIPs[ipStr]
+	spec, find := ci.caches.unallocatedFIPs[ipStr]
 	ci.caches.cacheLock.RUnlock()
 	if !find {
 		return fmt.Errorf("failed to find floating ip by %s in cache", ipStr)
@@ -280,6 +280,7 @@ func (ci *crdIpam) ByIP(ip net.IP) (database.FloatingIP, error) {
 		fip.Key = v.key
 		fip.Attr = v.att
 		fip.IP = nets.IPToInt(ip)
+		fip.UpdatedAt = v.updateTime
 		return fip, nil
 	}
 	fip.Subnet = v.subnet
@@ -287,6 +288,7 @@ func (ci *crdIpam) ByIP(ip net.IP) (database.FloatingIP, error) {
 	fip.Key = v.key
 	fip.Attr = v.att
 	fip.IP = nets.IPToInt(ip)
+	fip.UpdatedAt = v.updateTime
 	return fip, nil
 }
 
@@ -295,13 +297,14 @@ func (ci *crdIpam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
 	ci.caches.cacheLock.RLock()
 	defer ci.caches.cacheLock.RUnlock()
 	for ip, spec := range ci.caches.allocatedFIPs {
-		if strings.Contains(spec.key, prefix) {
+		if strings.HasPrefix(spec.key, prefix) {
 			tmp := database.FloatingIP{
-				Key:    spec.key,
-				Subnet: spec.subnet,
-				Attr:   spec.att,
-				Policy: uint16(spec.policy),
-				IP:     nets.IPToInt(net.ParseIP(ip)),
+				Key:       spec.key,
+				Subnet:    spec.subnet,
+				Attr:      spec.att,
+				Policy:    uint16(spec.policy),
+				IP:        nets.IPToInt(net.ParseIP(ip)),
+				UpdatedAt: spec.updateTime,
 			}
 			fips = append(fips, tmp)
 		}
@@ -309,11 +312,12 @@ func (ci *crdIpam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
 	if prefix == "" {
 		for ip, spec := range ci.caches.unallocatedFIPs {
 			tmp := database.FloatingIP{
-				Key:    spec.key,
-				Subnet: spec.subnet,
-				Attr:   spec.att,
-				Policy: uint16(spec.policy),
-				IP:     nets.IPToInt(net.ParseIP(ip)),
+				Key:       spec.key,
+				Subnet:    spec.subnet,
+				Attr:      spec.att,
+				Policy:    uint16(spec.policy),
+				IP:        nets.IPToInt(net.ParseIP(ip)),
+				UpdatedAt: spec.updateTime,
 			}
 			fips = append(fips, tmp)
 		}
@@ -405,6 +409,7 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 		}
 		glog.Infof("expect to delete %d ips from %v", len(deletingIPs), deletingIPs)
 	}
+	now := time.Now()
 	// fresh unallocated floatIP
 	tmpCacheUnallocated := make(map[string]*FloatingIPObj)
 	for _, fipConf := range fipMap {
@@ -416,10 +421,11 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 				ipStr := nets.IntToIP(first).String()
 				if _, contain := ci.caches.allocatedFIPs[ipStr]; !contain {
 					tmpFip := &FloatingIPObj{
-						key:    "",
-						att:    "",
-						policy: constant.ReleasePolicyPodDelete,
-						subnet: subnet,
+						key:        "",
+						att:        "",
+						policy:     constant.ReleasePolicyPodDelete,
+						subnet:     subnet,
+						updateTime: now,
 					}
 					tmpCacheUnallocated[ipStr] = tmpFip
 				}
@@ -479,6 +485,7 @@ func (ci *crdIpam) findFloatingIPByKey(key string) (database.FloatingIP, error) 
 			fip.Attr = spec.att
 			fip.Subnet = spec.subnet
 			fip.Policy = uint16(spec.policy)
+			fip.UpdatedAt = spec.updateTime
 			return fip, nil
 		}
 	}
@@ -517,7 +524,7 @@ func (ci *crdIpam) filterUnallocatedSubnet() (result []string) {
 	return result
 }
 
-func (ci *crdIpam) GetAllIPs(keyword string) ([]database.FloatingIP, error) {
+func (ci *crdIpam) ByKeyword(keyword string) ([]database.FloatingIP, error) {
 	//not implement
 	var fips []database.FloatingIP
 	ci.caches.cacheLock.RLock()
@@ -528,11 +535,12 @@ func (ci *crdIpam) GetAllIPs(keyword string) ([]database.FloatingIP, error) {
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if strings.Contains(spec.key, keyword) {
 			tmp := database.FloatingIP{
-				IP:     nets.IPToInt(net.ParseIP(ip)),
-				Key:    spec.key,
-				Subnet: spec.subnet,
-				Attr:   spec.att,
-				Policy: uint16(spec.policy),
+				IP:        nets.IPToInt(net.ParseIP(ip)),
+				Key:       spec.key,
+				Subnet:    spec.subnet,
+				Attr:      spec.att,
+				Policy:    uint16(spec.policy),
+				UpdatedAt: spec.updateTime,
 			}
 			fips = append(fips, tmp)
 		}
@@ -540,38 +548,35 @@ func (ci *crdIpam) GetAllIPs(keyword string) ([]database.FloatingIP, error) {
 	return fips, nil
 }
 
-func (ci *crdIpam) ReleaseIPs(ipToKey map[uint32]string) ([]string, error) {
-	var (
-		undeleted []string
-		deleted   []string
-	)
+func (ci *crdIpam) ReleaseIPs(ipToKey map[string]string) (map[string]string, map[string]string, error) {
+	deleted, undeleted := map[string]string{}, map[string]string{}
 	ci.caches.cacheLock.Lock()
 	defer ci.caches.cacheLock.Unlock()
+	for ipStr, key := range ipToKey {
+		undeleted[ipStr] = key
+	}
 	if ci.caches.allocatedFIPs == nil {
 		//for second ipam, caches may be nil
-		return deleted, nil
+		return deleted, undeleted, nil
 	}
-	for ip, key := range ipToKey {
-		ipStr := nets.IntToIP(ip).String()
+	for ipStr, key := range ipToKey {
 		if v, find := ci.caches.allocatedFIPs[ipStr]; find {
 			if v.key == key {
 				if err := ci.deleteFloatingIP(ipStr); err != nil {
-					undeleted = append(undeleted, ipStr)
-					glog.Errorf("failed to delete %v", ip)
-					continue
+					glog.Errorf("failed to delete %v", ipStr)
+					return deleted, undeleted, fmt.Errorf("failed to delete %v", ipStr)
 				}
 				ci.syncCacheAfterDel(ipStr)
-				glog.Infof("%v has been deleted", ip)
-				deleted = append(deleted, nets.IntToIP(ip).String())
+				glog.Infof("%v has been deleted", ipStr)
+				deleted[ipStr] = key
+				delete(undeleted, ipStr)
 			} else {
-				glog.Warningf("for %v, key is %s, not %s, without deleting it", ip, v.key, key)
+				// update key
+				undeleted[ipStr] = v.key
 			}
-		} else {
-			glog.Warningf("failed to find %v with key", ip, key)
+		} else if _, find := ci.caches.unallocatedFIPs[ipStr]; find {
+			undeleted[ipStr] = ""
 		}
 	}
-	if len(undeleted) > 0 {
-		return deleted, fmt.Errorf("failed to delete these IPs %v", undeleted)
-	}
-	return deleted, nil
+	return deleted, undeleted, nil
 }

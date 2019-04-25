@@ -69,6 +69,10 @@ func (k *KeyObj) genKey() {
 	if k.IsDeployment {
 		appTypePrefix = deploymentPrefixKey
 	}
+	if k.PoolName == "" && k.AppName == "" && k.Namespace == "" {
+		k.KeyInDB = ""
+		return
+	}
 	k.KeyInDB = fmt.Sprintf("%s%s%s_%s_%s", prefix, appTypePrefix, k.Namespace, k.AppName, k.PodName)
 }
 

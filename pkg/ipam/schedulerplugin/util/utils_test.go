@@ -313,6 +313,26 @@ func TestNewKeyObj(t *testing.T) {
 		t.Fatal(keyObj.KeyInDB)
 	}
 
+	keyObj = NewKeyObj(false, "", "", "", "")
+	if keyObj.KeyInDB != "" {
+		t.Fatal(keyObj.KeyInDB)
+	}
+
+	keyObj = NewKeyObj(true, "ns1", "rami", "", "rami")
+	if keyObj.KeyInDB != "pool__rami_dp_ns1_rami_" {
+		t.Fatal(keyObj.KeyInDB)
+	}
+
+	keyObj = NewKeyObj(true, "ns1", "rami", "", "")
+	if keyObj.KeyInDB != "dp_ns1_rami_" {
+		t.Fatal(keyObj.KeyInDB)
+	}
+
+	keyObj = NewKeyObj(false, "ns1", "rami", "", "")
+	if keyObj.KeyInDB != "sts_ns1_rami_" {
+		t.Fatal(keyObj.KeyInDB)
+	}
+
 	keyObj = NewKeyObj(true, "ns1", "rami", "rami-xx-yy", "rami")
 	if keyObj.KeyInDB != "pool__rami_dp_ns1_rami_rami-xx-yy" {
 		t.Fatal(keyObj.KeyInDB)

@@ -14,13 +14,16 @@ import (
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/api"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
 	crdInformer "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/informers/externalversions"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/crd"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server/options"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/httputil"
 	pageutil "git.code.oa.com/gaiastack/galaxy/pkg/utils/page"
 	"github.com/emicklei/go-restful"
+	"github.com/emicklei/go-restful-swagger12"
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
+	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
@@ -45,6 +48,7 @@ type Server struct {
 	*options.ServerRunOptions
 	client               kubernetes.Interface
 	crdClient            versioned.Interface
+	extensionClient      extensionClient.Interface
 	plugin               *schedulerplugin.FloatingIPPlugin
 	informerFactory      informers.SharedInformerFactory
 	crdInformerFactory   crdInformer.SharedInformerFactory
@@ -112,10 +116,14 @@ func (s *Server) Start() error {
 func (s *Server) Run() error {
 	go s.informerFactory.Start(s.stopChan)
 	go s.crdInformerFactory.Start(s.stopChan)
+	if err := crd.EnsureCRDCreated(s.extensionClient); err != nil {
+		return err
+	}
 	if err := s.plugin.Init(); err != nil {
 		return err
 	}
 	s.plugin.Run(s.stopChan)
+	go s.startAPIServer()
 	s.startServer()
 	return nil
 }
@@ -133,11 +141,13 @@ func (s *Server) initk8sClient() {
 	if err != nil {
 		glog.Fatalf("Error building kubernetes clientset: %v", err)
 	}
-	if s.JsonConf.SchedulePluginConf.StorageDriver == "k8s-crd" {
-		s.crdClient, err = versioned.NewForConfig(cfg)
-		if err != nil {
-			glog.Fatalf("Error building float ip clientset: %v", err)
-		}
+	s.crdClient, err = versioned.NewForConfig(cfg)
+	if err != nil {
+		glog.Fatalf("Error building float ip clientset: %v", err)
+	}
+	s.extensionClient, err = extensionClient.NewForConfig(cfg)
+	if err != nil {
+		glog.Fatalf("Error building float ip clientset: %v", err)
 	}
 	glog.Infof("connected to apiserver %v", cfg)
 
@@ -208,18 +218,93 @@ func (s *Server) startServer() {
 	ws.Route(ws.POST("/bind").To(s.bind).Reads(schedulerapi.ExtenderBindingArgs{}).Writes(schedulerapi.ExtenderBindingResult{}))
 	health := new(restful.WebService)
 	health.Route(health.GET("/healthy").To(s.healthy))
-	restful.Add(ws)
-	restful.Add(health)
-	c := api.NewController(s.plugin.GetIpam(), s.plugin.GetSecondIpam(), s.plugin.PodLister)
-	ws.Route(ws.GET("/ip").To(c.ListIPs).Writes(pageutil.Page{}))
-	ws.Route(ws.POST("/ip").To(c.ReleaseIPs).Reads(api.ReleaseIPReq{}).Writes(httputil.Resp{}))
-	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient}
-	ws.Route(ws.GET("/pool/{name}").To(poolController.Get).Writes(httputil.Resp{}))
-	ws.Route(ws.POST("/pool").To(poolController.CreateOrUpdate).Reads(api.Pool{}).Writes(httputil.Resp{}))
-	ws.Route(ws.DELETE("/pool/{name}").To(poolController.Delete).Writes(httputil.Resp{}))
-	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", s.Bind, s.Port), nil); err != nil {
+	container := restful.NewContainer()
+	container.Add(ws)
+	container.Add(health)
+	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", s.Bind, s.Port), container); err != nil {
 		glog.Fatalf("unable to listen: %v.", err)
 	}
+}
+
+func (s *Server) startAPIServer() {
+	ws := new(restful.WebService)
+	ws.
+		Path("/v1").
+		Consumes(restful.MIME_JSON).
+		Produces(restful.MIME_JSON)
+	c := api.NewController(s.plugin.GetIpam(), s.plugin.GetSecondIpam(), s.plugin.PodLister)
+	ws.Route(ws.GET("/ip").To(c.ListIPs).
+		Doc("List ips by keyword or params").
+		Param(ws.QueryParameter("keyword", "keyword").DataType("string")).
+		Param(ws.QueryParameter("poolName", "pool name").DataType("string")).
+		Param(ws.QueryParameter("appName", "app name").DataType("string")).
+		Param(ws.QueryParameter("podName", "pod name").DataType("string")).
+		Param(ws.QueryParameter("namespace", "namespace").DataType("string")).
+		Param(ws.QueryParameter("isDeployment", "listing deployments or statefulsets").DataType("boolean")).
+		Param(ws.QueryParameter("page", "page number, valid range [0,99999]").DataType("integer")).
+		Param(ws.QueryParameter("size", "page size, valid range (0,9999]").DataType("integer").DefaultValue("10")).
+		Param(ws.QueryParameter("sort", "sort by which field, supports ip/namespace/podname/policy asc/desc").DataType("string").DefaultValue("ip asc")).
+		Returns(http.StatusOK, "request succeed", api.ListIPResp{
+			Page: pageutil.Page{Last: true, TotalElements: 2, TotalPages: 1, First: true, NumberOfElements: 2, Size: 10, Number: 0},
+			Content: []api.FloatingIP{
+				{IP: "10.0.70.93", PoolName: "sample-pool", Policy: 2, UpdateTime: time.Unix(1555924386, 0), Releasable: true},
+				{IP: "10.0.70.118", PoolName: "sample-pool2", Namespace: "default", AppName: "app", PodName: "app-xxx-yyy", Policy: 2, UpdateTime: time.Unix(1555924279, 0), Status: "Running"},
+			}}).
+		Writes(api.ListIPResp{}))
+
+	ws.Route(ws.POST("/ip").To(c.ReleaseIPs).
+		Doc("Release ips").
+		Reads(api.ReleaseIPReq{}).
+		ReturnsError(http.StatusBadRequest, "10.0.0 is not a valid ip", nil).
+		ReturnsError(http.StatusBadRequest, "10.0.0.2 is not releasable", nil).
+		ReturnsError(http.StatusInternalServerError, "internal server error", nil).
+		ReturnsError(http.StatusAccepted, "Unreleased ips have been released or allocated to other pods, or are not within valid range", api.ReleaseIPResp{Unreleased: []string{"10.0.70.32"}}).
+		Returns(http.StatusOK, "request succeed", api.ReleaseIPResp{Resp: httputil.Resp{Code: http.StatusOK}}).
+		Writes(api.ReleaseIPResp{Resp: httputil.Resp{Code: http.StatusOK}}))
+
+	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient}
+	ws.Route(ws.GET("/pool/{name}").To(poolController.Get).
+		Doc("Get pool by name").
+		Param(ws.PathParameter("name", "pool name").DataType("string").Required(true)).
+		ReturnsError(http.StatusNotFound, "pool not found", nil).
+		ReturnsError(http.StatusBadRequest, "pool name is empty", nil).
+		ReturnsError(http.StatusInternalServerError, "internal server error", nil).
+		Returns(http.StatusOK, "request succeed", api.GetPoolResp{Resp: httputil.NewResp(http.StatusOK, ""), Pool: api.Pool{Name: "sample-pool", Size: 4}}).
+		Writes(api.GetPoolResp{}))
+
+	ws.Route(ws.POST("/pool").To(poolController.CreateOrUpdate).
+		Doc("Create or update pool").
+		Reads(api.Pool{Name: "sample-pool"}).
+		ReturnsError(http.StatusBadRequest, "pool name is empty", nil).
+		ReturnsError(http.StatusInternalServerError, "internal server error", nil).
+		Returns(http.StatusOK, "request succeed", httputil.Resp{Code: http.StatusOK}).
+		Writes(httputil.Resp{Code: http.StatusOK}))
+
+	ws.Route(ws.DELETE("/pool/{name}").To(poolController.Delete).
+		Doc("Delete pool by name").
+		Param(ws.PathParameter("name", "pool name").DataType("string").Required(true)).
+		ReturnsError(http.StatusNotFound, "pool not found", nil).
+		ReturnsError(http.StatusBadRequest, "pool name is empty", nil).
+		ReturnsError(http.StatusInternalServerError, "internal server error", nil).
+		Returns(http.StatusOK, "request succeed", httputil.Resp{Code: http.StatusOK}).
+		Writes(httputil.Resp{Code: http.StatusOK}))
+
+	restful.Add(ws)
+	addSwaggerUISupport(restful.DefaultContainer)
+	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", s.Bind, s.APIPort), nil); err != nil {
+		glog.Fatalf("unable to listen: %v.", err)
+	}
+}
+
+func addSwaggerUISupport(container *restful.Container) {
+	config := swagger.Config{
+		WebServices:     restful.RegisteredWebServices(),
+		ApiPath:         "/apidocs.json",
+		SwaggerPath:     "/apidocs/",
+		SwaggerFilePath: "/etc/swagger-ui/dist",
+	}
+
+	swagger.RegisterSwaggerService(config, container)
 }
 
 func (s *Server) filter(request *restful.Request, response *restful.Response) {

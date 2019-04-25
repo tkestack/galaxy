@@ -3,19 +3,20 @@ package api
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin/util"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/httputil"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
 	pageutil "git.code.oa.com/gaiastack/galaxy/pkg/utils/page"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/listers/core/v1"
 )
 
@@ -33,34 +34,75 @@ func NewController(ipam, secondIpam floatingip.IPAM, lister v1.PodLister) *Contr
 }
 
 type FloatingIP struct {
-	IP           string `json:"ip"`
-	Namespace    string `json:"namespace"`
-	AppName      string `json:"appName"`
-	PodName      string `json:"podName"`
-	PoolName     string `json:"poolName"`
-	Policy       uint16 `json:"policy"`
-	IsDeployment bool   `json:"isDeployment"`
-	UpdateTime   int64  `json:"updateTime"`
-	Status       string `json:"status"`
-	Releasable   bool   `json:"releasable"`
+	IP           string    `json:"ip"`
+	Namespace    string    `json:"namespace,omitempty"`
+	AppName      string    `json:"appName,omitempty"`
+	PodName      string    `json:"podName,omitempty"`
+	PoolName     string    `json:"poolName,omitempty"`
+	Policy       uint16    `json:"policy"`
+	IsDeployment bool      `json:"isDeployment,omitempty"`
+	UpdateTime   time.Time `json:"updateTime,omitempty"`
+	Status       string    `json:"status,omitempty"`
+	Releasable   bool      `json:"releasable,omitempty"`
 	attr         string
+}
+
+func (FloatingIP) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"ip":           "ip",
+		"namespace":    "namespace",
+		"appName":      "deployment or statefulset name",
+		"podName":      "pod name",
+		"policy":       "ip release policy",
+		"isDeployment": "deployment or statefulset",
+		"updateTime":   "last allocate or release time of this ip",
+		"status":       "pod status if exists",
+		"releasable":   "if the ip is releasable. An ip is releasable if it isn't belong to any pod",
+	}
+}
+
+type ListIPResp struct {
+	pageutil.Page
+	Content []FloatingIP `json:"content,omitempty"`
 }
 
 func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 	keyword := req.QueryParameter("keyword")
-
-	ret, err := listIPs(keyword, c.ipam, c.secondIpam)
+	key := keyword
+	fuzzyQuery := true
+	if keyword == "" {
+		fuzzyQuery = false
+		var err error
+		poolName := req.QueryParameter("poolName")
+		appName := req.QueryParameter("appName")
+		podName := req.QueryParameter("podName")
+		namespace := req.QueryParameter("namespace")
+		isDep := false
+		isDepStr := req.QueryParameter("isDeployment")
+		if isDepStr != "" {
+			isDep, err = strconv.ParseBool(isDepStr)
+			if err != nil {
+				httputil.BadRequest(resp, fmt.Errorf("invalid isDeployment(bool field): %s", isDepStr))
+				return
+			}
+		}
+		key = util.NewKeyObj(isDep, namespace, appName, podName, poolName).KeyInDB
+	}
+	glog.V(4).Infof("list ips by %s, fuzzyQuery %v", key, fuzzyQuery)
+	fips, err := listIPs(key, c.ipam, c.secondIpam, fuzzyQuery)
 	if err != nil {
 		httputil.InternalError(resp, err)
 		return
 	}
 	sortParam, page, size := pageutil.PagingParams(req)
-	pagin := format(sortParam, page, size, ret)
-	if err := fillReleasableAndStatus(c.podLister, ret); err != nil {
+	sort.Sort(bySortParam{array: fips, lessFunc: sortFunc(sortParam)})
+	start, end, pagin := pageutil.Pagination(page, size, len(fips))
+	pagedFips := fips[start:end]
+	if err := fillReleasableAndStatus(c.podLister, pagedFips); err != nil {
 		httputil.InternalError(resp, err)
 		return
 	}
-	resp.WriteEntity(*pagin) // nolint: errcheck
+	resp.WriteEntity(ListIPResp{Page: *pagin, Content: pagedFips}) // nolint: errcheck
 }
 
 func fillReleasableAndStatus(lister v1.PodLister, ips []FloatingIP) error {
@@ -82,19 +124,6 @@ func fillReleasableAndStatus(lister v1.PodLister, ips []FloatingIP) error {
 	return nil
 }
 
-var finishedStateMap = sets.NewString(string(corev1.PodFailed), string(corev1.PodSucceeded), "Completed", "Terminated")
-
-func isFinishedState(state string) bool {
-	return finishedStateMap.Has(state)
-}
-
-func format(sortParam string, page, size int, ret []FloatingIP) *pageutil.Page {
-	sort.Sort(bySortParam{array: ret, lessFunc: sortFunc(sortParam)})
-	start, end, pagin := pageutil.Pagination(page, size, len(ret))
-	pagin.Content = ret[start:end]
-	return pagin
-}
-
 type bySortParam struct {
 	lessFunc func(a, b int, array []FloatingIP) bool
 	array    []FloatingIP
@@ -114,8 +143,6 @@ func (by bySortParam) Len() int {
 
 func sortFunc(sort string) func(a, b int, array []FloatingIP) bool {
 	switch strings.ToLower(sort) {
-	case "project":
-		fallthrough
 	case "namespace asc":
 		return func(a, b int, array []FloatingIP) bool {
 			return array[a].Namespace < array[b].Namespace
@@ -163,13 +190,24 @@ type ReleaseIPReq struct {
 	IPs []FloatingIP `json:"ips"`
 }
 
+type ReleaseIPResp struct {
+	httputil.Resp
+	Unreleased []string `json:"unreleased,omitempty"`
+}
+
+func (ReleaseIPResp) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"unreleased": "unreleased ips, have been released or allocated to other pods, or are not within valid range",
+	}
+}
+
 func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 	var releaseIPReq ReleaseIPReq
 	if err := req.ReadEntity(&releaseIPReq); err != nil {
 		httputil.BadRequest(resp, err)
 		return
 	}
-	expectIPtoKey := make(map[uint32]string)
+	expectIPtoKey := make(map[string]string)
 	for i := range releaseIPReq.IPs {
 		temp := releaseIPReq.IPs[i]
 		ip := net.ParseIP(temp.IP)
@@ -177,9 +215,8 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 			httputil.BadRequest(resp, fmt.Errorf("%q is not a valid ip", temp.IP))
 			return
 		}
-		ipInt := nets.IPToInt(ip)
 		keyObj := util.NewKeyObj(temp.IsDeployment, temp.Namespace, temp.AppName, temp.PodName, temp.PoolName)
-		expectIPtoKey[ipInt] = keyObj.KeyInDB
+		expectIPtoKey[temp.IP] = keyObj.KeyInDB
 	}
 	if err := fillReleasableAndStatus(c.podLister, releaseIPReq.IPs); err != nil {
 		httputil.BadRequest(resp, err)
@@ -191,79 +228,91 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 			return
 		}
 	}
-	if err := batchDeleteIPs(expectIPtoKey, c.ipam, c.secondIpam); err != nil {
-		httputil.BadRequest(resp, err)
-		return
+	_, unreleased, err := batchReleaseIPs(expectIPtoKey, c.ipam, c.secondIpam)
+	var unreleasedIP []string
+	for ip := range unreleased {
+		unreleasedIP = append(unreleasedIP, ip)
 	}
-	httputil.Ok(resp)
-}
-
-type logObj struct {
-	IP  net.IP
-	Key string
-}
-
-func listIPs(keyword string, ipam floatingip.IPAM, secondIpam floatingip.IPAM) ([]FloatingIP, error) {
-	var resp []FloatingIP
-	fips, err := ipam.GetAllIPs(keyword)
+	var res *ReleaseIPResp
 	if err != nil {
-		return resp, err
+		res = &ReleaseIPResp{Resp: httputil.NewResp(http.StatusInternalServerError, fmt.Sprintf("server error: %v", err))}
+	} else if len(unreleasedIP) > 0 {
+		res = &ReleaseIPResp{Resp: httputil.NewResp(http.StatusAccepted, fmt.Sprintf("Unreleased ips have been released or allocated to other pods, or are not within valid range"))}
+	} else {
+		res = &ReleaseIPResp{Resp: httputil.NewResp(http.StatusOK, "")}
 	}
-	for _, fip := range fips {
-		keyObj := util.ParseKey(fip.Key)
-		tmp := FloatingIP{
-			IP:           strconv.FormatUint(uint64(fip.IP), 10),
+	res.Unreleased = unreleasedIP
+	resp.WriteHeader(res.Code)
+	resp.WriteEntity(res)
+}
+
+func listIPs(keyword string, ipam floatingip.IPAM, secondIpam floatingip.IPAM, fuzzyQuery bool) ([]FloatingIP, error) {
+	var fips []database.FloatingIP
+	var err error
+	if fuzzyQuery {
+		fips, err = ipam.ByKeyword(keyword)
+	} else {
+		fips, err = ipam.ByPrefix(keyword)
+	}
+	if err != nil {
+		return nil, err
+	}
+	resp := transform(fips)
+	if secondIpam != nil {
+		var secondFips []database.FloatingIP
+		if fuzzyQuery {
+			secondFips, err = secondIpam.ByKeyword(keyword)
+		} else {
+			secondFips, err = secondIpam.ByPrefix(keyword)
+		}
+		if err != nil {
+			return resp, err
+		}
+		resp2 := transform(secondFips)
+		resp = append(resp, resp2...)
+	}
+	return resp, nil
+}
+
+func transform(fips []database.FloatingIP) []FloatingIP {
+	var res []FloatingIP
+	for i := range fips {
+		keyObj := util.ParseKey(fips[i].Key)
+		res = append(res, FloatingIP{IP: nets.IntToIP(fips[i].IP).String(),
 			Namespace:    keyObj.Namespace,
 			AppName:      keyObj.AppName,
 			PodName:      keyObj.PodName,
 			PoolName:     keyObj.PoolName,
 			IsDeployment: keyObj.IsDeployment,
-			Policy:       fip.Policy,
-			attr:         fip.Attr,
-		}
-		resp = append(resp, tmp)
+			Policy:       fips[i].Policy,
+			UpdateTime:   fips[i].UpdatedAt,
+			attr:         fips[i].Attr})
 	}
-	if secondIpam != nil {
-		secondFips, err := secondIpam.GetAllIPs(keyword)
-		if err != nil {
-			return resp, err
-		}
-		for _, fip := range secondFips {
-			keyObj := util.ParseKey(fip.Key)
-			tmp := FloatingIP{
-				IP:           strconv.FormatUint(uint64(fip.IP), 10),
-				Namespace:    keyObj.Namespace,
-				AppName:      keyObj.AppName,
-				PodName:      keyObj.PodName,
-				PoolName:     keyObj.PoolName,
-				IsDeployment: keyObj.IsDeployment,
-				Policy:       fip.Policy,
-				attr:         fip.Attr,
-			}
-			resp = append(resp, tmp)
-		}
-	}
-	return resp, nil
+	return res
 }
 
-func batchDeleteIPs(ipToKey map[uint32]string, ipam floatingip.IPAM, secondIpam floatingip.IPAM) error {
-	deletedIP, err := ipam.ReleaseIPs(ipToKey)
-	if len(deletedIP) > 0 {
-		glog.Infof("releaseIPs %v", deletedIP)
+func batchReleaseIPs(ipToKey map[string]string, ipam floatingip.IPAM, secondIpam floatingip.IPAM) (map[string]string, map[string]string, error) {
+	released, unreleased, err := ipam.ReleaseIPs(ipToKey)
+	if len(released) > 0 {
+		glog.Infof("releaseIPs %v", released)
 	}
 	if err != nil {
-		return err
+		return released, unreleased, err
 	}
 	if secondIpam != nil {
-		deletedIP2, err := secondIpam.ReleaseIPs(ipToKey)
-		if len(deletedIP2) > 0 {
-			glog.Infof("releaseIPs in second IPAM %v", deletedIP2)
+		released2, unreleased2, err := secondIpam.ReleaseIPs(unreleased)
+		if len(released2) > 0 {
+			glog.Infof("releaseIPs in second IPAM %v", released2)
 		}
+		for k, v := range released2 {
+			released[k] = v
+		}
+		unreleased = unreleased2
 		if err != nil {
 			if !(strings.Contains(err.Error(), "Table") && strings.Contains(err.Error(), "doesn't exist")) {
-				return err
+				return released, unreleased, err
 			}
 		}
 	}
-	return nil
+	return released, unreleased, nil
 }
