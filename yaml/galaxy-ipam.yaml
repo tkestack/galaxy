@@ -7,9 +7,13 @@ metadata:
 spec:
   type: NodePort
   ports:
-  - port: 8080
-    targetPort: 80
+  - port: 9040
+    targetPort: 9040
     nodePort: 32760
+    protocol: TCP
+  - port: 9041
+    targetPort: 9041
+    nodePort: 32761
     protocol: TCP
   selector:
     app: galaxy-ipam
@@ -102,9 +106,13 @@ spec:
           - --v=4
           - --config=/etc/galaxy/galaxy-ipam.json
           - --port=9040
+          - --api-port=9041
           - --leader-elect
         command:
           - /usr/bin/galaxy-ipam
+        ports:
+          - containerPort: 9040
+          - containerPort: 9041
         imagePullPolicy: Always
         name: galaxy-ipam
         resources:

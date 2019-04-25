@@ -185,7 +185,7 @@ Get pool by name
 | poolName | string |  | No |
 | releasable | boolean | if the ip is releasable. An ip is releasable if it isn't belong to any pod | No |
 | status | string | pod status if exists | No |
-| updateTime | long | last allocate or release time of this ip | No |
+| updateTime | dateTime | last allocate or release time of this ip | No |
 
 #### api.GetPoolResp
 
