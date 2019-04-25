@@ -247,8 +247,8 @@ func (s *Server) startAPIServer() {
 		Returns(http.StatusOK, "request succeed", api.ListIPResp{
 			Page: pageutil.Page{Last: true, TotalElements: 2, TotalPages: 1, First: true, NumberOfElements: 2, Size: 10, Number: 0},
 			Content: []api.FloatingIP{
-				{IP: "10.0.70.93", PoolName: "sample-pool", Policy: 2, UpdateTime: 1555924386, Releasable: true},
-				{IP: "10.0.70.118", PoolName: "sample-pool2", Namespace: "default", AppName: "app", PodName: "app-xxx-yyy", Policy: 2, UpdateTime: 1555924279, Status: "Running"},
+				{IP: "10.0.70.93", PoolName: "sample-pool", Policy: 2, UpdateTime: time.Unix(1555924386, 0), Releasable: true},
+				{IP: "10.0.70.118", PoolName: "sample-pool2", Namespace: "default", AppName: "app", PodName: "app-xxx-yyy", Policy: 2, UpdateTime: time.Unix(1555924279, 0), Status: "Running"},
 			}}).
 		Writes(api.ListIPResp{}))
 

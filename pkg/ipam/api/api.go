@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin/util"
@@ -33,16 +34,16 @@ func NewController(ipam, secondIpam floatingip.IPAM, lister v1.PodLister) *Contr
 }
 
 type FloatingIP struct {
-	IP           string `json:"ip"`
-	Namespace    string `json:"namespace,omitempty"`
-	AppName      string `json:"appName,omitempty"`
-	PodName      string `json:"podName,omitempty"`
-	PoolName     string `json:"poolName,omitempty"`
-	Policy       uint16 `json:"policy"`
-	IsDeployment bool   `json:"isDeployment,omitempty"`
-	UpdateTime   int64  `json:"updateTime,omitempty"`
-	Status       string `json:"status,omitempty"`
-	Releasable   bool   `json:"releasable,omitempty"`
+	IP           string    `json:"ip"`
+	Namespace    string    `json:"namespace,omitempty"`
+	AppName      string    `json:"appName,omitempty"`
+	PodName      string    `json:"podName,omitempty"`
+	PoolName     string    `json:"poolName,omitempty"`
+	Policy       uint16    `json:"policy"`
+	IsDeployment bool      `json:"isDeployment,omitempty"`
+	UpdateTime   time.Time `json:"updateTime,omitempty"`
+	Status       string    `json:"status,omitempty"`
+	Releasable   bool      `json:"releasable,omitempty"`
 	attr         string
 }
 
@@ -284,7 +285,7 @@ func transform(fips []database.FloatingIP) []FloatingIP {
 			PoolName:     keyObj.PoolName,
 			IsDeployment: keyObj.IsDeployment,
 			Policy:       fips[i].Policy,
-			UpdateTime:   fips[i].UpdatedAt.Unix(),
+			UpdateTime:   fips[i].UpdatedAt,
 			attr:         fips[i].Attr})
 	}
 	return res
