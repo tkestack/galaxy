@@ -120,8 +120,8 @@ func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, polic
 	ci.caches.cacheLock.Lock()
 	for k, v := range ci.caches.unallocatedFIPs {
 		//find an unallocated fip, then use it
-		ipStr = k
 		if v.subnet == routableSubnet.String() {
+			ipStr = k
 			date := time.Now()
 			if err = ci.createFloatingIP(ipStr, key, policy, attr, v.subnet, date); err != nil {
 				glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
@@ -135,6 +135,9 @@ func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, polic
 	}
 	ci.caches.cacheLock.Unlock()
 
+	if ipStr == "" {
+		return nil, ErrNoEnoughIP
+	}
 	ci.caches.cacheLock.RLock()
 	defer ci.caches.cacheLock.RUnlock()
 	if err = ci.getFloatingIP(ipStr); err != nil {
