@@ -126,7 +126,7 @@ func CmdAdd(cmdArgs *skel.CmdArgs, networkInfos []*NetworkInfo) (types.Result, e
 	)
 	for idx, networkInfo := range networkInfos {
 		//append additional args from network info
-		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(networkInfo.Args))
+		cmdArgs.Args = strings.TrimRight(fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(networkInfo.Args)), ";")
 		result, err = DelegateAdd(networkInfo.Conf, cmdArgs, networkInfo.IfName)
 		if err != nil {
 			//fail to add cni, then delete all established CNIs recursively
@@ -176,7 +176,7 @@ func CmdDel(cmdArgs *skel.CmdArgs, lastIdx int) error {
 	for idx := lastIdx; idx >= 0; idx-- {
 		networkInfo := networkInfos[idx]
 		//append additional args from network info
-		cmdArgs.Args = fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(networkInfo.Args))
+		cmdArgs.Args = strings.TrimRight(fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(networkInfo.Args)), ";")
 		err := DelegateDel(networkInfo.Conf, cmdArgs, networkInfo.IfName)
 		if err != nil {
 			errorSet = append(errorSet, err.Error())
