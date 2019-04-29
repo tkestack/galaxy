@@ -89,6 +89,10 @@ data:
 - subnet: the POD IP subnet.
 - vlan: the POD IP vlan id. If POD IPs are not belongs to the same vlan as node IP, please specify the POD IP vlan ids. Leave it empty if not required.
 
+## CNI network configuration
+
+You can use [Vlan CNI or TKE route ENI CNI plugin](supported-cnis.md) to launch Float IP Pods. Make sure to update `DefaultNetworks` to `galaxy-k8s-vlan` of galaxy-etc ConfigMap or add `k8s.v1.cni.cncf.io/networks=galaxy-k8s-vlan` annotation to Pod spec.
+
 ## Cloud Provider
 
 If running on Public or Private Clouds, Galaxy can leverage ENI function to provide Float IPs for PODs.

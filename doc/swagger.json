@@ -1,0 +1,321 @@
+basePath: /
+definitions:
+  api.FloatingIP:
+    properties:
+      appName:
+        description: deployment or statefulset name
+        type: string
+      attr:
+        type: string
+      ip:
+        description: ip
+        type: string
+      isDeployment:
+        description: deployment or statefulset
+        type: boolean
+      namespace:
+        description: namespace
+        type: string
+      podName:
+        description: pod name
+        type: string
+      policy:
+        description: ip release policy
+        type: integer
+      poolName:
+        type: string
+      releasable:
+        description: >-
+          if the ip is releasable. An ip is releasable if it isn't belong to any
+          pod
+        type: boolean
+      status:
+        description: pod status if exists
+        type: string
+      updateTime:
+        description: last allocate or release time of this ip
+        format: date-time
+        type: string
+    required:
+      - ip
+      - policy
+      - attr
+  api.GetPoolResp:
+    properties:
+      code:
+        format: int32
+        type: integer
+      content:
+        $ref: '#/definitions/httputil.Resp.content'
+      message:
+        type: string
+      pool:
+        $ref: '#/definitions/api.Pool'
+    required:
+      - code
+      - message
+      - pool
+  api.ListIPResp:
+    properties:
+      content:
+        items:
+          $ref: '#/definitions/api.FloatingIP'
+        type: array
+      first:
+        description: if this is the first page
+        type: boolean
+      last:
+        description: if this is the last page
+        type: boolean
+      number:
+        description: page index starting from 0
+        format: int32
+        type: integer
+      numberOfElements:
+        description: number of elements in this page
+        format: int32
+        type: integer
+      size:
+        description: page size
+        format: int32
+        type: integer
+      totalElements:
+        description: total number of elements
+        format: int32
+        type: integer
+      totalPages:
+        description: total number of pages
+        format: int32
+        type: integer
+    required:
+      - content
+      - last
+      - totalElements
+      - totalPages
+      - first
+      - numberOfElements
+      - size
+      - number
+  api.Pool:
+    properties:
+      name:
+        description: pool name
+        type: string
+      size:
+        description: pool size
+        format: int32
+        type: integer
+    required:
+      - name
+      - size
+  api.ReleaseIPReq:
+    properties:
+      ips:
+        items:
+          $ref: '#/definitions/api.FloatingIP'
+        type: array
+    required:
+      - ips
+  api.ReleaseIPResp:
+    properties:
+      code:
+        format: int32
+        type: integer
+      content:
+        $ref: '#/definitions/httputil.Resp.content'
+      message:
+        type: string
+      unreleased:
+        description: >-
+          unreleased ips, have been released or allocated to other pods, or are
+          not within valid range
+        items:
+          type: string
+        type: array
+    required:
+      - code
+      - message
+  httputil.Resp:
+    properties:
+      code:
+        format: int32
+        type: integer
+      content:
+        $ref: '#/definitions/httputil.Resp.content'
+      message:
+        type: string
+    required:
+      - code
+      - message
+  httputil.Resp.content: {}
+  page.Page.content: {}
+host: '119.29.199.183:9041'
+info:
+  title: '119.29.199.183:9041'
+  version: 1.0.0
+paths:
+  /v1/ip:
+    get:
+      consumes:
+        - application/json
+      operationId: ListIPs
+      parameters:
+        - description: keyword
+          in: query
+          name: keyword
+          required: false
+          type: string
+        - description: pool name
+          in: query
+          name: poolName
+          required: false
+          type: string
+        - description: app name
+          in: query
+          name: appName
+          required: false
+          type: string
+        - description: pod name
+          in: query
+          name: podName
+          required: false
+          type: string
+        - description: namespace
+          in: query
+          name: namespace
+          required: false
+          type: string
+        - description: listing deployments or statefulsets
+          in: query
+          name: isDeployment
+          required: false
+          type: boolean
+        - description: 'page number, valid range [0,99999]'
+          in: query
+          name: page
+          required: false
+          type: integer
+        - default: 10
+          description: 'page size, valid range (0,9999]'
+          in: query
+          name: size
+          required: false
+          type: integer
+        - default: ip asc
+          description: 'sort by which field, supports ip/namespace/podname/policy asc/desc'
+          in: query
+          name: sort
+          required: false
+          type: string
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: request succeed
+          schema:
+            $ref: '#/definitions/api.ListIPResp'
+      summary: List ips by keyword or params
+    post:
+      consumes:
+        - application/json
+      operationId: ReleaseIPs
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.ReleaseIPReq'
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: request succeed
+          schema:
+            $ref: '#/definitions/api.ReleaseIPResp'
+        '202':
+          description: >-
+            Unreleased ips have been released or allocated to other pods, or are
+            not within valid range
+          schema:
+            $ref: '#/definitions/api.ReleaseIPResp'
+        '400':
+          description: 10.0.0.2 is not releasable
+        '500':
+          description: internal server error
+      summary: Release ips
+  /v1/pool:
+    post:
+      consumes:
+        - application/json
+      operationId: CreateOrUpdate
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.Pool'
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: request succeed
+          schema:
+            $ref: '#/definitions/httputil.Resp'
+        '400':
+          description: pool name is empty
+        '500':
+          description: internal server error
+      summary: Create or update pool
+  '/v1/pool/{name}':
+    delete:
+      consumes:
+        - application/json
+      operationId: Delete
+      parameters:
+        - description: pool name
+          in: path
+          name: name
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: request succeed
+          schema:
+            $ref: '#/definitions/httputil.Resp'
+        '400':
+          description: pool name is empty
+        '404':
+          description: pool not found
+        '500':
+          description: internal server error
+      summary: Delete pool by name
+    get:
+      consumes:
+        - application/json
+      operationId: Get
+      parameters:
+        - description: pool name
+          in: path
+          name: name
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: request succeed
+          schema:
+            $ref: '#/definitions/api.GetPoolResp'
+        '400':
+          description: pool name is empty
+        '404':
+          description: pool not found
+        '500':
+          description: internal server error
+      summary: Get pool by name
+schemes:
+  - http
+swagger: '2.0'
+

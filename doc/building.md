@@ -1,6 +1,9 @@
 # Build Binaries
 
 ```
+go get -d git.code.oa.com/gaiastack/galaxy
+cd $GOPATH/src/git.code.oa.com/gaiastack/galaxy
+
 # On mac
 hack/dockerbuild.sh
 

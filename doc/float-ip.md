@@ -51,10 +51,8 @@ size: 4
 
 ## API
 
-Galaxy provides swagger 1.2 docs. Add `--swagger` command line args to galaxy-ipam and restart it, check `http://${galaxy-ipam-ip}:9041/apidocs.json/v1`
-If you need a swagger 2.0 doc, please refer [api-spec-converter](https://github.com/LucyBot-Inc/api-spec-converter) to convert it.
-
-API document below is converted by [swagger-markdown](https://github.com/syroegkin/swagger-markdown).
+The following is Galaxy-ipam API doc. If you prefer a swagger API doc, please check [swagger.json](swagger.json)
+For how to generate markdown API document below or swagger API document, please refer to [Contributing to Galaxy](doc/contributing.md) for more information.
 
 ## Version: 1.0.0
 
