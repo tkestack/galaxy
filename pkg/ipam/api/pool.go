@@ -102,6 +102,10 @@ func (c *PoolController) Delete(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	if err := c.Client.GalaxyV1alpha1().Pools("kube-system").Delete(name, &v1.DeleteOptions{}); err != nil {
+		if errors.IsNotFound(err) {
+			httputil.ItemNotFound(resp, fmt.Errorf("pool %s", name))
+			return
+		}
 		httputil.InternalError(resp, err)
 		return
 	}
