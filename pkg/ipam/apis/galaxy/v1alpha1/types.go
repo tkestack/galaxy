@@ -65,6 +65,8 @@ type Pool struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	// The pool size
 	Size int `json:"size"`
+	// Pre-allocate IP when creating pool
+	PreAllocateIP bool `json:"preAllocateIP"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

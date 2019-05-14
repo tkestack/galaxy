@@ -18,21 +18,17 @@ func NewResp(code int, message string) Resp {
 }
 
 func Ok(resp *restful.Response) {
-	resp.WriteHeader(http.StatusOK)
-	resp.WriteEntity(NewResp(http.StatusOK, "")) // nolint: errcheck
+	resp.WriteHeaderAndEntity(http.StatusOK, NewResp(http.StatusOK, "")) // nolint: errcheck
 }
 
 func InternalError(resp *restful.Response, err error) {
-	resp.WriteHeader(http.StatusInternalServerError)
-	resp.WriteEntity(NewResp(http.StatusInternalServerError, fmt.Sprintf("server error: %v", err))) // nolint: errcheck
+	resp.WriteHeaderAndEntity(http.StatusInternalServerError, NewResp(http.StatusInternalServerError, fmt.Sprintf("server error: %v", err))) // nolint: errcheck
 }
 
 func BadRequest(resp *restful.Response, err error) {
-	resp.WriteHeader(http.StatusBadRequest)
-	resp.WriteEntity(NewResp(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))) // nolint: errcheck
+	resp.WriteHeaderAndEntity(http.StatusBadRequest, NewResp(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))) // nolint: errcheck
 }
 
 func ItemNotFound(resp *restful.Response, err error) {
-	resp.WriteHeader(http.StatusNotFound)
-	resp.WriteEntity(NewResp(http.StatusNotFound, fmt.Sprintf("not found: %v", err))) // nolint: errcheck
+	resp.WriteHeaderAndEntity(http.StatusNotFound, NewResp(http.StatusNotFound, fmt.Sprintf("not found: %v", err))) // nolint: errcheck
 }

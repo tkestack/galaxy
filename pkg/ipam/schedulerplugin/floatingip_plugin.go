@@ -898,8 +898,8 @@ func getAttr(nodeName string) string {
 	return string(attr)
 }
 
-func (p *FloatingIPPlugin) GetDB() *database.DBRecorder {
-	return p.db
+func (p *FloatingIPPlugin) GetLockPool() *keylock.Keylock {
+	return p.dpLockPool
 }
 
 func (p *FloatingIPPlugin) GetIpam() floatingip.IPAM {

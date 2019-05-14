@@ -467,10 +467,11 @@ func (ci *crdIpam) syncCacheAfterCreate(ip string, key string, att string, polic
 //don't use lock in the function, otherwise deadlock will be caused
 func (ci *crdIpam) syncCacheAfterDel(ip string) {
 	tmp := &FloatingIPObj{
-		key:    "",
-		att:    "",
-		policy: constant.ReleasePolicyPodDelete,
-		subnet: ci.caches.allocatedFIPs[ip].subnet,
+		key:        "",
+		att:        "",
+		policy:     constant.ReleasePolicyPodDelete,
+		subnet:     ci.caches.allocatedFIPs[ip].subnet,
+		updateTime: time.Now(),
 	}
 	delete(ci.caches.allocatedFIPs, ip)
 	ci.caches.unallocatedFIPs[ip] = tmp

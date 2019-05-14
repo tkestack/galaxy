@@ -262,7 +262,7 @@ func (s *Server) startAPIServer() {
 		Returns(http.StatusOK, "request succeed", api.ReleaseIPResp{Resp: httputil.Resp{Code: http.StatusOK}}).
 		Writes(api.ReleaseIPResp{Resp: httputil.Resp{Code: http.StatusOK}}))
 
-	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient}
+	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient, LockPool: s.plugin.GetLockPool(), IPAM: s.plugin.GetIpam(), SecondIPAM: s.plugin.GetSecondIpam()}
 	ws.Route(ws.GET("/pool/{name}").To(poolController.Get).
 		Doc("Get pool by name").
 		Param(ws.PathParameter("name", "pool name").DataType("string").Required(true)).
@@ -277,7 +277,8 @@ func (s *Server) startAPIServer() {
 		Reads(api.Pool{Name: "sample-pool"}).
 		ReturnsError(http.StatusBadRequest, "pool name is empty", nil).
 		ReturnsError(http.StatusInternalServerError, "internal server error", nil).
-		Returns(http.StatusOK, "request succeed", httputil.Resp{Code: http.StatusOK}).
+		ReturnsError(http.StatusAccepted, "No enough IPs", api.UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: 3}).
+		Returns(http.StatusOK, "request succeed", api.UpdatePoolResp{Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: 3}).
 		Writes(httputil.Resp{Code: http.StatusOK}))
 
 	ws.Route(ws.DELETE("/pool/{name}").To(poolController.Delete).

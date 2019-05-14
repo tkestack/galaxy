@@ -2,12 +2,17 @@ package api
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 
+	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
 	list "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/floatingip"
+	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/gaiastack/galaxy/pkg/utils/httputil"
+	"git.code.oa.com/gaiastack/galaxy/pkg/utils/keylock"
 	"github.com/emicklei/go-restful"
 	"github.com/golang/glog"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -15,19 +20,23 @@ import (
 )
 
 type PoolController struct {
-	Client     versioned.Interface
-	PoolLister list.PoolLister
+	Client           versioned.Interface
+	PoolLister       list.PoolLister
+	LockPool         *keylock.Keylock
+	IPAM, SecondIPAM floatingip.IPAM
 }
 
 type Pool struct {
-	Name string `json:"name"`
-	Size int    `json:"size"`
+	Name          string `json:"name"`
+	Size          int    `json:"size"`
+	PreAllocateIP bool   `json:"preAllocateIP"`
 }
 
 func (Pool) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"name": "pool name",
-		"size": "pool size",
+		"name":          "pool name",
+		"size":          "pool size",
+		"preAllocateIP": "Set to true to allocate IPs when creating or updating pool",
 	}
 }
 
@@ -51,7 +60,18 @@ func (c *PoolController) Get(req *restful.Request, resp *restful.Response) {
 		httputil.InternalError(resp, err)
 		return
 	}
-	resp.WriteEntity(GetPoolResp{Resp: httputil.NewResp(http.StatusOK, ""), Pool: Pool{Name: pool.Name, Size: pool.Size}})
+	resp.WriteEntity(GetPoolResp{Resp: httputil.NewResp(http.StatusOK, ""), Pool: Pool{Name: pool.Name, Size: pool.Size, PreAllocateIP: pool.PreAllocateIP}})
+}
+
+type UpdatePoolResp struct {
+	httputil.Resp
+	RealPoolSize int `json:"realPoolSize"`
+}
+
+func (UpdatePoolResp) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"realPoolSize": "real num of IPs of this pool after creating or updating",
+	}
 }
 
 func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Response) {
@@ -66,30 +86,78 @@ func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Resp
 	}
 	p, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Get(pool.Name, v1.GetOptions{})
 	if err != nil {
-		if errors.IsNotFound(err) {
-			// create Pool
-			if _, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Create(&v1alpha1.Pool{
-				TypeMeta:   v1.TypeMeta{Kind: "Pool", APIVersion: "v1alpha1"},
-				ObjectMeta: v1.ObjectMeta{Name: pool.Name},
-				Size:       pool.Size,
-			}); err != nil {
-				httputil.InternalError(resp, fmt.Errorf("failed to create Pool: %v", err))
-				return
-			}
-			glog.Infof("created pool: %v", pool)
-			httputil.Ok(resp)
-			return
-		}
-		httputil.InternalError(resp, err)
-		return
-	}
-	if pool.Size != p.Size {
-		p.Size = pool.Size
-		if _, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Update(p); err != nil {
+		if !errors.IsNotFound(err) {
 			httputil.InternalError(resp, err)
 			return
 		}
-		glog.Infof("updated pool: %v", pool)
+		// create Pool
+		if _, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Create(&v1alpha1.Pool{
+			TypeMeta:      v1.TypeMeta{Kind: "Pool", APIVersion: "v1alpha1"},
+			ObjectMeta:    v1.ObjectMeta{Name: pool.Name},
+			Size:          pool.Size,
+			PreAllocateIP: pool.PreAllocateIP,
+		}); err != nil {
+			httputil.InternalError(resp, fmt.Errorf("failed to create Pool: %v", err))
+			return
+		}
+		glog.Infof("created pool: %v", pool)
+	} else {
+		if pool.Size != p.Size || p.PreAllocateIP != pool.PreAllocateIP {
+			p.Size = pool.Size
+			p.PreAllocateIP = pool.PreAllocateIP
+			if _, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Update(p); err != nil {
+				httputil.InternalError(resp, err)
+				return
+			}
+			glog.Infof("updated pool: %v", pool)
+		}
+	}
+	if pool.PreAllocateIP {
+		poolPrefix := util.NewKeyObj(true, "", "", "", pool.Name).PoolPrefix()
+		lockIndex := c.LockPool.GetLockIndex([]byte(poolPrefix))
+		subnets, err := c.IPAM.QueryRoutableSubnetByKey("")
+		if err != nil {
+			httputil.InternalError(resp, err)
+			return
+		}
+		if len(subnets) == 0 {
+			httputil.InternalError(resp, fmt.Errorf("subnets empty"))
+			return
+		}
+		j := 0
+		_, subnetIPNet, _ := net.ParseCIDR(subnets[j])
+		c.LockPool.RawLock(lockIndex)
+		defer c.LockPool.RawUnlock(lockIndex)
+		fips, err := c.IPAM.ByPrefix(poolPrefix)
+		if err != nil {
+			httputil.InternalError(resp, err)
+			return
+		}
+		if pool.Size <= len(fips) {
+			resp.WriteEntity(UpdatePoolResp{Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: len(fips)})
+			return
+		}
+		needAllocateIPs := pool.Size - len(fips)
+		for i := 0; i < needAllocateIPs; i++ {
+			ip, err := c.IPAM.AllocateInSubnet(poolPrefix, subnetIPNet, constant.ReleasePolicyNever, "")
+			if err == nil {
+				glog.Infof("allocated ip %s to %s during creating or updating pool", ip.String(), poolPrefix)
+				continue
+			} else if err == floatingip.ErrNoEnoughIP {
+				j++
+				_, subnetIPNet, _ = net.ParseCIDR(subnets[j])
+				if j == len(subnets) {
+					resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: pool.Size - needAllocateIPs + i})
+					return
+				}
+				i--
+			} else {
+				httputil.InternalError(resp, err)
+				return
+			}
+		}
+		resp.WriteEntity(UpdatePoolResp{Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: pool.Size})
+		return
 	}
 	httputil.Ok(resp)
 	return

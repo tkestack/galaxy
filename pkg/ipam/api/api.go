@@ -44,7 +44,7 @@ type FloatingIP struct {
 	UpdateTime   time.Time `json:"updateTime,omitempty"`
 	Status       string    `json:"status,omitempty"`
 	Releasable   bool      `json:"releasable,omitempty"`
-	attr         string
+	attr         string    `json:"-"`
 }
 
 func (FloatingIP) SwaggerDoc() map[string]string {
@@ -242,8 +242,7 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 		res = &ReleaseIPResp{Resp: httputil.NewResp(http.StatusOK, "")}
 	}
 	res.Unreleased = unreleasedIP
-	resp.WriteHeader(res.Code)
-	resp.WriteEntity(res)
+	resp.WriteHeaderAndEntity(res.Code, res)
 }
 
 func listIPs(keyword string, ipam floatingip.IPAM, secondIpam floatingip.IPAM, fuzzyQuery bool) ([]FloatingIP, error) {
