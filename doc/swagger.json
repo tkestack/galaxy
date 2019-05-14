@@ -5,8 +5,6 @@ definitions:
       appName:
         description: deployment or statefulset name
         type: string
-      attr:
-        type: string
       ip:
         description: ip
         type: string
@@ -39,7 +37,6 @@ definitions:
     required:
       - ip
       - policy
-      - attr
   api.GetPoolResp:
     properties:
       code:
@@ -101,6 +98,9 @@ definitions:
       name:
         description: pool name
         type: string
+      preAllocateIP:
+        description: Set to true to allocate IPs when creating or updating pool
+        type: boolean
       size:
         description: pool size
         format: int32
@@ -108,6 +108,7 @@ definitions:
     required:
       - name
       - size
+      - preAllocateIP
   api.ReleaseIPReq:
     properties:
       ips:
@@ -135,6 +136,23 @@ definitions:
     required:
       - code
       - message
+  api.UpdatePoolResp:
+    properties:
+      code:
+        format: int32
+        type: integer
+      content:
+        $ref: '#/definitions/httputil.Resp.content'
+      message:
+        type: string
+      realPoolSize:
+        description: real num of IPs of this pool after creating or updating
+        format: int32
+        type: integer
+    required:
+      - code
+      - message
+      - realPoolSize
   httputil.Resp:
     properties:
       code:
@@ -258,9 +276,13 @@ paths:
         - application/json
       responses:
         '200':
-          description: request succeed
+          description: Description was not specified
           schema:
             $ref: '#/definitions/httputil.Resp'
+        '202':
+          description: No enough IPs
+          schema:
+            $ref: '#/definitions/api.UpdatePoolResp'
         '400':
           description: pool name is empty
         '500':

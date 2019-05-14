@@ -49,6 +49,10 @@ metadata:
 size: 4
 ```
 
+### Pre-allocate IP for a pool
+
+Galaxy-ipam supports pre-allocating IPs for a pool by setting `preAllocateIP=true` when creating or updating pool via HTTP API. Note that this is not working by creating pool via kubectl.
+
 ## API
 
 The following is Galaxy-ipam API doc. If you prefer a swagger API doc, please check [swagger.json](swagger.json)
@@ -120,7 +124,8 @@ Create or update pool
 
 | Code | Description | Schema |
 | ---- | ----------- | ------ |
-| 200 | request succeed | [httputil.Resp](#httputil.resp) |
+| 200 | Description was not specified | [httputil.Resp](#httputil.resp) |
+| 202 | No enough IPs | [api.UpdatePoolResp](#api.updatepoolresp) |
 | 400 | pool name is empty |  |
 | 500 | internal server error |  |
 
@@ -174,7 +179,6 @@ Get pool by name
 | Name | Type | Description | Required |
 | ---- | ---- | ----------- | -------- |
 | appName | string | deployment or statefulset name | No |
-| attr | string |  | Yes |
 | ip | string | ip | Yes |
 | isDeployment | boolean | deployment or statefulset | No |
 | namespace | string | namespace | No |
@@ -212,6 +216,7 @@ Get pool by name
 | Name | Type | Description | Required |
 | ---- | ---- | ----------- | -------- |
 | name | string | pool name | Yes |
+| preAllocateIP | boolean | Set to true to allocate IPs when creating or updating pool | Yes |
 | size | integer | pool size | Yes |
 
 #### api.ReleaseIPReq
@@ -228,6 +233,15 @@ Get pool by name
 | content | [httputil.Resp.content](#httputil.resp.content) |  | No |
 | message | string |  | Yes |
 | unreleased | [ string ] | unreleased ips, have been released or allocated to other pods, or are not within valid range | No |
+
+#### api.UpdatePoolResp
+
+| Name | Type | Description | Required |
+| ---- | ---- | ----------- | -------- |
+| code | integer |  | Yes |
+| content | [httputil.Resp.content](#httputil.resp.content) |  | No |
+| message | string |  | Yes |
+| realPoolSize | integer | real num of IPs of this pool after creating or updating | Yes |
 
 #### httputil.Resp
 
