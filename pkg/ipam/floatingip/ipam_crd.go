@@ -134,7 +134,6 @@ func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, polic
 		}
 	}
 	ci.caches.cacheLock.Unlock()
-
 	if ipStr == "" {
 		return nil, ErrNoEnoughIP
 	}
