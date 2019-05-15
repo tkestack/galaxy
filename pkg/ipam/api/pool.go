@@ -115,17 +115,6 @@ func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Resp
 	if pool.PreAllocateIP {
 		poolPrefix := util.NewKeyObj(true, "", "", "", pool.Name).PoolPrefix()
 		lockIndex := c.LockPool.GetLockIndex([]byte(poolPrefix))
-		subnets, err := c.IPAM.QueryRoutableSubnetByKey("")
-		if err != nil {
-			httputil.InternalError(resp, err)
-			return
-		}
-		if len(subnets) == 0 {
-			httputil.InternalError(resp, fmt.Errorf("subnets empty"))
-			return
-		}
-		j := 0
-		_, subnetIPNet, _ := net.ParseCIDR(subnets[j])
 		c.LockPool.RawLock(lockIndex)
 		defer c.LockPool.RawUnlock(lockIndex)
 		fips, err := c.IPAM.ByPrefix(poolPrefix)
@@ -133,6 +122,17 @@ func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Resp
 			httputil.InternalError(resp, err)
 			return
 		}
+		subnets, err := c.IPAM.QueryRoutableSubnetByKey("")
+		if err != nil {
+			httputil.InternalError(resp, err)
+			return
+		}
+		if len(subnets) == 0 {
+			resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: len(fips)})
+			return
+		}
+		j := 0
+		_, subnetIPNet, _ := net.ParseCIDR(subnets[j])
 		if pool.Size <= len(fips) {
 			resp.WriteEntity(UpdatePoolResp{Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: len(fips)})
 			return
@@ -145,11 +145,11 @@ func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Resp
 				continue
 			} else if err == floatingip.ErrNoEnoughIP {
 				j++
-				_, subnetIPNet, _ = net.ParseCIDR(subnets[j])
 				if j == len(subnets) {
 					resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: pool.Size - needAllocateIPs + i})
 					return
 				}
+				_, subnetIPNet, _ = net.ParseCIDR(subnets[j])
 				i--
 			} else {
 				httputil.InternalError(resp, err)
