@@ -105,6 +105,7 @@ spec:
             topologyKey: "kubernetes.io/hostname"
       serviceAccountName: galaxy-ipam
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
       - image: galaxy_ipam:1.0.0-alpha
         args:
