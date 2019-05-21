@@ -147,6 +147,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				// delete this record from allocatedIPs map to have a retry
 				delete(allocatedIPs, key)
 				glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.fip.IP).String(), key, err)
+				continue
 			}
 			if err := ipam.ReserveIP(key, key, getAttr("")); err != nil {
 				glog.Errorf("failed to reserve %s ip: %v", key, err)
