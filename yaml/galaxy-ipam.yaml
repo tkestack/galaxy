@@ -7,11 +7,13 @@ metadata:
 spec:
   type: NodePort
   ports:
-  - port: 9040
+  - name: scheduler-port
+    port: 9040
     targetPort: 9040
     nodePort: 32760
     protocol: TCP
-  - port: 9041
+  - name: api-port
+    port: 9041
     targetPort: 9041
     nodePort: 32761
     protocol: TCP
