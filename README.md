@@ -10,6 +10,8 @@ Currently, it consists of three components - Galaxy, CNI plugins and Galaxy IPAM
 Galaxy is a daemon process running on each kubelet node which invokes different kinds of CNI plugins to setup the required networks for pods.
 Galaxy IPAM is a Kubernetes Scheduler plugin which works as a Float IP configuration and allocation manager.
 
+Also, galaxy is compatible with CNI spec and you can integrate any CNI plugin with galaxy by installing CNI binaries and updating [network configuration](doc/galaxy-config.md).
+
 ## Using Galaxy
 
 - [Getting started](doc/getting-started.md)
