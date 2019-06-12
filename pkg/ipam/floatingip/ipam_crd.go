@@ -377,10 +377,8 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 		found := false
 		for _, fipConf := range fipMap {
 			if fipConf.IPNet().Contains(netIP) {
-				found = true
-				if !fipConf.Contains(netIP) {
-					deletingIPs = append(deletingIPs, ip.Name)
-				} else {
+				if fipConf.Contains(netIP) {
+					found = true
 					//ip in config, insert it into cache
 					tmpFip := &FloatingIPObj{
 						key:        ip.Spec.Key,
@@ -390,8 +388,8 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 						updateTime: ip.Spec.UpdateTime.Time,
 					}
 					tmpCacheAllocated[ip.Name] = tmpFip
+					break
 				}
-				break
 			}
 		}
 		if !found {

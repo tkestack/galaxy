@@ -82,11 +82,10 @@ func (i *dbIpam) mergeWithDB(fipMap map[string]*FloatingIP) error {
 		found := false
 		for _, fipConf := range fipMap {
 			if fipConf.IPNet().Contains(netIP) {
-				found = true
-				if !fipConf.Contains(netIP) {
-					toBeDelete = append(toBeDelete, ip.IP)
+				if fipConf.Contains(netIP) {
+					found = true
+					break
 				}
-				break
 			}
 		}
 		if !found {
