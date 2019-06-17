@@ -71,10 +71,12 @@ func SavePort(containerID string, data []byte) error {
 	return ioutil.WriteFile(path, data, 0600)
 }
 
+func RemovePortFile(containerID string) error {
+	return os.Remove(filepath.Join(stateDir, containerID))
+}
+
 func ConsumePort(containerID string) ([]Port, error) {
 	path := filepath.Join(stateDir, containerID)
-	defer os.Remove(path) // nolint: errcheck
-
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err

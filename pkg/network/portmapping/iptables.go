@@ -24,7 +24,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	"k8s.io/apimachinery/pkg/util/wait"
 	glog "k8s.io/klog"
 	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/utils/exec"
@@ -127,7 +129,7 @@ func containerPortChainRules(containerPort *k8s.Port, protocol string, hostportC
 	writeLine(natRules, args...)
 }
 
-func (h *PortMappingHandler) CleanPortMapping(ports []k8s.Port) {
+func (h *PortMappingHandler) CleanPortMapping(ports []k8s.Port) error {
 	var kubeHostportsChainRules [][]string
 	natChains := bytes.NewBuffer(nil)
 	natRules := bytes.NewBuffer(nil)
@@ -154,20 +156,35 @@ func (h *PortMappingHandler) CleanPortMapping(ports []k8s.Port) {
 	natLines := append(natChains.Bytes(), natRules.Bytes()...)
 
 	for _, rule := range kubeHostportsChainRules {
-		for i := 0; i < 3; i++ {
-			if err := h.DeleteRule(utiliptables.TableNAT, kubeHostportsChain, rule...); err != nil {
-				if strings.Contains(err.Error(), "Resource temporarily unavailable") {
-					continue
-				}
-				glog.Errorf("failed to delete rule %s: %v", rule, err)
-			}
-			break
+		if err := h.withRetry(func() error {
+			return h.DeleteRule(utiliptables.TableNAT, kubeHostportsChain, rule...)
+		}); err != nil {
+			err = fmt.Errorf("failed to delete rule %s: %v", rule, err)
+			glog.Warning(err)
+			return err
 		}
 	}
-	err := h.RestoreAll(natLines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
-	if err != nil {
-		glog.Errorf("Failed to execute iptables-restore for rules %s: %v", string(natLines), err)
+	if err := h.withRetry(func() error {
+		return h.RestoreAll(natLines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
+	}); err != nil {
+		err = fmt.Errorf("failed to execute iptables-restore for rules %s: %v", string(natLines), err)
+		glog.Warning(err)
+		return err
 	}
+	return nil
+}
+
+func (h *PortMappingHandler) withRetry(f func() error) error {
+	return wait.PollImmediate(time.Millisecond*100, time.Second*30, func() (done bool, err error) {
+		if err = f(); err == nil {
+			return true, nil
+		} else if strings.Contains(err.Error(), "Resource temporarily unavailable") {
+			return false, nil
+		} else {
+			glog.Error(err)
+			return false, err
+		}
+	})
 }
 
 // SetupPortMappingForAllPods setup iptables for all pods at start time

@@ -18,6 +18,8 @@ package portmapping
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 
 	"tkestack.io/galaxy/pkg/api/k8s"
@@ -207,6 +209,98 @@ COMMIT
 -A OUTPUT -m comment --comment "kube hostport portals" -m addrtype --dst-type LOCAL -j KUBE-HOSTPORTS
 -A POSTROUTING -m comment --comment "SNAT for localhost access to hostports" -o test0 -s 127.0.0.0/8 -j MASQUERADE
 -A PREROUTING -m comment --comment "kube hostport portals" -m addrtype --dst-type LOCAL -j KUBE-HOSTPORTS
+COMMIT
+`
+	if buf.String() != expectTxt {
+		t.Errorf("expect %s, real %s", expectTxt, buf.String())
+	}
+}
+
+type IPTablesWapper struct {
+	handler        utiliptables.Interface
+	realDeleteRule func(utiliptables.Table, utiliptables.Chain, ...string) error
+}
+
+func (w *IPTablesWapper) GetVersion() (string, error) { return w.handler.GetVersion() }
+func (w *IPTablesWapper) EnsureChain(table utiliptables.Table, chain utiliptables.Chain) (bool, error) {
+	return w.handler.EnsureChain(table, chain)
+}
+func (w *IPTablesWapper) FlushChain(table utiliptables.Table, chain utiliptables.Chain) error {
+	return w.handler.FlushChain(table, chain)
+}
+func (w *IPTablesWapper) DeleteChain(table utiliptables.Table, chain utiliptables.Chain) error {
+	return w.handler.DeleteRule(table, chain)
+}
+func (w *IPTablesWapper) EnsureRule(position utiliptables.RulePosition, table utiliptables.Table, chain utiliptables.Chain, args ...string) (bool, error) {
+	return w.handler.EnsureRule(position, table, chain, args...)
+}
+func (w *IPTablesWapper) DeleteRule(table utiliptables.Table, chain utiliptables.Chain, args ...string) error {
+	return w.realDeleteRule(table, chain, args...)
+}
+func (w *IPTablesWapper) ListRule(table utiliptables.Table, chain utiliptables.Chain, args ...string) ([]string, error) {
+	return w.handler.ListRule(table, chain, args...)
+}
+func (w *IPTablesWapper) IsIpv6() bool { return w.handler.IsIpv6() }
+func (w *IPTablesWapper) SaveInto(table utiliptables.Table, buffer *bytes.Buffer) error {
+	return w.handler.SaveInto(table, buffer)
+}
+func (w *IPTablesWapper) EnsurePolicy(table utiliptables.Table, chain utiliptables.Chain, policy string) error {
+	return w.handler.EnsurePolicy(table, chain, policy)
+}
+func (w *IPTablesWapper) Restore(table utiliptables.Table, data []byte, flush utiliptables.FlushFlag, counters utiliptables.RestoreCountersFlag) error {
+	return w.handler.Restore(table, data, flush, counters)
+}
+func (w *IPTablesWapper) RestoreAll(data []byte, flush utiliptables.FlushFlag, counters utiliptables.RestoreCountersFlag) error {
+	return w.handler.RestoreAll(data, flush, counters)
+}
+func (w *IPTablesWapper) AddReloadFunc(reloadFunc func()) { w.handler.AddReloadFunc(reloadFunc) }
+func (w *IPTablesWapper) Destroy()                        { w.handler.Destroy() }
+
+func TestCleanPortMappingWithRetry(t *testing.T) {
+	testPorts := []k8s.Port{{PodName: "pod-2", HostPort: 9090, Protocol: "UDP", ContainerPort: 9090, PodIP: "192.168.0.2"}}
+	wrapper := &IPTablesWapper{handler: iptablesTest.NewFakeIPTables()}
+	h := &PortMappingHandler{
+		Interface:        wrapper,
+		podPortMap:       make(map[string]map[hostport]closeable),
+		natInterfaceName: "test0",
+	}
+	if err := h.SetupPortMapping(testPorts); err != nil {
+		t.Fatal(err)
+	}
+
+	// test through unknown error
+	expectErr := fmt.Errorf("dummy error")
+	wrapper.realDeleteRule = func(utiliptables.Table, utiliptables.Chain, ...string) error {
+		return expectErr
+	}
+	err := h.CleanPortMapping(testPorts)
+	if err == nil || !strings.Contains(err.Error(), err.Error()) {
+		t.Fatal(err)
+	}
+
+	// test resource unavailable
+	var count int
+	wrapper.realDeleteRule = func(t utiliptables.Table, c utiliptables.Chain, args ...string) error {
+		if count < 3 {
+			count++
+			return fmt.Errorf("Resource temporarily unavailable")
+		}
+		return wrapper.handler.DeleteRule(t, c, args...)
+	}
+	err = h.CleanPortMapping(testPorts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf := bytes.NewBuffer(nil)
+	wrapper.SaveInto(utiliptables.TableNAT, buf)
+	expectTxt := `*nat
+:INPUT - [0:0]
+:KUBE-HOSTPORTS - [0:0]
+:KUBE-MARK-MASQ - [0:0]
+:OUTPUT - [0:0]
+:POSTROUTING - [0:0]
+:PREROUTING - [0:0]
+-A KUBE-MARK-MASQ -j MARK --set-xmark 0x4000/0x4000
 COMMIT
 `
 	if buf.String() != expectTxt {

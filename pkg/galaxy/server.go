@@ -397,7 +397,12 @@ func (g *Galaxy) cleanIPtables(containerID string) error {
 		return fmt.Errorf("failed to read ports %v", err)
 	}
 	if len(ports) != 0 {
-		g.pmhandler.CleanPortMapping(ports)
+		if err := g.pmhandler.CleanPortMapping(ports); err != nil {
+			return err
+		}
+		if err := k8s.RemovePortFile(containerID); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("delete port file for %s: %v", containerID, err)
+		}
 	}
 	return nil
 }
