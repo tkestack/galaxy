@@ -16,6 +16,7 @@ import (
 	"github.com/golang/glog"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -122,13 +123,16 @@ func (g *Galaxy) Stop() error {
 }
 
 func (g *Galaxy) initk8sClient() {
-	if g.Master == "" && g.KubeConf == "" {
-		// galaxy currently not support running in pod, so either flagApiServer or flagKubeConf should be specified
-		glog.Fatal("apiserver address unknown")
-	}
-	clientConfig, err := clientcmd.BuildConfigFromFlags(g.Master, g.KubeConf)
+	clientConfig, err := rest.InClusterConfig()
 	if err != nil {
-		glog.Fatalf("Invalid client config: error(%v)", err)
+		if g.Master == "" && g.KubeConf == "" {
+			// galaxy currently not support running in pod, so either flagApiServer or flagKubeConf should be specified
+			glog.Fatal("apiserver address unknown")
+		}
+		clientConfig, err = clientcmd.BuildConfigFromFlags(g.Master, g.KubeConf)
+		if err != nil {
+			glog.Fatalf("Invalid client config: error(%v)", err)
+		}
 	}
 	clientConfig.QPS = 1000.0
 	clientConfig.Burst = 2000
