@@ -64,6 +64,16 @@ func setDefaultConf(conf *NetConf) {
 	}
 }
 
+func loadConf(args *skel.CmdArgs) (*NetConf, error) {
+	conf := NetConf{}
+	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
+		return nil, fmt.Errorf("failed to loading config from args: %v", err)
+	}
+
+	setDefaultConf(&conf)
+	return &conf, nil
+}
+
 func loadConfAndK8SArgs(args *skel.CmdArgs) (*NetConf, *K8SArgs, error) {
 	conf := NetConf{}
 	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
@@ -82,7 +92,7 @@ func loadConfAndK8SArgs(args *skel.CmdArgs) (*NetConf, *K8SArgs, error) {
 func cmdAdd(args *skel.CmdArgs) error {
 	conf, k8sArgs, err := loadConfAndK8SArgs(args)
 	if err != nil {
-		return fmt.Errorf("failed to load config and k8s args: %v", err)
+		return err
 	}
 
 	_, err = netlink.LinkByName(conf.Eni)
@@ -154,9 +164,9 @@ func generateHostVethName(prefix, namespace, podname string) string {
 }
 
 func cmdDel(args *skel.CmdArgs) error {
-	conf, _, err := loadConfAndK8SArgs(args)
+	conf, err := loadConf(args)
 	if err != nil {
-		return fmt.Errorf("failed to load config and k8s args: %v", err)
+		return err
 	}
 
 	// get ip
