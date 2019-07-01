@@ -52,7 +52,7 @@ func NewFlannelGC(dockerCli *docker.DockerInterface, quit <-chan struct{}, clean
 func (gc *flannelGC) Run() {
 	go wait.Until(func() {
 		glog.V(4).Infof("starting flannel gc cleanup ip")
-		defer glog.Infof("flannel gc cleanup ip complete")
+		defer glog.V(4).Infof("flannel gc cleanup ip complete")
 		if err := gc.cleanupIP(); err != nil {
 			glog.Warningf("Error executing flannel gc cleanup ip %v", err)
 		}
@@ -120,9 +120,9 @@ func (gc *flannelGC) cleanupIP() error {
 }
 
 func (gc *flannelGC) cleanupGCDirs() error {
-	glog.V(3).Infof("cleanup gc_dirs...")
+	glog.V(4).Infof("cleanup gc_dirs...")
 	for _, dir := range gc.gcDirs {
-		glog.V(3).Infof("reading gcdir %s", dir)
+		glog.V(4).Infof("reading gcdir %s", dir)
 		fis, err := ioutil.ReadDir(dir)
 		if err != nil {
 			if os.IsNotExist(err) {

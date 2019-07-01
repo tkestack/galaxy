@@ -303,7 +303,7 @@ func (p *FloatingIPPlugin) listWantedPods() ([]*corev1.Pod, error) {
 
 // syncPodIPs sync all pods' ips with db, if a pod has PodIP and its ip is unallocated, allocate the ip to it
 func (p *FloatingIPPlugin) syncPodIPsIntoDB() {
-	glog.Infof("sync pod ips into DB")
+	glog.V(4).Infof("sync pod ips into DB")
 	if !p.storeReady() {
 		return
 	}

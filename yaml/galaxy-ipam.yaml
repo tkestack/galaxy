@@ -112,7 +112,7 @@ spec:
           - --logtostderr=false
           - --log-dir=/data/galaxy-ipam/logs
           - --profiling
-          - --v=4
+          - --v=3
           - --config=/etc/galaxy/galaxy-ipam.json
           - --port=9040
           - --api-port=9041
