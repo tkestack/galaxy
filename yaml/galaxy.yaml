@@ -43,6 +43,8 @@ spec:
           mountPath: /host/opt/cni/bin
         - name: cni-etc
           mountPath: /etc/cni/net.d
+        - name: cni-state
+          mountPath: /var/lib/cni
       terminationGracePeriodSeconds: 30
       volumes:
       - name: galaxy-run
@@ -69,6 +71,9 @@ spec:
       - name: cni-bin
         hostPath:
           path: /opt/cni/bin
+      - name: cni-state
+        hostPath:
+          path: /var/lib/cni
       - configMap:
           defaultMode: 420
           name: cni-etc
