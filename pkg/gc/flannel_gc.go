@@ -120,7 +120,7 @@ func (gc *flannelGC) cleanupIP() error {
 }
 
 func (gc *flannelGC) cleanupGCDirs() error {
-	glog.Infof("cleanup gc_dirs...")
+	glog.V(3).Infof("cleanup gc_dirs...")
 	for _, dir := range gc.gcDirs {
 		glog.V(3).Infof("reading gcdir %s", dir)
 		fis, err := ioutil.ReadDir(dir)
