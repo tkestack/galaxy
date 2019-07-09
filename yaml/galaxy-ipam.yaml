@@ -109,8 +109,7 @@ spec:
       containers:
       - image: galaxy_ipam:1.0.0-alpha
         args:
-          - --logtostderr=false
-          - --log-dir=/data/galaxy-ipam/logs
+          - --logtostderr=true
           - --profiling
           - --v=3
           - --config=/etc/galaxy/galaxy-ipam.json
