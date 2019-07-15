@@ -53,6 +53,19 @@ size: 4
 
 Galaxy-ipam supports pre-allocating IPs for a pool by setting `preAllocateIP=true` when creating or updating pool via HTTP API. Note that this is not working by creating pool via kubectl.
 
+## Rolling upgrade policy issue
+
+Default update strategy for a deployment is `StrategyType=RollingUpdate` and `25% max unavailable, 25% max surge`, this
+means during upgrading a deployment, deployment controller when make sure a max of 25% pods beyond replicas will be created
+and a max of 25% pods of replicas won't be running. Consider a deployment of replicas <= 3, when upgrading it, deployment
+controller will first create a new pod and ensure it become running before teardown an old pod. Issue comes if the deployment
+also asks for float IP release policy `immutable` or `never`, which means during upgrading galaxy-ipam will ensure a new
+pod gets the same IP from an old pod and thus make new pods waits at scheduling phase for terminating of old pods to get
+reuse their IPs.
+
+Thus the two strategy resulting in a dead lock during upgrading for a `replicas <= 3` deployment. We suggest to release
+one strategy to get upgrade working.
+
 ## API
 
 The following is Galaxy-ipam API doc. If you prefer a swagger API doc, please check [swagger.json](swagger.json)

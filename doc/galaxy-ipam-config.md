@@ -70,6 +70,9 @@ Galaxy uses MySQL or CRD to persist allocated IPs. Please update galaxy-ipam-etc
     }
 ```
 
+Please replace `database: {...}` with `"storageDriver": "k8s-crd"` to use CRD to persist allocated IPs.
+Note that preserved IPs will be lost if changing storage driver.
+
 ## Float IP Configuration
 
 If running on bare metal environment, please create a ConfigMap floatingip-config.

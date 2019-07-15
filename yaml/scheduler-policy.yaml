@@ -1,19 +1,21 @@
+# make sue --policy-configmap=scheduler-policy of kube-scheduler is set
+# note that --policy-config-file and --use-legacy-policy-config is conflict with --policy-configmap
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: scheduler-policy
   namespace: kube-system
 data:
+  # set "ignoredByScheduler" to true if not ENI
   policy.cfg: |
     {
       "kind": "Policy",
       "apiVersion": "v1",
       "extenders": [
         {
-          "urlPrefix": "http://127.0.0.1:9040/v1",
+          "urlPrefix": "http://127.0.0.1:32760/v1",
           "httpTimeout": 70000000000,
           "filterVerb": "filter",
-          "prioritizeVerb": "prioritize",
           "BindVerb": "bind",
           "weight": 1,
           "enableHttps": false,

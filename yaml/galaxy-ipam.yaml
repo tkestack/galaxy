@@ -27,34 +27,34 @@ kind: ClusterRole
 metadata:
   name: galaxy-ipam
 rules:
-  - apiGroups: [""]
-    resources:
-      - pods
-      - namespaces
-      - nodes
-      - pods/binding
-    verbs: ["list", "watch", "get", "patch", "create"]
-  - apiGroups: ["apps", "extensions"]
-    resources:
-      - statefulsets
-      - deployments
-    verbs: ["list", "watch"]
-  - apiGroups: [""]
-    resources:
-      - configmaps
-      - endpoints
-      - events
-    verbs: ["get", "list", "watch", "update", "create", "patch"]
-  - apiGroups: ["galaxy.k8s.io"]
-    resources:
-      - pools
-      - floatingips
-    verbs: ["get", "list", "watch", "update", "create", "patch", "delete"]
-  - apiGroups: ["apiextensions.k8s.io"]
-      resources:
-        - customresourcedefinitions
-      verbs:
-        - "*"
+- apiGroups: [""]
+  resources:
+  - pods
+  - namespaces
+  - nodes
+  - pods/binding
+  verbs: ["list", "watch", "get", "patch", "create"]
+- apiGroups: ["apps", "extensions"]
+  resources:
+  - statefulsets
+  - deployments
+  verbs: ["list", "watch"]
+- apiGroups: [""]
+  resources:
+  - configmaps
+  - endpoints
+  - events
+  verbs: ["get", "list", "watch", "update", "create", "patch"]
+- apiGroups: ["galaxy.k8s.io"]
+  resources:
+  - pools
+  - floatingips
+  verbs: ["get", "list", "watch", "update", "create", "patch", "delete"]
+- apiGroups: ["apiextensions.k8s.io"]
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - "*"
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -156,18 +156,11 @@ metadata:
   name: galaxy-ipam-etc
   namespace: kube-system
 data:
+  # delete cloudProviderGrpcAddr if not ENI
   galaxy-ipam.json: |
     {
       "schedule_plugin": {
-        "database": {
-          "protocol": "tcp",
-          "addr": "127.0.0.1:3306",
-          "username": "root",
-          "password": "root",
-          "driver": "mysql",
-          "name": "test",
-          "maxConn": 10000
-        },
+        "storageDriver": "k8s-crd",
         "cloudProviderGrpcAddr": "127.0.0.2:80"
       }
     }

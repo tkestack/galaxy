@@ -95,6 +95,8 @@ metadata:
   name: galaxy-etc
   namespace: kube-system
 data:
+  # update network card name in "galaxy-k8s-vlan" and "galaxy-k8s-sriov" if necessary
+  # update vf_num in "galaxy-k8s-sriov" according to demand
   galaxy.json: |
     {
       "NetworkConf":[
