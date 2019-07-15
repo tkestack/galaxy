@@ -382,9 +382,7 @@ func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy consta
 		}
 		glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d, isPoolSizeDefined %v", keyObj, unusedSubnetSet, usedCount, replicas, isPoolSizeDefined)
 		// check usedCount >= replicas to ensure upgrading a deployment won't change its ips
-		// check unusedSubnetSet.Len() == 0 to ensure during upgrading a deployment if a pool has more ips, the newly created pod could allocate
-		// such unused ips event if it gets replicas nums of ips.
-		if usedCount >= replicas && unusedSubnetSet.Len() == 0 {
+		if usedCount >= replicas {
 			if isPoolSizeDefined {
 				return nil, false, fmt.Errorf("reached pool %s size limit of %d", keyObj.PoolName, replicas)
 			}
