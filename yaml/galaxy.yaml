@@ -1,3 +1,59 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# kubernetes versions before 1.8.0 should use rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: galaxy
+rules:
+- apiGroups: [""]
+  resources:
+  - pods
+  - namespaces
+  - nodes
+  - pods/binding
+  verbs: ["list", "watch", "get", "patch", "create"]
+- apiGroups: ["apps", "extensions"]
+  resources:
+  - statefulsets
+  - deployments
+  verbs: ["list", "watch"]
+- apiGroups: [""]
+  resources:
+  - configmaps
+  - endpoints
+  - events
+  verbs: ["get", "list", "watch", "update", "create", "patch"]
+- apiGroups: ["galaxy.k8s.io"]
+  resources:
+  - pools
+  - floatingips
+  verbs: ["get", "list", "watch", "update", "create", "patch", "delete"]
+- apiGroups: ["apiextensions.k8s.io"]
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - "*"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: galaxy
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# kubernetes versions before 1.8.0 should use rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: galaxy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: galaxy
+subjects:
+  - kind: ServiceAccount
+    name: galaxy
+    namespace: kube-system
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -14,6 +70,7 @@ spec:
       labels:
         app: galaxy
     spec:
+      serviceAccountName: galaxy
       hostNetwork: true
       hostPID: true
       containers:
