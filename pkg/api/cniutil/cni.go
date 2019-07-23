@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -286,4 +287,60 @@ func consumeNetworkInfo(containerID string) ([]*NetworkInfo, error) {
 		return infos, err
 	}
 	return infos, nil
+}
+
+func GetNetworkConfig(networkName, confdir string) ([]byte, error) {
+	// In part, adapted from K8s pkg/kubelet/dockershim/network/cni/cni.go#getDefaultCNINetwork
+	// Different from original code, the following search conf files for max dir depth=2
+	// if confdir=/etc/cni/net.d/, we will search for /etc/cni/net.d/tke-bridge-1.conf
+	// and /etc/cni/net.d/multus/tke-bridge-2.conf
+	var confExts = []string{".conf", ".json", ".conflist"}
+	files, err := libcni.ConfFiles(confdir, confExts)
+	if err != nil {
+		return nil, err
+	}
+	allFiles, err := ioutil.ReadDir(confdir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+	for i := range allFiles {
+		if allFiles[i].IsDir() {
+			moreFiles, err := libcni.ConfFiles(filepath.Join(confdir, allFiles[i].Name()), confExts)
+			if err != nil {
+				return nil, err
+			}
+			files = append(files, moreFiles...)
+		}
+	}
+	for _, confFile := range files {
+		var confList *libcni.NetworkConfigList
+		if strings.HasSuffix(confFile, ".conflist") {
+			confList, err = libcni.ConfListFromFile(confFile)
+			if err != nil {
+				return nil, fmt.Errorf("Error loading CNI conflist file %s: %v", confFile, err)
+			}
+
+			if confList.Name == networkName || networkName == "" {
+				return confList.Bytes, nil
+			}
+
+		} else {
+			conf, err := libcni.ConfFromFile(confFile)
+			if err != nil {
+				return nil, fmt.Errorf("Error loading CNI config file %s: %v", confFile, err)
+			}
+
+			if conf.Network.Name == networkName || networkName == "" {
+				// Ensure the config has a "type" so we know what plugin to run.
+				// Also catches the case where somebody put a conflist into a conf file.
+				if conf.Network.Type == "" {
+					return nil, fmt.Errorf("Error loading CNI config file %s: no 'type'; perhaps this is a .conflist?", confFile)
+				}
+				return conf.Bytes, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("no network available in the name %s in cni dir %s", networkName, confdir)
 }
