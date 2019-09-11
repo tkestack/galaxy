@@ -13,6 +13,7 @@ type ServerRunOptions struct {
 	RouteENI             bool
 	JsonConfigPath       string
 	NetworkPolicy        bool
+	PProf                bool
 }
 
 func NewServerRunOptions() *ServerRunOptions {
@@ -36,4 +37,5 @@ func (s *ServerRunOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.RouteENI, "route-eni", s.RouteENI, "Ensure route-eni is set/unset")
 	fs.StringVar(&s.JsonConfigPath, "json-config-path", s.JsonConfigPath, "The json config file location of galaxy")
 	fs.BoolVar(&s.NetworkPolicy, "network-policy", s.NetworkPolicy, "Enable network policy function")
+	fs.BoolVar(&s.PProf, "pprof", s.PProf, "Enable pprof")
 }

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/exec"
 	"time"
@@ -28,6 +29,11 @@ import (
 )
 
 func (g *Galaxy) StartServer() error {
+	if g.PProf {
+		go func() {
+			http.ListenAndServe("127.0.0.1:0", nil)
+		}()
+	}
 	g.installHandlers()
 	if err := os.MkdirAll(private.GalaxySocketDir, 0755); err != nil {
 		return fmt.Errorf("failed to create %s: %v", private.GalaxySocketDir, err)

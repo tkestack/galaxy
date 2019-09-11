@@ -132,6 +132,7 @@ func (p *PolicyManager) Run() {
 }
 
 func (p *PolicyManager) syncPods() {
+	glog.V(4).Infof("start syncing pods")
 	var wg sync.WaitGroup
 	syncPodChains := func(pod *corev1.Pod) {
 		defer wg.Done()
@@ -146,11 +147,13 @@ func (p *PolicyManager) syncPods() {
 			return
 		}
 		nodeHostName := k8s.GetHostname()
+		glog.V(4).Infof("find %d pods, nodeHostName %s", len(pods), nodeHostName)
 		for i := range pods {
-			if pods[i].Spec.Hostname != nodeHostName {
+			if pods[i].Spec.NodeName != nodeHostName {
 				continue
 			}
 			wg.Add(1)
+			glog.V(4).Infof("starting goroutine to sync pod chain for %s_%s", pods[i].Name, pods[i].Namespace)
 			go syncPodChains(pods[i])
 		}
 	} else {
@@ -160,6 +163,7 @@ func (p *PolicyManager) syncPods() {
 			glog.Warningf("failed to list pods: %v", err)
 			return
 		}
+		glog.V(4).Infof("find %d pods", len(list.Items))
 		for i := range list.Items {
 			wg.Add(1)
 			go syncPodChains(&list.Items[i])
@@ -735,6 +739,7 @@ func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 
 // SyncPod ensures GLX-INGRESS/GLX-EGRESS/GLX-POD-XXXX iptable chains are expected
 func (p *PolicyManager) SyncPodChains(pod *corev1.Pod) error {
+	glog.V(4).Infof("sync pod chain for %s_%s", pod.Name, pod.Namespace)
 	var policies []policy
 	p.Lock()
 	policies = p.policies
