@@ -10,8 +10,8 @@ import (
 	"os"
 	"strings"
 
-	galaxyapi "git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
+	galaxyapi "git.code.oa.com/tkestack/galaxy/pkg/api/galaxy"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/private"
 	"github.com/containernetworking/cni/pkg/skel"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/version"

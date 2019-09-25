@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/golang/glog"
 )

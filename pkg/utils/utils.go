@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
 	"github.com/containernetworking/cni/pkg/skel"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/plugins/pkg/ip"

@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"testing"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
-	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
-	iptablesTest "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables/testing"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
+	utiliptables "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables"
+	iptablesTest "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables/testing"
 )
 
 func TestHostportChainName(t *testing.T) {

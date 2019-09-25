@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"

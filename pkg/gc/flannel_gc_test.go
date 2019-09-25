@@ -5,8 +5,8 @@ import (
 
 	"strings"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/docker"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/vishvananda/netlink"
 )
 

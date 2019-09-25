@@ -5,7 +5,7 @@ import (
 	"syscall"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network"
+	"git.code.oa.com/tkestack/galaxy/pkg/network"
 	log "github.com/golang/glog"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
+	"git.code.oa.com/tkestack/galaxy/pkg/network"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"

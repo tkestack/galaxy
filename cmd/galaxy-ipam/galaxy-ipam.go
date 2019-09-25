@@ -22,10 +22,10 @@ import (
 	"os"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/server"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/flag"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ldflags/verflag"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/logs"
+	"git.code.oa.com/tkestack/galaxy/pkg/ipam/server"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/flag"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/ldflags/verflag"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/logs"
 	"github.com/spf13/pflag"
 )
 

@@ -17,7 +17,7 @@ import (
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
 
-	galaxyIpam "git.code.oa.com/gaiastack/galaxy/cni/ipam"
+	galaxyIpam "git.code.oa.com/tkestack/galaxy/cni/ipam"
 )
 
 const (

@@ -23,7 +23,7 @@ import (
 	"sort"
 	"strings"
 
-	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
+	utiliptables "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 

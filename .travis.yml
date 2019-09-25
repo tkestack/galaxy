@@ -10,7 +10,7 @@ addons:
 
 go:
   - "1.11.x"
-go_import_path: git.code.oa.com/gaiastack/galaxy
+go_import_path: git.code.oa.com/tkestack/galaxy
 
 install: true
 

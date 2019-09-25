@@ -4,11 +4,11 @@ import (
 	"math/rand"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/galaxy"
-	"git.code.oa.com/gaiastack/galaxy/pkg/signal"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/flag"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ldflags/verflag"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/logs"
+	"git.code.oa.com/tkestack/galaxy/pkg/galaxy"
+	"git.code.oa.com/tkestack/galaxy/pkg/signal"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/flag"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/ldflags/verflag"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/logs"
 	"github.com/golang/glog"
 	"github.com/spf13/pflag"
 )

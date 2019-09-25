@@ -5,7 +5,7 @@ import (
 	"net"
 	"strings"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
 	"github.com/golang/glog"
 )
 

@@ -5,7 +5,7 @@ import (
 	"net"
 	"reflect"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/netns"
+	"git.code.oa.com/tkestack/galaxy/pkg/network/netns"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 )

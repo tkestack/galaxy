@@ -6,7 +6,7 @@ import (
 	"net"
 	"sync"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 )
 
 type FloatingIP struct {

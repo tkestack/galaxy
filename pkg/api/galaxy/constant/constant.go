@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 )
 
 const (

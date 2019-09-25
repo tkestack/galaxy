@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/cloudprovider/rpc"
+	"git.code.oa.com/tkestack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"

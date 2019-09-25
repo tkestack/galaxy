@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/docker"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/docker"
 	"github.com/golang/glog"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/util/wait"

@@ -4,7 +4,7 @@ set -e
 
 flags=${debug:+"-v"}
 ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd -P)
-PKG=git.code.oa.com/gaiastack/galaxy
+PKG=git.code.oa.com/tkestack/galaxy
 BIN_PREFIX="galaxy"
 CNI_PKG=github.com/containernetworking/plugins
 

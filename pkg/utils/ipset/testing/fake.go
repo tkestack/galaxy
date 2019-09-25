@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ipset"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/ipset"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 

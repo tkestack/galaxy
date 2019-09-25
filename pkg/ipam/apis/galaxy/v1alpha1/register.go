@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy"
+	"git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

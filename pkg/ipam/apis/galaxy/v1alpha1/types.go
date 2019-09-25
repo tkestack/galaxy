@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

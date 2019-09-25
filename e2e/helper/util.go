@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	packageName  = "git.code.oa.com/gaiastack/galaxy"
+	packageName  = "git.code.oa.com/tkestack/galaxy"
 	CNI_IFNAME   = "eth0"
 	NetNS_PREFIX = "test_"
 	NetNS_PATH   = "/var/run/netns"

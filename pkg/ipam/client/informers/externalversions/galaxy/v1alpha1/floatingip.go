@@ -21,10 +21,10 @@ package v1alpha1
 import (
 	time "time"
 
-	galaxyv1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
-	versioned "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
-	internalinterfaces "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
+	galaxyv1alpha1 "git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
+	versioned "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned"
+	internalinterfaces "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"

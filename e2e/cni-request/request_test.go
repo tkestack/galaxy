@@ -9,11 +9,11 @@ import (
 	"os"
 	"path"
 
-	"git.code.oa.com/gaiastack/galaxy/e2e"
-	"git.code.oa.com/gaiastack/galaxy/e2e/helper"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/private"
-	"git.code.oa.com/gaiastack/galaxy/pkg/galaxy"
+	"git.code.oa.com/tkestack/galaxy/e2e"
+	"git.code.oa.com/tkestack/galaxy/e2e/helper"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/private"
+	"git.code.oa.com/tkestack/galaxy/pkg/galaxy"
 
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo"

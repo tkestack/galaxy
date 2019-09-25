@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/netns"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ips"
+	"git.code.oa.com/tkestack/galaxy/pkg/network/netns"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/ips"
 	"github.com/vishvananda/netlink"
 )
 

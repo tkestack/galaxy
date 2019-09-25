@@ -9,9 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/k8s"
-	utildbus "git.code.oa.com/gaiastack/galaxy/pkg/utils/dbus"
-	utiliptables "git.code.oa.com/gaiastack/galaxy/pkg/utils/iptables"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
+	utildbus "git.code.oa.com/tkestack/galaxy/pkg/utils/dbus"
+	utiliptables "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables"
 	"github.com/golang/glog"
 	utilexec "k8s.io/utils/exec"
 )

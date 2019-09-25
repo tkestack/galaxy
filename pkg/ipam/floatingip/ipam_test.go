@@ -12,8 +12,8 @@ import (
 
 	"github.com/jinzhu/gorm"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 )
 
 func Start(t *testing.T) *dbIpam {

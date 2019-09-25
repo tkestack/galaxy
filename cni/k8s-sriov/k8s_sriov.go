@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	galaxyIpam "git.code.oa.com/gaiastack/galaxy/cni/ipam"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
+	galaxyIpam "git.code.oa.com/tkestack/galaxy/cni/ipam"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"

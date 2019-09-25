@@ -11,7 +11,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/util/wait"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ips"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/ips"
 )
 
 const (

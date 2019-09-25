@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"

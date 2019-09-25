@@ -4,8 +4,8 @@ import (
 	"flag"
 	"net"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/vlan"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
+	"git.code.oa.com/tkestack/galaxy/pkg/network/vlan"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"

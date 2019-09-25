@@ -19,7 +19,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	internalinterfaces "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/informers/externalversions/internalinterfaces"
+	internalinterfaces "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/informers/externalversions/internalinterfaces"
 )
 
 // Interface provides access to all the informers in this group version.

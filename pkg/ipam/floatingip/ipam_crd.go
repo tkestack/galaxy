@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
-	crd_clientset "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/nets"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
+	crd_clientset "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	"github.com/golang/glog"
 )
 

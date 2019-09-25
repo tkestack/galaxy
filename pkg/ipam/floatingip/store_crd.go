@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
+	"git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

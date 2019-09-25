@@ -1,7 +1,7 @@
 package crd
 
 import (
-	"git.code.oa.com/gaiastack/galaxy/pkg/ipam/apis/galaxy"
+	"git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy"
 	"github.com/golang/glog"
 	extensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"

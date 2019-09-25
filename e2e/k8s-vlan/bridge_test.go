@@ -5,16 +5,16 @@ import (
 	"net"
 	"path"
 
-	"git.code.oa.com/gaiastack/galaxy/e2e/helper"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ips"
+	"git.code.oa.com/tkestack/galaxy/e2e/helper"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/ips"
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 )
 
 var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {

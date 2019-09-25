@@ -21,7 +21,7 @@ import (
 	"os"
 	"strconv"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/ldflags"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/ldflags"
 	flag "github.com/spf13/pflag"
 )
 

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/api/galaxy/constant"
-	fakeGalaxyCli "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned/fake"
-	"git.code.oa.com/gaiastack/galaxy/pkg/utils/database"
+	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
+	fakeGalaxyCli "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned/fake"
+	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )

@@ -5,7 +5,7 @@ set -o pipefail
 
 ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd -P)
 LOCAL_GOPATH="${ROOT}/go"
-PKG="git.code.oa.com/gaiastack/galaxy"
+PKG="git.code.oa.com/tkestack/galaxy"
 
 source ${ROOT}/hack/init.sh
 create_go_path_tree

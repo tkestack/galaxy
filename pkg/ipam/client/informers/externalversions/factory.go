@@ -23,9 +23,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/clientset/versioned"
-	galaxy "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/informers/externalversions/galaxy"
-	internalinterfaces "git.code.oa.com/gaiastack/galaxy/pkg/ipam/client/informers/externalversions/internalinterfaces"
+	versioned "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned"
+	galaxy "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/informers/externalversions/galaxy"
+	internalinterfaces "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/informers/externalversions/internalinterfaces"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

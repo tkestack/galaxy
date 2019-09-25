@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"git.code.oa.com/gaiastack/galaxy/pkg/network/netns"
+	"git.code.oa.com/tkestack/galaxy/pkg/network/netns"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
