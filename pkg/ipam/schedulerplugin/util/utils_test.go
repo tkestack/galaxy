@@ -11,31 +11,20 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestResolveDpKey(t *testing.T) {
-	tests := map[string][]string{"dp_default_dp1_dp1-rs1-pod1": {"default", "dp1", "dp1-rs1-pod1"}, "sts_default_fip_fip-0": {"", "", ""}}
+func TestResolvePodKey(t *testing.T) {
+	tests := map[string][]string{
+		"dp_default_dp1_dp1-rs1-pod1":           {"default", "dp1", "dp1-rs1-pod1"},
+		"sts_default_fip_fip-0":                 {"default", "fip", "fip-0"},
+		"sts_kube-system_fip-bj_fip-bj-111":     {"kube-system", "fip-bj", "fip-bj-111"},
+		"tapp_kube-system_tapp-bj_tapp-bj-2091": {"kube-system", "tapp-bj", "tapp-bj-2091"},
+	}
 	for k, v := range tests {
-		appname, podName, namespace := ResolveDpKey(k)
+		appname, podName, namespace := resolvePodKey(k)
 		if namespace != v[0] {
 			t.Fatal(namespace)
 		}
 		if appname != v[1] {
 			t.Fatal(appname)
-		}
-		if podName != v[2] {
-			t.Fatal(podName)
-		}
-	}
-}
-
-func TestResolveStsKey(t *testing.T) {
-	tests := map[string][]string{"sts_default_fip_fip-0": {"default", "fip", "fip-0"}, "sts_kube-system_fip-bj_fip-bj-111": {"kube-system", "fip-bj", "fip-bj-111"}, "dp_default_dp1_dp1-rs1-pod1": {"", "", ""}}
-	for k, v := range tests {
-		appName, podName, namespace := resolveStsKey(k)
-		if namespace != v[0] {
-			t.Fatal(namespace)
-		}
-		if appName != v[1] {
-			t.Fatal(appName)
 		}
 		if podName != v[2] {
 			t.Fatal(podName)
@@ -53,12 +42,13 @@ func TestFormatKey(t *testing.T) {
 		{
 			pod: createStatefulSetPod("sts-1", "ns1", nil),
 			expect: KeyObj{
-				KeyInDB:      "sts_ns1_sts_sts-1",
-				IsDeployment: false,
-				AppName:      "sts",
-				PodName:      "sts-1",
-				Namespace:    "ns1",
-				PoolName:     "",
+				KeyInDB:       "sts_ns1_sts_sts-1",
+				IsDeployment:  false,
+				AppTypePrefix: StatefulsetPrefixKey,
+				AppName:       "sts",
+				PodName:       "sts-1",
+				Namespace:     "ns1",
+				PoolName:      "",
 			},
 			expectPoolPrefix:    "sts_ns1_sts_",
 			expectPoolAppPrefix: "sts_ns1_sts_",
@@ -66,12 +56,13 @@ func TestFormatKey(t *testing.T) {
 		{
 			pod: createStatefulSetPod("sts-1", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
 			expect: KeyObj{
-				KeyInDB:      "pool__pl1_sts_ns1_sts_sts-1",
-				IsDeployment: false,
-				AppName:      "sts",
-				PodName:      "sts-1",
-				Namespace:    "ns1",
-				PoolName:     "pl1",
+				KeyInDB:       "pool__pl1_sts_ns1_sts_sts-1",
+				IsDeployment:  false,
+				AppTypePrefix: StatefulsetPrefixKey,
+				AppName:       "sts",
+				PodName:       "sts-1",
+				Namespace:     "ns1",
+				PoolName:      "pl1",
 			},
 			expectPoolPrefix:    "pool__pl1_",
 			expectPoolAppPrefix: "pool__pl1_sts_ns1_sts",
@@ -79,12 +70,13 @@ func TestFormatKey(t *testing.T) {
 		{
 			pod: createDeploymentPod("dp-xxx-yyy", "ns1", nil),
 			expect: KeyObj{
-				KeyInDB:      "dp_ns1_dp_dp-xxx-yyy",
-				IsDeployment: true,
-				AppName:      "dp",
-				PodName:      "dp-xxx-yyy",
-				Namespace:    "ns1",
-				PoolName:     "",
+				KeyInDB:       "dp_ns1_dp_dp-xxx-yyy",
+				IsDeployment:  true,
+				AppTypePrefix: DeploymentPrefixKey,
+				AppName:       "dp",
+				PodName:       "dp-xxx-yyy",
+				Namespace:     "ns1",
+				PoolName:      "",
 			},
 			expectPoolPrefix:    "dp_ns1_dp_",
 			expectPoolAppPrefix: "dp_ns1_dp_",
@@ -92,15 +84,44 @@ func TestFormatKey(t *testing.T) {
 		{
 			pod: createDeploymentPod("dp-xxx-yyy", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
 			expect: KeyObj{
-				KeyInDB:      "pool__pl1_dp_ns1_dp_dp-xxx-yyy",
-				IsDeployment: true,
-				AppName:      "dp",
-				PodName:      "dp-xxx-yyy",
-				Namespace:    "ns1",
-				PoolName:     "pl1",
+				KeyInDB:       "pool__pl1_dp_ns1_dp_dp-xxx-yyy",
+				IsDeployment:  true,
+				AppTypePrefix: DeploymentPrefixKey,
+				AppName:       "dp",
+				PodName:       "dp-xxx-yyy",
+				Namespace:     "ns1",
+				PoolName:      "pl1",
 			},
 			expectPoolPrefix:    "pool__pl1_",
 			expectPoolAppPrefix: "pool__pl1_dp_ns1_dp_",
+		},
+		{
+			pod: createTAppPod("tapp-1", "ns1", nil),
+			expect: KeyObj{
+				KeyInDB:       "tapp_ns1_tapp_tapp-1",
+				IsDeployment:  false,
+				AppTypePrefix: TAppPrefixKey,
+				AppName:       "tapp",
+				PodName:       "tapp-1",
+				Namespace:     "ns1",
+				PoolName:      "",
+			},
+			expectPoolPrefix:    "tapp_ns1_tapp_",
+			expectPoolAppPrefix: "tapp_ns1_tapp_",
+		},
+		{
+			pod: createTAppPod("tapp-1", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
+			expect: KeyObj{
+				KeyInDB:       "pool__pl1_tapp_ns1_tapp_tapp-1",
+				IsDeployment:  false,
+				AppTypePrefix: TAppPrefixKey,
+				AppName:       "tapp",
+				PodName:       "tapp-1",
+				Namespace:     "ns1",
+				PoolName:      "pl1",
+			},
+			expectPoolPrefix:    "pool__pl1_",
+			expectPoolAppPrefix: "pool__pl1_tapp_ns1_tapp",
 		},
 	}
 	for i := range testCases {
@@ -128,12 +149,13 @@ func TestParseKey(t *testing.T) {
 		{
 			keyInDB: "sts_ns1_demo_demo-1",
 			expect: KeyObj{
-				KeyInDB:      "sts_ns1_demo_demo-1",
-				IsDeployment: false,
-				AppName:      "demo",
-				PodName:      "demo-1",
-				Namespace:    "ns1",
-				PoolName:     "",
+				KeyInDB:       "sts_ns1_demo_demo-1",
+				IsDeployment:  false,
+				AppTypePrefix: StatefulsetPrefixKey,
+				AppName:       "demo",
+				PodName:       "demo-1",
+				Namespace:     "ns1",
+				PoolName:      "",
 			},
 			expectPoolPrefix: "sts_ns1_demo_",
 		},
@@ -141,12 +163,13 @@ func TestParseKey(t *testing.T) {
 		{
 			keyInDB: "sts_ns1_sts-demo_sts-demo-1",
 			expect: KeyObj{
-				KeyInDB:      "sts_ns1_sts-demo_sts-demo-1",
-				IsDeployment: false,
-				AppName:      "sts-demo",
-				PodName:      "sts-demo-1",
-				Namespace:    "ns1",
-				PoolName:     "",
+				KeyInDB:       "sts_ns1_sts-demo_sts-demo-1",
+				IsDeployment:  false,
+				AppTypePrefix: StatefulsetPrefixKey,
+				AppName:       "sts-demo",
+				PodName:       "sts-demo-1",
+				Namespace:     "ns1",
+				PoolName:      "",
 			},
 			expectPoolPrefix: "sts_ns1_sts-demo_",
 		},
@@ -154,12 +177,13 @@ func TestParseKey(t *testing.T) {
 		{
 			keyInDB: "pool__pl1_sts_ns1_demo_demo-1",
 			expect: KeyObj{
-				KeyInDB:      "pool__pl1_sts_ns1_demo_demo-1",
-				IsDeployment: false,
-				AppName:      "demo",
-				PodName:      "demo-1",
-				Namespace:    "ns1",
-				PoolName:     "pl1",
+				KeyInDB:       "pool__pl1_sts_ns1_demo_demo-1",
+				IsDeployment:  false,
+				AppTypePrefix: StatefulsetPrefixKey,
+				AppName:       "demo",
+				PodName:       "demo-1",
+				Namespace:     "ns1",
+				PoolName:      "pl1",
 			},
 			expectPoolPrefix: "pool__pl1_",
 		},
@@ -167,12 +191,13 @@ func TestParseKey(t *testing.T) {
 		{
 			keyInDB: "sts_ns1_demo_",
 			expect: KeyObj{
-				KeyInDB:      "sts_ns1_demo_",
-				IsDeployment: false,
-				AppName:      "demo",
-				PodName:      "",
-				Namespace:    "ns1",
-				PoolName:     "",
+				KeyInDB:       "sts_ns1_demo_",
+				IsDeployment:  false,
+				AppTypePrefix: StatefulsetPrefixKey,
+				AppName:       "demo",
+				PodName:       "",
+				Namespace:     "ns1",
+				PoolName:      "",
 			},
 			expectPoolPrefix: "sts_ns1_demo_",
 		},
@@ -180,12 +205,13 @@ func TestParseKey(t *testing.T) {
 		{
 			keyInDB: "pool__pl1_",
 			expect: KeyObj{
-				KeyInDB:      "pool__pl1_",
-				IsDeployment: false,
-				AppName:      "",
-				PodName:      "",
-				Namespace:    "",
-				PoolName:     "pl1",
+				KeyInDB:       "pool__pl1_",
+				IsDeployment:  false,
+				AppTypePrefix: "",
+				AppName:       "",
+				PodName:       "",
+				Namespace:     "",
+				PoolName:      "pl1",
 			},
 			expectPoolPrefix: "pool__pl1_",
 		},
@@ -193,12 +219,13 @@ func TestParseKey(t *testing.T) {
 		{
 			keyInDB: "dp_ns1_dp_dp-xxx-yyy",
 			expect: KeyObj{
-				KeyInDB:      "dp_ns1_dp_dp-xxx-yyy",
-				IsDeployment: true,
-				AppName:      "dp",
-				PodName:      "dp-xxx-yyy",
-				Namespace:    "ns1",
-				PoolName:     "",
+				KeyInDB:       "dp_ns1_dp_dp-xxx-yyy",
+				IsDeployment:  true,
+				AppTypePrefix: DeploymentPrefixKey,
+				AppName:       "dp",
+				PodName:       "dp-xxx-yyy",
+				Namespace:     "ns1",
+				PoolName:      "",
 			},
 			expectPoolPrefix: "dp_ns1_dp_",
 		},
@@ -206,12 +233,13 @@ func TestParseKey(t *testing.T) {
 		{
 			keyInDB: "dp_ns1_dp_",
 			expect: KeyObj{
-				KeyInDB:      "dp_ns1_dp_",
-				IsDeployment: true,
-				AppName:      "dp",
-				PodName:      "",
-				Namespace:    "ns1",
-				PoolName:     "",
+				KeyInDB:       "dp_ns1_dp_",
+				IsDeployment:  true,
+				AppTypePrefix: DeploymentPrefixKey,
+				AppName:       "dp",
+				PodName:       "",
+				Namespace:     "ns1",
+				PoolName:      "",
 			},
 			expectPoolPrefix: "dp_ns1_dp_",
 		},
@@ -219,14 +247,71 @@ func TestParseKey(t *testing.T) {
 		{
 			keyInDB: "pool__pl1_dp_ns1_dp_dp-xxx-yyy",
 			expect: KeyObj{
-				KeyInDB:      "pool__pl1_dp_ns1_dp_dp-xxx-yyy",
-				IsDeployment: true,
-				AppName:      "dp",
-				PodName:      "dp-xxx-yyy",
-				Namespace:    "ns1",
-				PoolName:     "pl1",
+				KeyInDB:       "pool__pl1_dp_ns1_dp_dp-xxx-yyy",
+				IsDeployment:  true,
+				AppTypePrefix: DeploymentPrefixKey,
+				AppName:       "dp",
+				PodName:       "dp-xxx-yyy",
+				Namespace:     "ns1",
+				PoolName:      "pl1",
 			},
 			expectPoolPrefix: "pool__pl1_",
+		},
+		// tapp pod key
+		{
+			keyInDB: "tapp_ns1_demo_demo-1",
+			expect: KeyObj{
+				KeyInDB:       "tapp_ns1_demo_demo-1",
+				IsDeployment:  false,
+				AppTypePrefix: TAppPrefixKey,
+				AppName:       "demo",
+				PodName:       "demo-1",
+				Namespace:     "ns1",
+				PoolName:      "",
+			},
+			expectPoolPrefix: "tapp_ns1_demo_",
+		},
+		// tapp pod key
+		{
+			keyInDB: "tapp_ns1_sts-demo_sts-demo-1",
+			expect: KeyObj{
+				KeyInDB:       "tapp_ns1_sts-demo_sts-demo-1",
+				IsDeployment:  false,
+				AppTypePrefix: TAppPrefixKey,
+				AppName:       "sts-demo",
+				PodName:       "sts-demo-1",
+				Namespace:     "ns1",
+				PoolName:      "",
+			},
+			expectPoolPrefix: "tapp_ns1_sts-demo_",
+		},
+		// pool statefulset pod key
+		{
+			keyInDB: "pool__pl1_tapp_ns1_demo_demo-1",
+			expect: KeyObj{
+				KeyInDB:       "pool__pl1_tapp_ns1_demo_demo-1",
+				IsDeployment:  false,
+				AppTypePrefix: TAppPrefixKey,
+				AppName:       "demo",
+				PodName:       "demo-1",
+				Namespace:     "ns1",
+				PoolName:      "pl1",
+			},
+			expectPoolPrefix: "pool__pl1_",
+		},
+		// statefulset key
+		{
+			keyInDB: "tapp_ns1_demo_",
+			expect: KeyObj{
+				KeyInDB:       "tapp_ns1_demo_",
+				IsDeployment:  false,
+				AppTypePrefix: TAppPrefixKey,
+				AppName:       "demo",
+				PodName:       "",
+				Namespace:     "ns1",
+				PoolName:      "",
+			},
+			expectPoolPrefix: "tapp_ns1_demo_",
 		},
 	}
 	for i := range testCases {
@@ -268,9 +353,9 @@ func TestResolveDeploymentName(t *testing.T) {
 	}
 }
 
-func createStatefulSetPodWithLabels(name, namespace string, labels map[string]string) *corev1.Pod {
-	pod := createStatefulSetPod(name, namespace, nil)
-	pod.Labels = labels
+func createTAppPod(name, namespace string, annotations map[string]string) *corev1.Pod {
+	pod := createStatefulSetPod(name, namespace, annotations)
+	pod.OwnerReferences[0].Kind = "TApp"
 	return pod
 }
 
@@ -308,37 +393,37 @@ func createDeploymentPod(name, namespace string, annotation map[string]string) *
 }
 
 func TestNewKeyObj(t *testing.T) {
-	keyObj := NewKeyObj(false, "", "", "", "rami")
+	keyObj := NewKeyObj(StatefulsetPrefixKey, "", "", "", "rami")
 	if keyObj.KeyInDB != "pool__rami_" {
 		t.Fatal(keyObj.KeyInDB)
 	}
 
-	keyObj = NewKeyObj(false, "", "", "", "")
+	keyObj = NewKeyObj(StatefulsetPrefixKey, "", "", "", "")
 	if keyObj.KeyInDB != "" {
 		t.Fatal(keyObj.KeyInDB)
 	}
 
-	keyObj = NewKeyObj(true, "ns1", "rami", "", "rami")
+	keyObj = NewKeyObj(DeploymentPrefixKey, "ns1", "rami", "", "rami")
 	if keyObj.KeyInDB != "pool__rami_dp_ns1_rami_" {
 		t.Fatal(keyObj.KeyInDB)
 	}
 
-	keyObj = NewKeyObj(true, "ns1", "rami", "", "")
+	keyObj = NewKeyObj(DeploymentPrefixKey, "ns1", "rami", "", "")
 	if keyObj.KeyInDB != "dp_ns1_rami_" {
 		t.Fatal(keyObj.KeyInDB)
 	}
 
-	keyObj = NewKeyObj(false, "ns1", "rami", "", "")
+	keyObj = NewKeyObj(StatefulsetPrefixKey, "ns1", "rami", "", "")
 	if keyObj.KeyInDB != "sts_ns1_rami_" {
 		t.Fatal(keyObj.KeyInDB)
 	}
 
-	keyObj = NewKeyObj(true, "ns1", "rami", "rami-xx-yy", "rami")
+	keyObj = NewKeyObj(DeploymentPrefixKey, "ns1", "rami", "rami-xx-yy", "rami")
 	if keyObj.KeyInDB != "pool__rami_dp_ns1_rami_rami-xx-yy" {
 		t.Fatal(keyObj.KeyInDB)
 	}
 
-	keyObj = NewKeyObj(false, "ns1", "rami", "rami-xx-yy", "rami")
+	keyObj = NewKeyObj(StatefulsetPrefixKey, "ns1", "rami", "rami-xx-yy", "rami")
 	if keyObj.KeyInDB != "pool__rami_sts_ns1_rami_rami-xx-yy" {
 		t.Fatal(keyObj.KeyInDB)
 	}

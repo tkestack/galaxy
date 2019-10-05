@@ -34,13 +34,15 @@ func NewController(ipam, secondIpam floatingip.IPAM, lister v1.PodLister) *Contr
 }
 
 type FloatingIP struct {
-	IP           string    `json:"ip"`
-	Namespace    string    `json:"namespace,omitempty"`
-	AppName      string    `json:"appName,omitempty"`
-	PodName      string    `json:"podName,omitempty"`
-	PoolName     string    `json:"poolName,omitempty"`
-	Policy       uint16    `json:"policy"`
+	IP        string `json:"ip"`
+	Namespace string `json:"namespace,omitempty"`
+	AppName   string `json:"appName,omitempty"`
+	PodName   string `json:"podName,omitempty"`
+	PoolName  string `json:"poolName,omitempty"`
+	Policy    uint16 `json:"policy"`
+	// Deprecate
 	IsDeployment bool      `json:"isDeployment,omitempty"`
+	AppType      string    `json:"appType,omitempty"`
 	UpdateTime   time.Time `json:"updateTime,omitempty"`
 	Status       string    `json:"status,omitempty"`
 	Releasable   bool      `json:"releasable,omitempty"`
@@ -54,7 +56,8 @@ func (FloatingIP) SwaggerDoc() map[string]string {
 		"appName":      "deployment or statefulset name",
 		"podName":      "pod name",
 		"policy":       "ip release policy",
-		"isDeployment": "deployment or statefulset",
+		"isDeployment": "deployment or statefulset, deprecated please set appType",
+		"appType":      "deployment, statefulset or tapp",
 		"updateTime":   "last allocate or release time of this ip",
 		"status":       "pod status if exists",
 		"releasable":   "if the ip is releasable. An ip is releasable if it isn't belong to any pod",
@@ -72,21 +75,36 @@ func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 	fuzzyQuery := true
 	if keyword == "" {
 		fuzzyQuery = false
-		var err error
 		poolName := req.QueryParameter("poolName")
 		appName := req.QueryParameter("appName")
 		podName := req.QueryParameter("podName")
 		namespace := req.QueryParameter("namespace")
-		isDep := false
-		isDepStr := req.QueryParameter("isDeployment")
-		if isDepStr != "" {
-			isDep, err = strconv.ParseBool(isDepStr)
-			if err != nil {
-				httputil.BadRequest(resp, fmt.Errorf("invalid isDeployment(bool field): %s", isDepStr))
-				return
+		appType := req.QueryParameter("appType")
+		var appTypePrefix string
+		if appType == "" {
+			isDepStr := req.QueryParameter("isDeployment")
+			if isDepStr != "" {
+				isDep, err := strconv.ParseBool(isDepStr)
+				if err != nil {
+					httputil.BadRequest(resp, fmt.Errorf("invalid isDeployment(bool field): %s", isDepStr))
+					return
+				}
+				if isDep {
+					appTypePrefix = util.DeploymentPrefixKey
+				} else {
+					appTypePrefix = util.StatefulsetPrefixKey
+				}
+			} else {
+				appTypePrefix = util.StatefulsetPrefixKey
 			}
+		} else {
+			appTypePrefix = toAppTypePrefix(appType)
 		}
-		key = util.NewKeyObj(isDep, namespace, appName, podName, poolName).KeyInDB
+		if appTypePrefix == "" {
+			httputil.BadRequest(resp, fmt.Errorf("invalid appType %s", appType))
+			return
+		}
+		key = util.NewKeyObj(appTypePrefix, namespace, appName, podName, poolName).KeyInDB
 	}
 	glog.V(4).Infof("list ips by %s, fuzzyQuery %v", key, fuzzyQuery)
 	fips, err := listIPs(key, c.ipam, c.secondIpam, fuzzyQuery)
@@ -103,6 +121,32 @@ func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	resp.WriteEntity(ListIPResp{Page: *pagin, Content: pagedFips}) // nolint: errcheck
+}
+
+func toAppTypePrefix(appType string) string {
+	switch appType {
+	case "deployment":
+		return util.DeploymentPrefixKey
+	case "statefulset", "statefulsets":
+		return util.StatefulsetPrefixKey
+	case "tapp":
+		return util.TAppPrefixKey
+	default:
+		return ""
+	}
+}
+
+func toAppType(appTypePrefix string) string {
+	switch appTypePrefix {
+	case util.DeploymentPrefixKey:
+		return "deployment"
+	case util.StatefulsetPrefixKey:
+		return "statefulset"
+	case util.TAppPrefixKey:
+		return "tapp"
+	default:
+		return ""
+	}
 }
 
 func fillReleasableAndStatus(lister v1.PodLister, ips []FloatingIP) error {
@@ -215,7 +259,21 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 			httputil.BadRequest(resp, fmt.Errorf("%q is not a valid ip", temp.IP))
 			return
 		}
-		keyObj := util.NewKeyObj(temp.IsDeployment, temp.Namespace, temp.AppName, temp.PodName, temp.PoolName)
+		var appTypePrefix string
+		if temp.AppType == "" {
+			if temp.IsDeployment {
+				appTypePrefix = util.DeploymentPrefixKey
+			} else {
+				appTypePrefix = util.StatefulsetPrefixKey
+			}
+		} else {
+			appTypePrefix = toAppTypePrefix(temp.AppType)
+			if appTypePrefix == "" {
+				httputil.BadRequest(resp, fmt.Errorf("unknown app type %q", temp.AppType))
+				return
+			}
+		}
+		keyObj := util.NewKeyObj(appTypePrefix, temp.Namespace, temp.AppName, temp.PodName, temp.PoolName)
 		expectIPtoKey[temp.IP] = keyObj.KeyInDB
 	}
 	if err := fillReleasableAndStatus(c.podLister, releaseIPReq.IPs); err != nil {
@@ -283,6 +341,7 @@ func transform(fips []database.FloatingIP) []FloatingIP {
 			PodName:      keyObj.PodName,
 			PoolName:     keyObj.PoolName,
 			IsDeployment: keyObj.IsDeployment,
+			AppType:      toAppType(keyObj.AppTypePrefix),
 			Policy:       fips[i].Policy,
 			UpdateTime:   fips[i].UpdatedAt,
 			attr:         fips[i].Attr})

@@ -113,7 +113,7 @@ func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Resp
 		}
 	}
 	if pool.PreAllocateIP {
-		poolPrefix := util.NewKeyObj(true, "", "", "", pool.Name).PoolPrefix()
+		poolPrefix := util.NewKeyObj(util.DeploymentPrefixKey, "", "", "", pool.Name).PoolPrefix()
 		lockIndex := c.LockPool.GetLockIndex([]byte(poolPrefix))
 		c.LockPool.RawLock(lockIndex)
 		defer c.LockPool.RawUnlock(lockIndex)
