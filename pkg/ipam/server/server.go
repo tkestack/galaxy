@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	tappVersioned "git.code.oa.com/gaia/tapp-controller/pkg/client/clientset/versioned"
+	tappInformers "git.code.oa.com/gaia/tapp-controller/pkg/client/informers/externalversions"
 	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s/eventhandler"
 	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/api"
@@ -48,10 +50,12 @@ type Server struct {
 	*options.ServerRunOptions
 	client               kubernetes.Interface
 	crdClient            versioned.Interface
+	tappClient           tappVersioned.Interface
 	extensionClient      extensionClient.Interface
 	plugin               *schedulerplugin.FloatingIPPlugin
 	informerFactory      informers.SharedInformerFactory
 	crdInformerFactory   crdInformer.SharedInformerFactory
+	tappInformerFactory  tappInformers.SharedInformerFactory
 	stopChan             chan struct{}
 	leaderElectionConfig *leaderelection.LeaderElectionConfig
 }
@@ -81,13 +85,18 @@ func (s *Server) init() error {
 	deploymentInformer := s.informerFactory.Apps().V1().Deployments()
 	s.crdInformerFactory = crdInformer.NewSharedInformerFactory(s.crdClient, 0)
 	poolInformer := s.crdInformerFactory.Galaxy().V1alpha1().Pools()
+	s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)
+	tappInformer := s.tappInformerFactory.Tappcontroller().V1alpha1().TApps()
 
 	pluginArgs := &schedulerplugin.PluginFactoryArgs{
 		PodLister:         podInformer.Lister(),
 		StatefulSetLister: statefulsetInformer.Lister(),
 		DeploymentLister:  deploymentInformer.Lister(),
+		TAppLister:        tappInformer.Lister(),
 		Client:            s.client,
+		TAppClient:        s.tappClient,
 		PodHasSynced:      podInformer.Informer().HasSynced,
+		TAppHasSynced:     tappInformer.Informer().HasSynced,
 		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
 		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 		PoolLister:        poolInformer.Lister(),
@@ -116,6 +125,7 @@ func (s *Server) Start() error {
 func (s *Server) Run() error {
 	go s.informerFactory.Start(s.stopChan)
 	go s.crdInformerFactory.Start(s.stopChan)
+	go s.tappInformerFactory.Start(s.stopChan)
 	if err := crd.EnsureCRDCreated(s.extensionClient); err != nil {
 		return err
 	}
@@ -148,6 +158,10 @@ func (s *Server) initk8sClient() {
 	s.extensionClient, err = extensionClient.NewForConfig(cfg)
 	if err != nil {
 		glog.Fatalf("Error building float ip clientset: %v", err)
+	}
+	s.tappClient, err = tappVersioned.NewForConfig(cfg)
+	if err != nil {
+		glog.Fatalf("Error building tapp clientset: %v", err)
 	}
 	glog.Infof("connected to apiserver %v", cfg)
 
