@@ -30,9 +30,8 @@ import (
 const (
 	deletedAndIPMutablePod         = "deletedAndIPMutablePod"
 	deletedAndParentAppNotExistPod = "deletedAndParentAppNotExistPod"
-	deletedAndScaledDownSSPod      = "deletedAndScaledDownSSPod"
+	deletedAndScaledDownAppPod     = "deletedAndScaledDownAppPod"
 	deletedAndScaledDownDpPod      = "deletedAndScaledDownDpPod"
-	deletedAndLabelMissMatchPod    = "deletedAndLabelMissMatchPod"
 )
 
 type Conf struct {
@@ -254,7 +253,7 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 	policy := parseReleasePolicy(&pod.ObjectMeta)
 	var replicas int
 	var isPoolSizeDefined bool
-	if keyObj.IsDeployment {
+	if keyObj.Deployment() {
 		replicas, isPoolSizeDefined, err = p.getReplicas(keyObj)
 		if err != nil {
 			return nil, err
@@ -355,7 +354,7 @@ func (p *FloatingIPPlugin) getReplicas(keyObj *util.KeyObj) (int, bool, error) {
 }
 
 func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy constant.ReleasePolicy, replicas int, isPoolSizeDefined bool) (subnets []string, reserve bool, err error) {
-	if keyObj.IsDeployment && policy != constant.ReleasePolicyPodDelete {
+	if keyObj.Deployment() && policy != constant.ReleasePolicyPodDelete {
 		var ips []database.FloatingIP
 		poolPrefix := keyObj.PoolPrefix()
 		poolAppPrefix := keyObj.PoolAppPrefix()
@@ -628,75 +627,82 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		}
 	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)
-	if keyObj.IsDeployment {
+	if keyObj.Deployment() {
 		return p.unbindDpPod(pod, keyObj, policy)
 	}
-	// statefulset pod
-	return p.unbindStsPod(pod, keyObj, policy)
+	return p.unbindStsOrTappPod(pod, keyObj, policy)
 }
 
-func (p *FloatingIPPlugin) unbindStsPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
+func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
 	key := keyObj.KeyInDB
-	attr := getAttr("")
 	if policy == constant.ReleasePolicyPodDelete {
 		return p.releaseIP(key, deletedAndIPMutablePod, pod)
 	} else if policy == constant.ReleasePolicyNever {
-		glog.V(3).Infof("reserved %s for pod %s, because of never release policy", getIPStrFromAnnotation(pod), key)
-		if err := p.ipam.ReserveIP(key, key, attr); err != nil {
-			return err
-		}
-		if p.enabledSecondIP(pod) {
-			if err := p.ipam.ReserveIP(key, key, attr); err != nil {
-				return err
-			}
-		}
-		return nil
+		return p.reserveIP(key, key, "never policy", p.enabledSecondIP(pod))
 	} else if policy == constant.ReleasePolicyImmutable {
-		// for test
-		if p.StatefulSetLister != nil {
+		var appExist bool
+		var replicas int32
+		// In test, p.StatefulSetLister may be nil
+		if keyObj.StatefulSet() && p.StatefulSetLister != nil {
 			statefulSet, err := p.StatefulSetLister.GetPodStatefulSets(pod)
 			if err != nil {
 				if !metaErrs.IsNotFound(err) {
 					return err
 				}
-				return p.releaseIP(key, deletedAndParentAppNotExistPod, pod)
+			} else {
+				appExist = true
+				if len(statefulSet) > 1 {
+					glog.Warningf("multiple ss found for pod %s", util.PodName(pod))
+				}
+				ss := statefulSet[0]
+				replicas = 1
+				if ss.Spec.Replicas != nil {
+					replicas = *ss.Spec.Replicas
+				}
 			}
-			// it's a statefulset pod
-			if len(statefulSet) > 1 {
-				glog.Warningf("multiple ss found for pod %s", key)
-			}
-			ss := statefulSet[0]
-			index, err := parsePodIndex(pod.Name)
+		} else if keyObj.TApp() && p.TAppLister != nil {
+			tapps, err := p.TAppLister.GetPodTApps(pod)
 			if err != nil {
-				return fmt.Errorf("invalid pod name %s of ss %s: %v", key, util.StatefulsetName(ss), err)
+				if !metaErrs.IsNotFound(err) {
+					return err
+				}
+			} else {
+				appExist = true
+				if len(tapps) > 1 {
+					glog.Warningf("multiple ss found for pod %s", util.PodName(pod))
+				}
+				replicas = tapps[0].Spec.Replicas
 			}
-			if ss.Spec.Replicas != nil && *ss.Spec.Replicas < int32(index)+1 {
-				return p.releaseIP(key, deletedAndScaledDownSSPod, pod)
-			}
-			glog.V(3).Infof("reserved %s for pod %s, because of never release policy", getIPStrFromAnnotation(pod), key)
-
+		} else {
+			return nil
+		}
+		shouldReserve, reason, err := p.shouldReserve(pod, keyObj, appExist, replicas)
+		if err != nil {
+			return err
+		}
+		if shouldReserve {
+			return p.reserveIP(key, key, "immutable policy", p.enabledSecondIP(pod))
+		} else {
+			return p.releaseIP(key, reason, pod)
 		}
 	}
 	return nil
 }
 
-func getIPStrFromAnnotation(pod *corev1.Pod) string {
-	if pod.Annotations == nil {
-		return ""
+func (p *FloatingIPPlugin) shouldReserve(pod *corev1.Pod, keyObj *util.KeyObj, appExist bool, replicas int32) (bool, string, error) {
+	if !appExist {
+		return false, deletedAndParentAppNotExistPod, nil
 	}
-	cniArgsStr := pod.Annotations[constant.ExtendedCNIArgsAnnotation]
-	if ipInfos, err := constant.ParseIPInfo(cniArgsStr); err != nil || len(ipInfos) == 0 {
-		glog.Warningf("bad IPInfo annotation %s for pod %s", cniArgsStr, util.PodName(pod))
-		return ""
+	index, err := parsePodIndex(pod.Name)
+	if err != nil {
+		return false, "", fmt.Errorf("invalid pod name %s of key %s: %v", util.PodName(pod), keyObj.KeyInDB, err)
+	}
+	if replicas < int32(index)+1 {
+		return false, deletedAndScaledDownAppPod, nil
 	} else {
-		var ipInfoStr []string
-		for i := range ipInfos {
-			if ipInfos[i].IP != nil {
-				ipInfoStr = append(ipInfoStr, ipInfos[i].IP.IP.String())
-			}
-		}
-		return strings.Join(ipInfoStr, ",")
+		return true, "", nil
 	}
+	return false, deletedAndParentAppNotExistPod, nil
 }
 
 func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
@@ -740,6 +746,18 @@ func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keyloc
 	} else {
 		if key != prefixKey {
 			return reserveIP(key, prefixKey, ipam, fmt.Sprintf("allocated %d <= replicas %d %s", len(fips), replicas, when))
+		}
+	}
+	return nil
+}
+
+func (p *FloatingIPPlugin) reserveIP(old, new, reason string, enabledSecondIP bool) error {
+	if err := reserveIP(old, new, p.ipam, reason); err != nil {
+		return err
+	}
+	if enabledSecondIP {
+		if err := reserveIP(old, new, p.secondIPAM, reason); err != nil {
+			return err
 		}
 	}
 	return nil

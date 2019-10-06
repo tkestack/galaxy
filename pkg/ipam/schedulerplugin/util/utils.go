@@ -33,7 +33,8 @@ type KeyObj struct {
 	// If deployment name is 63 bytes, e.g. dp1234567890dp1234567890dp1234567890dp1234567890dp1234567890dp1
 	// deployment pod name will be 63 bytes with modified suffix, e.g. dp1234567890dp1234567890dp1234567890dp1234567890dp1234567848p74
 	// So we can't get deployment name from pod name and have to store deployment name with pod name
-	KeyInDB       string
+	KeyInDB string
+	// Deprecated, please use Deployment() instead
 	IsDeployment  bool
 	AppName       string
 	AppTypePrefix string
@@ -50,6 +51,18 @@ func NewKeyObj(appTypePrefix string, namespace, appName, podName, poolName strin
 	}
 	k.genKey()
 	return k
+}
+
+func (k *KeyObj) Deployment() bool {
+	return k.AppTypePrefix == DeploymentPrefixKey
+}
+
+func (k *KeyObj) StatefulSet() bool {
+	return k.AppTypePrefix == StatefulsetPrefixKey
+}
+
+func (k *KeyObj) TApp() bool {
+	return k.AppTypePrefix == TAppPrefixKey
 }
 
 func (k *KeyObj) genKey() {
