@@ -9,8 +9,6 @@ import (
 	"os"
 	"time"
 
-	tappVersioned "git.code.oa.com/gaia/tapp-controller/pkg/client/clientset/versioned"
-	tappInformers "git.code.oa.com/gaia/tapp-controller/pkg/client/informers/externalversions"
 	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s/eventhandler"
 	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s/schedulerapi"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/api"
@@ -21,6 +19,8 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/server/options"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/httputil"
 	pageutil "git.code.oa.com/tkestack/galaxy/pkg/utils/page"
+	tappVersioned "git.tencent.com/tke/tapp-controller/pkg/client/clientset/versioned"
+	tappInformers "git.tencent.com/tke/tapp-controller/pkg/client/informers/externalversions"
 	"github.com/emicklei/go-restful"
 	"github.com/emicklei/go-restful-swagger12"
 	"github.com/golang/glog"
@@ -86,7 +86,7 @@ func (s *Server) init() error {
 	s.crdInformerFactory = crdInformer.NewSharedInformerFactory(s.crdClient, 0)
 	poolInformer := s.crdInformerFactory.Galaxy().V1alpha1().Pools()
 	s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)
-	tappInformer := s.tappInformerFactory.Tappcontroller().V1alpha1().TApps()
+	tappInformer := s.tappInformerFactory.Tappcontroller().V1().TApps()
 
 	pluginArgs := &schedulerplugin.PluginFactoryArgs{
 		PodLister:         podInformer.Lister(),
@@ -102,6 +102,7 @@ func (s *Server) init() error {
 		PoolLister:        poolInformer.Lister(),
 		PoolSynced:        poolInformer.Informer().HasSynced,
 		CrdClient:         s.crdClient,
+		ExtClient:         s.extensionClient,
 	}
 	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
 	if err != nil {

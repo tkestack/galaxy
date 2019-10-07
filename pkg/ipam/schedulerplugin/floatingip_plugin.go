@@ -661,17 +661,14 @@ func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyO
 				}
 			}
 		} else if keyObj.TApp() && p.TAppLister != nil {
-			tapps, err := p.TAppLister.GetPodTApps(pod)
+			tapp, err := p.TAppLister.TApps(pod.Namespace).Get(keyObj.AppName)
 			if err != nil {
 				if !metaErrs.IsNotFound(err) {
 					return err
 				}
 			} else {
 				appExist = true
-				if len(tapps) > 1 {
-					glog.Warningf("multiple ss found for pod %s", util.PodName(pod))
-				}
-				replicas = tapps[0].Spec.Replicas
+				replicas = tapp.Spec.Replicas
 			}
 		} else {
 			return nil

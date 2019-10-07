@@ -18,9 +18,12 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
+	fakeTAppCli "git.tencent.com/tke/tapp-controller/pkg/client/clientset/versioned/fake"
+	tappInformer "git.tencent.com/tke/tapp-controller/pkg/client/informers/externalversions"
 	"github.com/jinzhu/gorm"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -53,13 +56,12 @@ func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlu
 	}
 	allObjs := append([]runtime.Object{&nodes[0], &nodes[1], &nodes[2], &nodes[3]}, objs...)
 	fipPlugin, stopChan := newPlugin(t, conf, allObjs...)
-	// drain drainedNode
-	drainedNodeIPNet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
-	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", drainedNodeIPNet, constant.ReleasePolicyPodDelete, ""); err != nil || ipInfo == nil || "10.180.154.7" != ipInfo.String() {
-		t.Fatal(err, ipInfo)
+	// drain drainedNode 10.180.1.3/32
+	if err := fipPlugin.ipam.AllocateSpecificIP("ns_notexistpod", net.ParseIP("10.180.154.7"), constant.ReleasePolicyPodDelete, ""); err != nil {
+		t.Fatal(err)
 	}
-	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", drainedNodeIPNet, constant.ReleasePolicyPodDelete, ""); err != nil || ipInfo == nil || "10.180.154.8" != ipInfo.String() {
-		t.Fatal(err, ipInfo)
+	if err := fipPlugin.ipam.AllocateSpecificIP("ns_notexistpod", net.ParseIP("10.180.154.8"), constant.ReleasePolicyPodDelete, ""); err != nil {
+		t.Fatal(err)
 	}
 	return fipPlugin, stopChan, nodes
 }
@@ -83,12 +85,10 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the following is to check release policy
-	// allocate a ip of 10.173.13.0/24
-	_, ipNet, _ := net.ParseCIDR("10.173.13.0/24")
 	pod := createStatefulSetPod("pod1-0", "ns1", immutableAnnotation)
 	podKey := util.FormatKey(pod)
-	if ipInfo, err := fipPlugin.ipam.AllocateInSubnet(podKey.KeyInDB, ipNet, constant.ReleasePolicyPodDelete, ""); err != nil || ipInfo == nil || "10.173.13.2" != ipInfo.String() {
-		t.Fatal(err, ipInfo)
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyPodDelete, ""); err != nil {
+		t.Fatal(err)
 	}
 	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.KeyInDB, constant.ReleasePolicyPodDelete, expectAttrEmpty()); err != nil {
 		t.Fatal(err)
@@ -492,6 +492,9 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 	podInformer := informerFactory.Core().V1().Pods()
 	statefulsetInformer := informerFactory.Apps().V1().StatefulSets()
 	deploymentInformer := informerFactory.Apps().V1().Deployments()
+	tappCli := fakeTAppCli.NewSimpleClientset()
+	tappInformerFactory := tappInformer.NewSharedInformerFactory(tappCli, 0)
+	tappInformer := tappInformerFactory.Tappcontroller().V1().TApps()
 	stopChan := make(chan struct{})
 	pluginArgs := &PluginFactoryArgs{
 		PodLister:         podInformer.Lister(),
@@ -503,9 +506,14 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 		PoolLister:        poolInformer.Lister(),
 		PoolSynced:        poolInformer.Informer().HasSynced,
+		TAppClient:        tappCli,
+		TAppHasSynced:     tappInformer.Informer().HasSynced,
+		TAppLister:        tappInformer.Lister(),
+		ExtClient:         extensionClient.NewSimpleClientset(),
 	}
 	go informerFactory.Start(stopChan)
 	go crdInformerFactory.Start(stopChan)
+	go tappInformerFactory.Start(stopChan)
 	return pluginArgs, stopChan
 }
 

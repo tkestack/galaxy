@@ -7,13 +7,14 @@ import (
 	"strconv"
 	"strings"
 
-	tappv1 "git.code.oa.com/gaia/tapp-controller/pkg/apis/tappcontroller/v1alpha1"
 	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
+	tappv1 "git.tencent.com/tke/tapp-controller/pkg/apis/tappcontroller/v1"
+	"git.tencent.com/tke/tapp-controller/pkg/tapp"
 	"github.com/golang/glog"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,9 +36,12 @@ func (p *FloatingIPPlugin) storeReady() bool {
 		glog.V(3).Infof("the deployment store has not been synced yet")
 		return false
 	}
-	if !p.TAppHasSynced() {
-		glog.V(3).Infof("the tapp store has not been synced yet")
-		return false
+	if _, err := p.ExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(tapp.CRD.Name, v1.GetOptions{}); err == nil {
+		//If TApp CRD created, waits for tapp
+		if !p.TAppHasSynced() {
+			glog.V(3).Infof("the tapp store has not been synced yet")
+			return false
+		}
 	}
 	if !p.PoolSynced() {
 		glog.V(3).Infof("the pool store has not been synced yet")
@@ -192,7 +196,7 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 					replicas = tapp.Spec.Replicas
 				}
 			} else {
-				glog.Warningf("unknow app type of key %s", obj.keyObj)
+				glog.Warningf("unknow app type of key %s", obj.keyObj.KeyInDB)
 				continue
 			}
 			if should, reason := p.shouldReleaseDuringResync(obj.keyObj, releasePolicy, appExist, replicas); should {
