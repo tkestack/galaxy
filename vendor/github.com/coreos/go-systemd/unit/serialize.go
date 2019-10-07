@@ -19,9 +19,7 @@ import (
 	"io"
 )
 
-// Serialize encodes all of the given UnitOption objects into a
-// unit file. When serialized the options are sorted in their
-// supplied order but grouped by section.
+// Serialize encodes all of the given UnitOption objects into a unit file
 func Serialize(opts []*UnitOption) io.Reader {
 	var buf bytes.Buffer
 
@@ -29,30 +27,20 @@ func Serialize(opts []*UnitOption) io.Reader {
 		return &buf
 	}
 
-	// Index of sections -> ordered options
 	idx := map[string][]*UnitOption{}
-	// Separately preserve order in which sections were seen
-	sections := []string{}
 	for _, opt := range opts {
-		sec := opt.Section
-		if _, ok := idx[sec]; !ok {
-			sections = append(sections, sec)
-		}
-		idx[sec] = append(idx[sec], opt)
+		idx[opt.Section] = append(idx[opt.Section], opt)
 	}
 
-	for i, sect := range sections {
-		writeSectionHeader(&buf, sect)
+	for curSection, curOpts := range idx {
+		writeSectionHeader(&buf, curSection)
 		writeNewline(&buf)
 
-		opts := idx[sect]
-		for _, opt := range opts {
+		for _, opt := range curOpts {
 			writeOption(&buf, opt)
 			writeNewline(&buf)
 		}
-		if i < len(sections)-1 {
-			writeNewline(&buf)
-		}
+		writeNewline(&buf)
 	}
 
 	return &buf

@@ -69,6 +69,8 @@ import:
   version: v1.19.0
 - package: github.com/emicklei/go-restful-swagger12
   version: 1.0.1
+- package: git.tencent.com/tke/tapp-controller
+  version: 2b03d3f3bbcae97d6af88b237e906fdc1c1c4de3
 testImport:
 - package: github.com/onsi/ginkgo
   version: ^1.4.0

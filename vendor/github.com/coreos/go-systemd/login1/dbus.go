@@ -16,7 +16,6 @@
 package login1
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 
@@ -31,7 +30,7 @@ const (
 // Conn is a connection to systemds dbus endpoint.
 type Conn struct {
 	conn   *dbus.Conn
-	object dbus.BusObject
+	object *dbus.Object
 }
 
 // New() establishes a connection to the system bus and authenticates.
@@ -77,32 +76,4 @@ func (c *Conn) initConnection() error {
 // Reboot asks logind for a reboot optionally asking for auth.
 func (c *Conn) Reboot(askForAuth bool) {
 	c.object.Call(dbusInterface+".Reboot", 0, askForAuth)
-}
-
-// Inhibit takes inhibition lock in logind.
-func (c *Conn) Inhibit(what, who, why, mode string) (*os.File, error) {
-	var fd dbus.UnixFD
-
-	err := c.object.Call(dbusInterface+".Inhibit", 0, what, who, why, mode).Store(&fd)
-	if err != nil {
-		return nil, err
-	}
-
-	return os.NewFile(uintptr(fd), "inhibit"), nil
-}
-
-// Subscribe to signals on the logind dbus
-func (c *Conn) Subscribe(members ...string) chan *dbus.Signal {
-	for _, member := range members {
-		c.conn.BusObject().Call("org.freedesktop.DBus.AddMatch", 0,
-			fmt.Sprintf("type='signal',interface='org.freedesktop.login1.Manager',member='%s'", member))
-	}
-	ch := make(chan *dbus.Signal, 10)
-	c.conn.Signal(ch)
-	return ch
-}
-
-// PowerOff asks logind for a power off optionally asking for auth.
-func (c *Conn) PowerOff(askForAuth bool) {
-	c.object.Call(dbusInterface+".PowerOff", 0, askForAuth)
 }
