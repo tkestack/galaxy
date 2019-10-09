@@ -249,6 +249,9 @@ func (d *VlanDriver) getOrCreateVlanDevice(vlanId uint16) (netlink.Link, error) 
 	// check if vlan created by user exist
 	link, err := d.getVlanIfExist(vlanId)
 	if err != nil || link != nil {
+		if link != nil {
+			d.DeviceIndex = link.Attrs().Index
+		}
 		return link, err
 	}
 	vlanIfName := fmt.Sprintf("%s%d", d.VlanNamePrefix, vlanId)
