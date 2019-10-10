@@ -47,14 +47,6 @@ We use [gometalinter](https://github.com/alecthomas/gometalinter) to check code 
 Galaxy provides swagger 1.2 docs. Add `--swagger` command line args to galaxy-ipam and restart it, check `http://${galaxy-ipam-ip}:9041/apidocs.json/v1`
 API documents of this project is converted by [api-spec-converter](https://github.com/LucyBot-Inc/api-spec-converter) and [swagger-markdown](https://github.com/syroegkin/swagger-markdown).
 
-```
-# convert swagger docs to 2.0 format
-api-spec-converter --from=swagger_1 --to=swagger_2 --syntax=yaml --order=alpha http://${galaxy-ipam-ip}:9041/apidocs.json/v1 > swagger.json
-
-# convert swagger 2.0 json doc to markdown format. This will output a swagger.md
-swagger-markdown -i swagger.json
-```
-
 # License
 
 By contributing to Galaxy, you agree that your contributions will be licensed under its [Apache License 2.0](../LICENSE)

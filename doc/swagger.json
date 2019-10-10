@@ -1,343 +1,546 @@
-basePath: /
-definitions:
-  api.FloatingIP:
-    properties:
-      appName:
-        description: deployment or statefulset name
-        type: string
-      ip:
-        description: ip
-        type: string
-      isDeployment:
-        description: deployment or statefulset
-        type: boolean
-      namespace:
-        description: namespace
-        type: string
-      podName:
-        description: pod name
-        type: string
-      policy:
-        description: ip release policy
-        type: integer
-      poolName:
-        type: string
-      releasable:
-        description: >-
-          if the ip is releasable. An ip is releasable if it isn't belong to any
-          pod
-        type: boolean
-      status:
-        description: pod status if exists
-        type: string
-      updateTime:
-        description: last allocate or release time of this ip
-        format: date-time
-        type: string
-    required:
-      - ip
-      - policy
-  api.GetPoolResp:
-    properties:
-      code:
-        format: int32
-        type: integer
-      content:
-        $ref: '#/definitions/httputil.Resp.content'
-      message:
-        type: string
-      pool:
-        $ref: '#/definitions/api.Pool'
-    required:
-      - code
-      - message
-      - pool
-  api.ListIPResp:
-    properties:
-      content:
-        items:
-          $ref: '#/definitions/api.FloatingIP'
-        type: array
-      first:
-        description: if this is the first page
-        type: boolean
-      last:
-        description: if this is the last page
-        type: boolean
-      number:
-        description: page index starting from 0
-        format: int32
-        type: integer
-      numberOfElements:
-        description: number of elements in this page
-        format: int32
-        type: integer
-      size:
-        description: page size
-        format: int32
-        type: integer
-      totalElements:
-        description: total number of elements
-        format: int32
-        type: integer
-      totalPages:
-        description: total number of pages
-        format: int32
-        type: integer
-    required:
-      - content
-      - last
-      - totalElements
-      - totalPages
-      - first
-      - numberOfElements
-      - size
-      - number
-  api.Pool:
-    properties:
-      name:
-        description: pool name
-        type: string
-      preAllocateIP:
-        description: Set to true to allocate IPs when creating or updating pool
-        type: boolean
-      size:
-        description: pool size
-        format: int32
-        type: integer
-    required:
-      - name
-      - size
-      - preAllocateIP
-  api.ReleaseIPReq:
-    properties:
-      ips:
-        items:
-          $ref: '#/definitions/api.FloatingIP'
-        type: array
-    required:
-      - ips
-  api.ReleaseIPResp:
-    properties:
-      code:
-        format: int32
-        type: integer
-      content:
-        $ref: '#/definitions/httputil.Resp.content'
-      message:
-        type: string
-      unreleased:
-        description: >-
-          unreleased ips, have been released or allocated to other pods, or are
-          not within valid range
-        items:
-          type: string
-        type: array
-    required:
-      - code
-      - message
-  api.UpdatePoolResp:
-    properties:
-      code:
-        format: int32
-        type: integer
-      content:
-        $ref: '#/definitions/httputil.Resp.content'
-      message:
-        type: string
-      realPoolSize:
-        description: real num of IPs of this pool after creating or updating
-        format: int32
-        type: integer
-    required:
-      - code
-      - message
-      - realPoolSize
-  httputil.Resp:
-    properties:
-      code:
-        format: int32
-        type: integer
-      content:
-        $ref: '#/definitions/httputil.Resp.content'
-      message:
-        type: string
-    required:
-      - code
-      - message
-  httputil.Resp.content: {}
-  page.Page.content: {}
-host: '119.29.199.183:9041'
-info:
-  title: '119.29.199.183:9041'
-  version: 1.0.0
-paths:
-  /v1/ip:
-    get:
-      consumes:
-        - application/json
-      operationId: ListIPs
-      parameters:
-        - description: keyword
-          in: query
-          name: keyword
-          required: false
-          type: string
-        - description: pool name
-          in: query
-          name: poolName
-          required: false
-          type: string
-        - description: app name
-          in: query
-          name: appName
-          required: false
-          type: string
-        - description: pod name
-          in: query
-          name: podName
-          required: false
-          type: string
-        - description: namespace
-          in: query
-          name: namespace
-          required: false
-          type: string
-        - description: listing deployments or statefulsets
-          in: query
-          name: isDeployment
-          required: false
-          type: boolean
-        - description: 'page number, valid range [0,99999]'
-          in: query
-          name: page
-          required: false
-          type: integer
-        - default: 10
-          description: 'page size, valid range (0,9999]'
-          in: query
-          name: size
-          required: false
-          type: integer
-        - default: ip asc
-          description: 'sort by which field, supports ip/namespace/podname/policy asc/desc'
-          in: query
-          name: sort
-          required: false
-          type: string
-      produces:
-        - application/json
-      responses:
-        '200':
-          description: request succeed
-          schema:
-            $ref: '#/definitions/api.ListIPResp'
-      summary: List ips by keyword or params
-    post:
-      consumes:
-        - application/json
-      operationId: ReleaseIPs
-      parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/api.ReleaseIPReq'
-      produces:
-        - application/json
-      responses:
-        '200':
-          description: request succeed
-          schema:
-            $ref: '#/definitions/api.ReleaseIPResp'
-        '202':
-          description: >-
-            Unreleased ips have been released or allocated to other pods, or are
-            not within valid range
-          schema:
-            $ref: '#/definitions/api.ReleaseIPResp'
-        '400':
-          description: 10.0.0.2 is not releasable
-        '500':
-          description: internal server error
-      summary: Release ips
-  /v1/pool:
-    post:
-      consumes:
-        - application/json
-      operationId: CreateOrUpdate
-      parameters:
-        - in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/api.Pool'
-      produces:
-        - application/json
-      responses:
-        '200':
-          description: Description was not specified
-          schema:
-            $ref: '#/definitions/httputil.Resp'
-        '202':
-          description: No enough IPs
-          schema:
-            $ref: '#/definitions/api.UpdatePoolResp'
-        '400':
-          description: pool name is empty
-        '500':
-          description: internal server error
-      summary: Create or update pool
-  '/v1/pool/{name}':
-    delete:
-      consumes:
-        - application/json
-      operationId: Delete
-      parameters:
-        - description: pool name
-          in: path
-          name: name
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        '200':
-          description: request succeed
-          schema:
-            $ref: '#/definitions/httputil.Resp'
-        '400':
-          description: pool name is empty
-        '404':
-          description: pool not found
-        '500':
-          description: internal server error
-      summary: Delete pool by name
-    get:
-      consumes:
-        - application/json
-      operationId: Get
-      parameters:
-        - description: pool name
-          in: path
-          name: name
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        '200':
-          description: request succeed
-          schema:
-            $ref: '#/definitions/api.GetPoolResp'
-        '400':
-          description: pool name is empty
-        '404':
-          description: pool not found
-        '500':
-          description: internal server error
-      summary: Get pool by name
-schemes:
-  - http
-swagger: '2.0'
-
+{
+  "swaggerVersion": "1.2",
+  "apiVersion": "",
+  "basePath": "http://192.168.99.100:32761",
+  "resourcePath": "/v1",
+  "info": {
+   "title": "",
+   "description": ""
+  },
+  "apis": [
+   {
+    "path": "/v1/ip",
+    "description": "",
+    "operations": [
+     {
+      "type": "api.ListIPResp",
+      "method": "GET",
+      "summary": "List ips by keyword or params",
+      "nickname": "ListIPs",
+      "parameters": [
+       {
+        "type": "string",
+        "paramType": "query",
+        "name": "keyword",
+        "description": "keyword",
+        "required": false,
+        "allowMultiple": false
+       },
+       {
+        "type": "string",
+        "paramType": "query",
+        "name": "poolName",
+        "description": "pool name",
+        "required": false,
+        "allowMultiple": false
+       },
+       {
+        "type": "string",
+        "paramType": "query",
+        "name": "appName",
+        "description": "app name",
+        "required": false,
+        "allowMultiple": false
+       },
+       {
+        "type": "string",
+        "paramType": "query",
+        "name": "podName",
+        "description": "pod name",
+        "required": false,
+        "allowMultiple": false
+       },
+       {
+        "type": "string",
+        "paramType": "query",
+        "name": "namespace",
+        "description": "namespace",
+        "required": false,
+        "allowMultiple": false
+       },
+       {
+        "type": "boolean",
+        "paramType": "query",
+        "name": "isDeployment",
+        "description": "listing deployments or statefulsets. Deprecated, please set appType",
+        "required": false,
+        "allowMultiple": false
+       },
+       {
+        "type": "string",
+        "paramType": "query",
+        "name": "appType",
+        "description": "app type, deployment, statefulset or tapp",
+        "required": false,
+        "allowMultiple": false
+       },
+       {
+        "type": "integer",
+        "paramType": "query",
+        "name": "page",
+        "description": "page number, valid range [0,99999]",
+        "required": false,
+        "allowMultiple": false
+       },
+       {
+        "type": "integer",
+        "defaultValue": "10",
+        "paramType": "query",
+        "name": "size",
+        "description": "page size, valid range (0,9999]",
+        "required": false,
+        "allowMultiple": false
+       },
+       {
+        "type": "string",
+        "defaultValue": "ip asc",
+        "paramType": "query",
+        "name": "sort",
+        "description": "sort by which field, supports ip/namespace/podname/policy asc/desc",
+        "required": false,
+        "allowMultiple": false
+       }
+      ],
+      "responseMessages": [
+       {
+        "code": 200,
+        "message": "request succeed",
+        "responseModel": "api.ListIPResp"
+       }
+      ],
+      "produces": [
+       "application/json"
+      ],
+      "consumes": [
+       "application/json"
+      ]
+     },
+     {
+      "type": "api.ReleaseIPResp",
+      "method": "POST",
+      "summary": "Release ips",
+      "nickname": "ReleaseIPs",
+      "parameters": [
+       {
+        "type": "api.ReleaseIPReq",
+        "paramType": "body",
+        "name": "body",
+        "description": "",
+        "required": true,
+        "allowMultiple": false
+       }
+      ],
+      "responseMessages": [
+       {
+        "code": 200,
+        "message": "request succeed",
+        "responseModel": "api.ReleaseIPResp"
+       },
+       {
+        "code": 202,
+        "message": "Unreleased ips have been released or allocated to other pods, or are not within valid range",
+        "responseModel": "api.ReleaseIPResp"
+       },
+       {
+        "code": 400,
+        "message": "10.0.0.2 is not releasable"
+       },
+       {
+        "code": 500,
+        "message": "internal server error"
+       }
+      ],
+      "produces": [
+       "application/json"
+      ],
+      "consumes": [
+       "application/json"
+      ]
+     }
+    ]
+   },
+   {
+    "path": "/v1/pool/{name}",
+    "description": "",
+    "operations": [
+     {
+      "type": "api.GetPoolResp",
+      "method": "GET",
+      "summary": "Get pool by name",
+      "nickname": "Get",
+      "parameters": [
+       {
+        "type": "string",
+        "paramType": "path",
+        "name": "name",
+        "description": "pool name",
+        "required": true,
+        "allowMultiple": false
+       }
+      ],
+      "responseMessages": [
+       {
+        "code": 200,
+        "message": "request succeed",
+        "responseModel": "api.GetPoolResp"
+       },
+       {
+        "code": 400,
+        "message": "pool name is empty"
+       },
+       {
+        "code": 404,
+        "message": "pool not found"
+       },
+       {
+        "code": 500,
+        "message": "internal server error"
+       }
+      ],
+      "produces": [
+       "application/json"
+      ],
+      "consumes": [
+       "application/json"
+      ]
+     },
+     {
+      "type": "httputil.Resp",
+      "method": "DELETE",
+      "summary": "Delete pool by name",
+      "nickname": "Delete",
+      "parameters": [
+       {
+        "type": "string",
+        "paramType": "path",
+        "name": "name",
+        "description": "pool name",
+        "required": true,
+        "allowMultiple": false
+       }
+      ],
+      "responseMessages": [
+       {
+        "code": 200,
+        "message": "request succeed",
+        "responseModel": "httputil.Resp"
+       },
+       {
+        "code": 400,
+        "message": "pool name is empty"
+       },
+       {
+        "code": 404,
+        "message": "pool not found"
+       },
+       {
+        "code": 500,
+        "message": "internal server error"
+       }
+      ],
+      "produces": [
+       "application/json"
+      ],
+      "consumes": [
+       "application/json"
+      ]
+     }
+    ]
+   },
+   {
+    "path": "/v1/pool",
+    "description": "",
+    "operations": [
+     {
+      "type": "httputil.Resp",
+      "method": "POST",
+      "summary": "Create or update pool",
+      "nickname": "CreateOrUpdate",
+      "parameters": [
+       {
+        "type": "api.Pool",
+        "paramType": "body",
+        "name": "body",
+        "description": "",
+        "required": true,
+        "allowMultiple": false
+       }
+      ],
+      "responseMessages": [
+       {
+        "code": 200,
+        "message": "request succeed",
+        "responseModel": "api.UpdatePoolResp"
+       },
+       {
+        "code": 202,
+        "message": "No enough IPs",
+        "responseModel": "api.UpdatePoolResp"
+       },
+       {
+        "code": 400,
+        "message": "pool name is empty"
+       },
+       {
+        "code": 500,
+        "message": "internal server error"
+       }
+      ],
+      "produces": [
+       "application/json"
+      ],
+      "consumes": [
+       "application/json"
+      ]
+     }
+    ]
+   }
+  ],
+  "models": {
+   "api.ListIPResp": {
+    "id": "api.ListIPResp",
+    "required": [
+     "content",
+     "last",
+     "totalElements",
+     "totalPages",
+     "first",
+     "numberOfElements",
+     "size",
+     "number"
+    ],
+    "properties": {
+     "content": {
+      "type": "array",
+      "items": {
+       "$ref": "api.FloatingIP"
+      }
+     },
+     "last": {
+      "type": "boolean",
+      "description": "if this is the last page"
+     },
+     "totalElements": {
+      "type": "integer",
+      "format": "int32",
+      "description": "total number of elements"
+     },
+     "totalPages": {
+      "type": "integer",
+      "format": "int32",
+      "description": "total number of pages"
+     },
+     "first": {
+      "type": "boolean",
+      "description": "if this is the first page"
+     },
+     "numberOfElements": {
+      "type": "integer",
+      "format": "int32",
+      "description": "number of elements in this page"
+     },
+     "size": {
+      "type": "integer",
+      "format": "int32",
+      "description": "page size"
+     },
+     "number": {
+      "type": "integer",
+      "format": "int32",
+      "description": "page index starting from 0"
+     }
+    }
+   },
+   "page.Page.content": {
+    "id": "page.Page.content",
+    "properties": {}
+   },
+   "api.FloatingIP": {
+    "id": "api.FloatingIP",
+    "required": [
+     "ip",
+     "policy"
+    ],
+    "properties": {
+     "ip": {
+      "type": "string",
+      "description": "ip"
+     },
+     "namespace": {
+      "type": "string",
+      "description": "namespace"
+     },
+     "appName": {
+      "type": "string",
+      "description": "deployment or statefulset name"
+     },
+     "podName": {
+      "type": "string",
+      "description": "pod name"
+     },
+     "poolName": {
+      "type": "string"
+     },
+     "policy": {
+      "type": "integer",
+      "description": "ip release policy"
+     },
+     "isDeployment": {
+      "type": "boolean",
+      "description": "deployment or statefulset, deprecated please set appType"
+     },
+     "appType": {
+      "type": "string",
+      "description": "deployment, statefulset or tapp"
+     },
+     "updateTime": {
+      "type": "string",
+      "format": "date-time",
+      "description": "last allocate or release time of this ip"
+     },
+     "status": {
+      "type": "string",
+      "description": "pod status if exists"
+     },
+     "releasable": {
+      "type": "boolean",
+      "description": "if the ip is releasable. An ip is releasable if it isn't belong to any pod"
+     }
+    }
+   },
+   "api.ReleaseIPResp": {
+    "id": "api.ReleaseIPResp",
+    "required": [
+     "code",
+     "message"
+    ],
+    "properties": {
+     "code": {
+      "type": "integer",
+      "format": "int32"
+     },
+     "message": {
+      "type": "string"
+     },
+     "content": {
+      "$ref": "httputil.Resp.content"
+     },
+     "unreleased": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "unreleased ips, have been released or allocated to other pods, or are not within valid range"
+     }
+    }
+   },
+   "httputil.Resp.content": {
+    "id": "httputil.Resp.content",
+    "properties": {}
+   },
+   "api.ReleaseIPReq": {
+    "id": "api.ReleaseIPReq",
+    "required": [
+     "ips"
+    ],
+    "properties": {
+     "ips": {
+      "type": "array",
+      "items": {
+       "$ref": "api.FloatingIP"
+      }
+     }
+    }
+   },
+   "api.GetPoolResp": {
+    "id": "api.GetPoolResp",
+    "required": [
+     "code",
+     "message",
+     "pool"
+    ],
+    "properties": {
+     "code": {
+      "type": "integer",
+      "format": "int32"
+     },
+     "message": {
+      "type": "string"
+     },
+     "content": {
+      "$ref": "httputil.Resp.content"
+     },
+     "pool": {
+      "$ref": "api.Pool"
+     }
+    }
+   },
+   "api.Pool": {
+    "id": "api.Pool",
+    "required": [
+     "name",
+     "size",
+     "preAllocateIP"
+    ],
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "pool name"
+     },
+     "size": {
+      "type": "integer",
+      "format": "int32",
+      "description": "pool size"
+     },
+     "preAllocateIP": {
+      "type": "boolean",
+      "description": "Set to true to allocate IPs when creating or updating pool"
+     }
+    }
+   },
+   "httputil.Resp": {
+    "id": "httputil.Resp",
+    "required": [
+     "code",
+     "message"
+    ],
+    "properties": {
+     "code": {
+      "type": "integer",
+      "format": "int32"
+     },
+     "message": {
+      "type": "string"
+     },
+     "content": {
+      "$ref": "httputil.Resp.content"
+     }
+    }
+   },
+   "api.UpdatePoolResp": {
+    "id": "api.UpdatePoolResp",
+    "required": [
+     "code",
+     "message",
+     "realPoolSize"
+    ],
+    "properties": {
+     "code": {
+      "type": "integer",
+      "format": "int32"
+     },
+     "message": {
+      "type": "string"
+     },
+     "content": {
+      "$ref": "httputil.Resp.content"
+     },
+     "realPoolSize": {
+      "type": "integer",
+      "format": "int32",
+      "description": "real num of IPs of this pool after creating or updating"
+     }
+    }
+   }
+  }
+ }
