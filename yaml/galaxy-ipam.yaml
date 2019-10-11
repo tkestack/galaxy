@@ -55,6 +55,10 @@ rules:
   - customresourcedefinitions
   verbs:
   - "*"
+- apiGroups: ["tke.cloud.tencent.com"]
+  resources:
+  - tapps
+  verbs: ["list", "watch"]
 ---
 apiVersion: v1
 kind: ServiceAccount
