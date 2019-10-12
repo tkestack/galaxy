@@ -521,14 +521,24 @@ func (r Request) finalURLTemplate() url.URL {
 	return *url
 }
 
-func (r *Request) tryThrottle() {
+func (r *Request) tryThrottle() error {
+	if r.throttle == nil {
+		return nil
+	}
+
 	now := time.Now()
-	if r.throttle != nil {
+	var err error
+	if r.ctx != nil {
+		err = r.throttle.Wait(r.ctx)
+	} else {
 		r.throttle.Accept()
 	}
+
 	if latency := time.Since(now); latency > longThrottleLatency {
 		klog.V(4).Infof("Throttling request took %v, request: %s:%s", latency, r.verb, r.URL().String())
 	}
+
+	return err
 }
 
 // Watch attempts to begin watching the requested location.
@@ -592,10 +602,15 @@ func (r *Request) WatchWithSpecificDecoders(wrapperDecoderFn func(io.ReadCloser)
 		if result := r.transformResponse(resp, req); result.err != nil {
 			return nil, result.err
 		}
-		return nil, fmt.Errorf("for request '%+v', got status: %v", url, resp.StatusCode)
+		return nil, fmt.Errorf("for request %s, got status: %v", url, resp.StatusCode)
 	}
 	wrapperDecoder := wrapperDecoderFn(resp.Body)
-	return watch.NewStreamWatcher(restclientwatch.NewDecoder(wrapperDecoder, embeddedDecoder)), nil
+	return watch.NewStreamWatcher(
+		restclientwatch.NewDecoder(wrapperDecoder, embeddedDecoder),
+		// use 500 to indicate that the cause of the error is unknown - other error codes
+		// are more specific to HTTP interactions, and set a reason
+		errors.NewClientErrorReporter(http.StatusInternalServerError, r.verb, "ClientWatchDecoding"),
+	), nil
 }
 
 // updateURLMetrics is a convenience function for pushing metrics.
@@ -625,12 +640,17 @@ func (r *Request) Stream() (io.ReadCloser, error) {
 		return nil, r.err
 	}
 
-	r.tryThrottle()
+	if err := r.tryThrottle(); err != nil {
+		return nil, err
+	}
 
 	url := r.URL().String()
 	req, err := http.NewRequest(r.verb, url, nil)
 	if err != nil {
 		return nil, err
+	}
+	if r.body != nil {
+		req.Body = ioutil.NopCloser(r.body)
 	}
 	if r.ctx != nil {
 		req = req.WithContext(r.ctx)
@@ -671,6 +691,33 @@ func (r *Request) Stream() (io.ReadCloser, error) {
 	}
 }
 
+// requestPreflightCheck looks for common programmer errors on Request.
+//
+// We tackle here two programmer mistakes. The first one is to try to create
+// something(POST) using an empty string as namespace with namespaceSet as
+// true. If namespaceSet is true then namespace should also be defined. The
+// second mistake is, when under the same circumstances, the programmer tries
+// to GET, PUT or DELETE a named resource(resourceName != ""), again, if
+// namespaceSet is true then namespace must not be empty.
+func (r *Request) requestPreflightCheck() error {
+	if !r.namespaceSet {
+		return nil
+	}
+	if len(r.namespace) > 0 {
+		return nil
+	}
+
+	switch r.verb {
+	case "POST":
+		return fmt.Errorf("an empty namespace may not be set during creation")
+	case "GET", "PUT", "DELETE":
+		if len(r.resourceName) > 0 {
+			return fmt.Errorf("an empty namespace may not be set when a resource name is provided")
+		}
+	}
+	return nil
+}
+
 // request connects to the server and invokes the provided function when a server response is
 // received. It handles retry behavior and up front validation of requests. It will invoke
 // fn at most once. It will return an error if a problem occurred prior to connecting to the
@@ -687,12 +734,8 @@ func (r *Request) request(fn func(*http.Request, *http.Response)) error {
 		return r.err
 	}
 
-	// TODO: added to catch programmer errors (invoking operations with an object with an empty namespace)
-	if (r.verb == "GET" || r.verb == "PUT" || r.verb == "DELETE") && r.namespaceSet && len(r.resourceName) > 0 && len(r.namespace) == 0 {
-		return fmt.Errorf("an empty namespace may not be set when a resource name is provided")
-	}
-	if (r.verb == "POST") && r.namespaceSet && len(r.namespace) == 0 {
-		return fmt.Errorf("an empty namespace may not be set during creation")
+	if err := r.requestPreflightCheck(); err != nil {
+		return err
 	}
 
 	client := r.client
@@ -727,7 +770,9 @@ func (r *Request) request(fn func(*http.Request, *http.Response)) error {
 			// We are retrying the request that we already send to apiserver
 			// at least once before.
 			// This request should also be throttled with the client-internal throttler.
-			r.tryThrottle()
+			if err := r.tryThrottle(); err != nil {
+				return err
+			}
 		}
 		resp, err := client.Do(req)
 		updateURLMetrics(r, resp, err)
@@ -793,12 +838,12 @@ func (r *Request) request(fn func(*http.Request, *http.Response)) error {
 // processing.
 //
 // Error type:
-//  * If the request can't be constructed, or an error happened earlier while building its
-//    arguments: *RequestConstructionError
 //  * If the server responds with a status: *errors.StatusError or *errors.UnexpectedObjectError
 //  * http.Client.Do errors are returned directly.
 func (r *Request) Do() Result {
-	r.tryThrottle()
+	if err := r.tryThrottle(); err != nil {
+		return Result{err: err}
+	}
 
 	var result Result
 	err := r.request(func(req *http.Request, resp *http.Response) {
@@ -812,7 +857,9 @@ func (r *Request) Do() Result {
 
 // DoRaw executes the request but does not process the response body.
 func (r *Request) DoRaw() ([]byte, error) {
-	r.tryThrottle()
+	if err := r.tryThrottle(); err != nil {
+		return nil, err
+	}
 
 	var result Result
 	err := r.request(func(req *http.Request, resp *http.Response) {
@@ -845,13 +892,13 @@ func (r *Request) transformResponse(resp *http.Response, req *http.Request) Resu
 			// 3. Apiserver closes connection.
 			// 4. client-go should catch this and return an error.
 			klog.V(2).Infof("Stream error %#v when reading response body, may be caused by closed connection.", err)
-			streamErr := fmt.Errorf("Stream error %#v when reading response body, may be caused by closed connection. Please retry.", err)
+			streamErr := fmt.Errorf("stream error when reading response body, may be caused by closed connection. Please retry. Original error: %v", err)
 			return Result{
 				err: streamErr,
 			}
 		default:
-			klog.Errorf("Unexpected error when reading response body: %#v", err)
-			unexpectedErr := fmt.Errorf("Unexpected error %#v when reading response body. Please retry.", err)
+			klog.Errorf("Unexpected error when reading response body: %v", err)
+			unexpectedErr := fmt.Errorf("unexpected error when reading response body. Please retry. Original error: %v", err)
 			return Result{
 				err: unexpectedErr,
 			}
@@ -1100,7 +1147,8 @@ func (r Result) Into(obj runtime.Object) error {
 		return fmt.Errorf("serializer for %s doesn't exist", r.contentType)
 	}
 	if len(r.body) == 0 {
-		return fmt.Errorf("0-length response")
+		return fmt.Errorf("0-length response with status code: %d and content type: %s",
+			r.statusCode, r.contentType)
 	}
 
 	out, _, err := r.decoder.Decode(r.body, nil, obj)
@@ -1195,7 +1243,6 @@ func IsValidPathSegmentPrefix(name string) []string {
 func ValidatePathSegmentName(name string, prefix bool) []string {
 	if prefix {
 		return IsValidPathSegmentPrefix(name)
-	} else {
-		return IsValidPathSegmentName(name)
 	}
+	return IsValidPathSegmentName(name)
 }
