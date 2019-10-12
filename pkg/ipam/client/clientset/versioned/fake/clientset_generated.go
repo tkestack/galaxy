@@ -75,3 +75,8 @@ var _ clientset.Interface = &Clientset{}
 func (c *Clientset) GalaxyV1alpha1() galaxyv1alpha1.GalaxyV1alpha1Interface {
 	return &fakegalaxyv1alpha1.FakeGalaxyV1alpha1{Fake: &c.Fake}
 }
+
+// Galaxy retrieves the GalaxyV1alpha1Client
+func (c *Clientset) Galaxy() galaxyv1alpha1.GalaxyV1alpha1Interface {
+	return &fakegalaxyv1alpha1.FakeGalaxyV1alpha1{Fake: &c.Fake}
+}

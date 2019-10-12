@@ -112,7 +112,7 @@ func (c *FakeFloatingIPs) DeleteCollection(options *v1.DeleteOptions, listOption
 // Patch applies the patch and returns the patched floatingIP.
 func (c *FakeFloatingIPs) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.FloatingIP, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(floatingipsResource, name, pt, data, subresources...), &v1alpha1.FloatingIP{})
+		Invokes(testing.NewRootPatchSubresourceAction(floatingipsResource, name, data, subresources...), &v1alpha1.FloatingIP{})
 	if obj == nil {
 		return nil, err
 	}

@@ -184,6 +184,7 @@ func (s *Server) initk8sClient() {
 			"kube-system",
 			COMPONENT_NAME,
 			leaderElectionClient.CoreV1(),
+			leaderElectionClient.CoordinationV1(),
 			resourcelock.ResourceLockConfig{
 				Identity:      id,
 				EventRecorder: recorder,

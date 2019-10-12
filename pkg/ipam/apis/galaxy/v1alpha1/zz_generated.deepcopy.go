@@ -55,7 +55,7 @@ func (in *FloatingIP) DeepCopyObject() runtime.Object {
 func (in *FloatingIPList) DeepCopyInto(out *FloatingIPList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]FloatingIP, len(*in))
@@ -131,7 +131,7 @@ func (in *Pool) DeepCopyObject() runtime.Object {
 func (in *PoolList) DeepCopyInto(out *PoolList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]Pool, len(*in))
