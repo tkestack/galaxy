@@ -14,7 +14,6 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	tappv1 "git.tencent.com/tke/tapp-controller/pkg/apis/tappcontroller/v1"
-	"git.tencent.com/tke/tapp-controller/pkg/tapp"
 	glog "k8s.io/klog"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +35,7 @@ func (p *FloatingIPPlugin) storeReady() bool {
 		glog.V(3).Infof("the deployment store has not been synced yet")
 		return false
 	}
-	if _, err := p.ExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(tapp.CRD.Name, v1.GetOptions{}); err == nil {
+	if _, err := p.ExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("tapps.tke.cloud.tencent.com", v1.GetOptions{}); err == nil {
 		//If TApp CRD created, waits for tapp
 		if !p.TAppHasSynced() {
 			glog.V(3).Infof("the tapp store has not been synced yet")
