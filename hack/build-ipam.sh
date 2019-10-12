@@ -23,4 +23,5 @@ version_package=${PKG}/pkg/utils/ldflags
 # build galaxy-ipam
 echo "Building galaxy-ipam"
 echo "   galaxy-ipam"
+echo go build -o bin/galaxy-ipam $flags -ldflags "$(print_ldflags)" ${PKG}/cmd/galaxy-ipam
 go build -o bin/galaxy-ipam $flags -ldflags "$(print_ldflags)" ${PKG}/cmd/galaxy-ipam

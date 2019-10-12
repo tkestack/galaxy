@@ -12,7 +12,7 @@ import (
 	crd_clientset "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 )
 
 type Type uint16

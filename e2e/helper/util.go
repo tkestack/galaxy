@@ -11,7 +11,7 @@ import (
 
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/types"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"github.com/google/uuid"
 )
 

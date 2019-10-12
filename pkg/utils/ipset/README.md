@@ -1,2 +1,1 @@
-This package is copied from k8s.io/kubernetes/pkg/util/ipset so that galaxy doesn't need to vendor kubernetes repo.
-Vendoring kubernetes repo will heavily slow down updating vendors.
+This package is copied from k8s.io/kubernetes/pkg/util/ipset and added more funcs after.

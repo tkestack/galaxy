@@ -16,7 +16,6 @@ require (
 	github.com/emicklei/go-restful v2.10.0+incompatible
 	github.com/emicklei/go-restful-swagger12 v0.0.0-20170926063155-7524189396c6
 	github.com/godbus/dbus v4.1.0+incompatible
-	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/groupcache v0.0.0-20191002201903-404acd9df4cc // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/google/uuid v1.1.1
@@ -37,8 +36,10 @@ require (
 	k8s.io/apiextensions-apiserver v0.0.0
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v11.0.0+incompatible
+	k8s.io/component-base v0.0.0
+	k8s.io/klog v0.3.1
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d // indirect
-	k8s.io/kubernetes v1.16.0-alpha.0 // indirect
+	k8s.io/kubernetes v1.16.0-alpha.0
 	k8s.io/utils v0.0.0-20191010214722-8d271d903fe4
 )
 

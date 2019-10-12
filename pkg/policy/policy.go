@@ -12,10 +12,9 @@ import (
 
 	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
 	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s/eventhandler"
-	utildbus "git.code.oa.com/tkestack/galaxy/pkg/utils/dbus"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/ipset"
 	utiliptables "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +27,7 @@ import (
 	corev1Lister "k8s.io/client-go/listers/core/v1"
 	networkingv1Lister "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
+	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/utils/exec"
 )
 

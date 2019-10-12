@@ -5,7 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 )
 
 func BlockSignalHandler(f func()) {

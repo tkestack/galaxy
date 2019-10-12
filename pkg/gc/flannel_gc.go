@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"git.code.oa.com/tkestack/galaxy/pkg/api/docker"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/util/wait"
 )

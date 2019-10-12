@@ -15,7 +15,7 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/private"
 	"git.code.oa.com/tkestack/galaxy/pkg/galaxy"
 
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

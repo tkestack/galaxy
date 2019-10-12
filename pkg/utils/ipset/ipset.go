@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	utilexec "k8s.io/utils/exec"
 )
 

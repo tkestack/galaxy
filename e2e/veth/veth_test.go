@@ -10,7 +10,7 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/ips"
 	"github.com/containernetworking/cni/pkg/invoke"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"

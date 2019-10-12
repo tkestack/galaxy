@@ -6,7 +6,7 @@ import (
 	"syscall"
 
 	"github.com/dbdd4us/qcloudapi-sdk-go/metadata"
-	log "github.com/golang/glog"
+	log "k8s.io/klog"
 )
 
 func getENIIndex(ifName string) (int, error) {

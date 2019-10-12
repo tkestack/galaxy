@@ -5,7 +5,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 

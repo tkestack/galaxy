@@ -6,7 +6,7 @@ import (
 
 	dockerapi "github.com/docker/engine-api/client"
 	dockertypes "github.com/docker/engine-api/types"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"golang.org/x/net/context"
 )
 

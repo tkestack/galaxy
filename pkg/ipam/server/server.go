@@ -23,7 +23,7 @@ import (
 	tappInformers "git.tencent.com/tke/tapp-controller/pkg/client/informers/externalversions"
 	"github.com/emicklei/go-restful"
 	"github.com/emicklei/go-restful-swagger12"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"

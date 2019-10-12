@@ -9,7 +9,7 @@ import (
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 )
 
 var (

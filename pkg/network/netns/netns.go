@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"github.com/vishvananda/netns"
 )
 

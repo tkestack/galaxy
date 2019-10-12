@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 )

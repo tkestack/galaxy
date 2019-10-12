@@ -19,7 +19,7 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/keylock"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"

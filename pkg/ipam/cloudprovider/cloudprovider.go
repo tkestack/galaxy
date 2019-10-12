@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/cloudprovider/rpc"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 )

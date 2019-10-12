@@ -1,1 +1,1 @@
-Copied from k8s.io/kubernetes/pkg/kubelet/dockershim/network/hostport
+Copied from k8s.io/kubernetes/pkg/kubelet/dockershim/network/hostport and added more funcs after.

@@ -14,7 +14,7 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/httputil"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/keylock"
 	"github.com/emicklei/go-restful"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 )

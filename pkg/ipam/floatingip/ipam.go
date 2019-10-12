@@ -9,7 +9,7 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 )
 
 var (

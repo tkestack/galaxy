@@ -23,10 +23,10 @@ import (
 	"time"
 
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/server"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/flag"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/ldflags/verflag"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/logs"
 	"github.com/spf13/pflag"
+	"k8s.io/component-base/cli/flag"
+	"k8s.io/component-base/logs"
+	"k8s.io/kubernetes/pkg/version/verflag"
 )
 
 func main() {

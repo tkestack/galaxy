@@ -20,7 +20,7 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/emicklei/go-restful"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"

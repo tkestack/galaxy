@@ -16,7 +16,7 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	pageutil "git.code.oa.com/tkestack/galaxy/pkg/utils/page"
 	"github.com/emicklei/go-restful"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"k8s.io/client-go/listers/core/v1"
 )
 

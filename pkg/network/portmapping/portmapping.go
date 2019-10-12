@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 )
 
 //OpenHostports opens all hostport for pod. The opened hostports are assigned to k8sPorts

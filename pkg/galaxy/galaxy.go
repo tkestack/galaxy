@@ -13,7 +13,7 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/network/portmapping"
 	"git.code.oa.com/tkestack/galaxy/pkg/policy"
 	"git.code.oa.com/tkestack/galaxy/pkg/tke/eni"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"

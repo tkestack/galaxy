@@ -10,9 +10,9 @@ import (
 	"sync"
 
 	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
-	utildbus "git.code.oa.com/tkestack/galaxy/pkg/utils/dbus"
 	utiliptables "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
+	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/utils/exec"
 )
 

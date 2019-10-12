@@ -1,7 +1,7 @@
 package eventhandler
 
 import (
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 )

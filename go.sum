@@ -493,6 +493,7 @@ k8s.io/client-go v0.0.0-20190918200256-06eb1244587a/go.mod h1:3YAcTbI2ArBRmhHns5
 k8s.io/cloud-provider v0.0.0-20190918203125-ae665f80358a/go.mod h1:hfxdMPnFjoiVZrbaHkBS0t56GelBDM199c4gOXAwQ/I=
 k8s.io/cluster-bootstrap v0.0.0-20190918202959-c340507a5d48/go.mod h1:JoNzH2HyeimzRZXShJRDmpANOXTTL5RoXNbeCS3D8gY=
 k8s.io/code-generator v0.0.0-20190612205613-18da4a14b22b/go.mod h1:G8bQwmHm2eafm5bgtX67XDZQ8CWKSGu9DekI+yN4Y5I=
+k8s.io/component-base v0.0.0-20190918200425-ed2f0867c778 h1:YicOHTLJZz/TIpJcqhVYJI2LyuM7VMkYiiG6FZfJmzY=
 k8s.io/component-base v0.0.0-20190918200425-ed2f0867c778/go.mod h1:DFWQCXgXVLiWtzFaS17KxHdlUeUymP7FLxZSkmL9/jU=
 k8s.io/cri-api v0.0.0-20190817025403-3ae76f584e79/go.mod h1:MQf3sTYxPlSVy4QhUrDFfHWFxHtwhdpvGBECKGhZULk=
 k8s.io/csi-translation-lib v0.0.0-20190918203248-97c07dcbb623/go.mod h1:FP2ff9xZ2FL6m427s99qF74Y18P8WSCvv1+CxK2RpLM=

@@ -7,7 +7,7 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
 	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
 	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 )
 
 // Request sent to the Galaxy by the Galaxy SDN CNI plugin

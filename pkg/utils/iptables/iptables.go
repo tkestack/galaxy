@@ -23,11 +23,11 @@ import (
 	"strings"
 	"sync"
 
-	utildbus "git.code.oa.com/tkestack/galaxy/pkg/utils/dbus"
-	utilversion "git.code.oa.com/tkestack/galaxy/pkg/utils/version"
 	godbus "github.com/godbus/dbus"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"k8s.io/apimachinery/pkg/util/sets"
+	utilversion "k8s.io/apimachinery/pkg/util/version"
+	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/utils/exec"
 )
 

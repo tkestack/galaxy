@@ -8,7 +8,7 @@ import (
 
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"github.com/jinzhu/gorm"
 )
 

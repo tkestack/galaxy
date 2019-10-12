@@ -7,7 +7,7 @@ import (
 
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/dbdd4us/qcloudapi-sdk-go/metadata"
-	log "github.com/golang/glog"
+	log "k8s.io/klog"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/util/wait"
 

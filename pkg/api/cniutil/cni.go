@@ -16,7 +16,7 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/plugins/pkg/ip"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	"github.com/vishvananda/netlink"
 )
 

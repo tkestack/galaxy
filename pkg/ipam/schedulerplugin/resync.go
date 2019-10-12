@@ -15,7 +15,7 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	tappv1 "git.tencent.com/tke/tapp-controller/pkg/apis/tappcontroller/v1"
 	"git.tencent.com/tke/tapp-controller/pkg/tapp"
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"

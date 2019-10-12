@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/golang/glog"
+	glog "k8s.io/klog"
 )
 
 /*
