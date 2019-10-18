@@ -1,20 +1,11 @@
-package k8s_vlan_test
+package k8s_vlan
 
 import (
-	"encoding/json"
-	"net"
-	"path"
-
 	"git.code.oa.com/tkestack/galaxy/e2e/helper"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/ips"
-	"github.com/containernetworking/cni/pkg/invoke"
-	glog "k8s.io/klog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/vishvananda/netlink"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 )
 
 var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {
@@ -34,23 +25,10 @@ var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {
     "device": "dummy0",
     "default_bridge_name": "brtest"
 }`)
-		nsPath, err := helper.NewNetNS(containerId)
-		Expect(err).NotTo(HaveOccurred())
-		err = helper.SetupDummyDev("dummy0", ifaceCidr)
-		Expect(err).NotTo(HaveOccurred())
 		argsStr, err := helper.IPInfo(containerCidr, 0)
 		Expect(err).NotTo(HaveOccurred())
-		result, err := helper.ExecCNIWithResult(cni, netConf, &invoke.Args{
-			Command:       "ADD",
-			ContainerID:   containerId,
-			NetNS:         path.Join(helper.NetNS_PATH, containerId),
-			PluginArgsStr: cniutil.BuildCNIArgs(map[string]string{constant.IPInfosKey: argsStr}),
-		})
-		Expect(err).NotTo(HaveOccurred())
-		data, err := json.Marshal(result)
-		Expect(err).NotTo(HaveOccurred())
-		glog.V(4).Infof("result: %s", string(data))
-		Expect(string(data)).Should(Equal(`{"cniVersion":"0.2.0","ip4":{"ip":"192.168.0.68/26","gateway":"192.168.0.65","routes":[{"dst":"0.0.0.0/0"}]},"dns":{}}`), "result: %s", string(data))
+		nsPath := helper.CmdAdd(containerId, ifaceCidr, argsStr, cni,
+			`{"cniVersion":"0.2.0","ip4":{"ip":"192.168.0.68/26","gateway":"192.168.0.65","routes":[{"dst":"0.0.0.0/0"}]},"dns":{}}`, netConf)
 		_, err = helper.Ping("192.168.0.68")
 		Expect(err).NotTo(HaveOccurred())
 
@@ -70,24 +48,10 @@ var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {
 		Expect(err).Should(BeNil(), "%v", err)
 
 		// check container iface topology, route, neigh, ip address is expected
-		containerIPNet, err := ips.ParseCIDR(containerCidr)
-		Expect(err).NotTo(HaveOccurred())
-		err = (&helper.NetworkTopology{
-			Netns: nsPath,
-			LeaveDevices: []*helper.LinkDevice{
-				helper.NewLinkDevice(containerIPNet, "eth0", "veth"),
-			},
-			Routes: []helper.Route{{Route: netlink.Route{Gw: net.ParseIP("192.168.0.65")}, LinkName: "eth0"}},
-		}).Verify()
-		Expect(err).Should(BeNil(), "%v", err)
+		helper.CheckContainerTopology(nsPath, containerCidr, "192.168.0.65")
 
 		// test DEL command
-		err = helper.ExecCNI(cni, netConf, &invoke.Args{
-			Command:     "DEL",
-			ContainerID: containerId,
-			NetNS:       path.Join(helper.NetNS_PATH, containerId),
-		})
-		Expect(err).Should(BeNil(), "%v", err)
+		helper.CmdDel(containerId, cni, netConf)
 	})
 
 	It("pure switch", func() {
@@ -97,23 +61,10 @@ var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {
     "device": "dummy0",
     "switch": "pure"
 }`)
-		nsPath, err := helper.NewNetNS(containerId)
-		Expect(err).NotTo(HaveOccurred())
-		err = helper.SetupDummyDev("dummy0", ifaceCidr)
-		Expect(err).NotTo(HaveOccurred())
 		argsStr, err := helper.IPInfo(containerCidr, 0)
 		Expect(err).NotTo(HaveOccurred())
-		result, err := helper.ExecCNIWithResult(cni, netConf, &invoke.Args{
-			Command:       "ADD",
-			ContainerID:   containerId,
-			NetNS:         path.Join(helper.NetNS_PATH, containerId),
-			PluginArgsStr: cniutil.BuildCNIArgs(map[string]string{constant.IPInfosKey: argsStr}),
-		})
-		Expect(err).NotTo(HaveOccurred())
-		data, err := json.Marshal(result)
-		Expect(err).NotTo(HaveOccurred())
-		glog.V(4).Infof("result: %s", string(data))
-		Expect(string(data)).Should(Equal(`{"cniVersion":"0.2.0","ip4":{"ip":"192.168.0.68/26","gateway":"192.168.0.65","routes":[{"dst":"0.0.0.0/0"}]},"dns":{}}`), "result: %s", string(data))
+		nsPath := helper.CmdAdd(containerId, ifaceCidr, argsStr, cni,
+			`{"cniVersion":"0.2.0","ip4":{"ip":"192.168.0.68/26","gateway":"192.168.0.65","routes":[{"dst":"0.0.0.0/0"}]},"dns":{}}`, netConf)
 		_, err = helper.Ping("192.168.0.68")
 		Expect(err).NotTo(HaveOccurred())
 
@@ -129,15 +80,6 @@ var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {
 		Expect(err).Should(BeNil(), "%v", err)
 
 		// check container iface topology, route, neigh, ip address is expected
-		containerIPNet, err := ips.ParseCIDR(containerCidr)
-		Expect(err).NotTo(HaveOccurred())
-		err = (&helper.NetworkTopology{
-			Netns: nsPath,
-			LeaveDevices: []*helper.LinkDevice{
-				helper.NewLinkDevice(containerIPNet, "eth0", "veth"),
-			},
-			Routes: []helper.Route{{Route: netlink.Route{Gw: net.ParseIP("192.168.0.65")}, LinkName: "eth0"}},
-		}).Verify()
-		Expect(err).Should(BeNil(), "%v", err)
+		helper.CheckContainerTopology(nsPath, containerCidr, "192.168.0.65")
 	})
 })

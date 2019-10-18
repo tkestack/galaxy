@@ -11,8 +11,8 @@ import (
 
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/types"
-	glog "k8s.io/klog"
 	"github.com/google/uuid"
+	glog "k8s.io/klog"
 )
 
 var (
