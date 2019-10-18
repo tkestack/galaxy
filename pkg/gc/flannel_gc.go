@@ -22,12 +22,15 @@ const (
 )
 
 var (
-	flagFlannelGCInterval = flag.Duration("flannel_gc_interval", time.Second*10, "Interval of executing flannel network gc")
-	flagAllocatedIPDir    = flag.String("flannel_allocated_ip_dir", "/var/lib/cni/networks", "IP storage directory of flannel cni plugin")
+	flagFlannelGCInterval = flag.Duration("flannel_gc_interval", time.Second*10, "Interval of executing flannel " +
+		"network gc")
+	flagAllocatedIPDir    = flag.String("flannel_allocated_ip_dir", "/var/lib/cni/networks", "IP storage directory " +
+		"of flannel cni plugin")
 	// /var/lib/cni/galaxy/$containerid stores network type, it's like {"galaxy-flannel":{}}
 	// /var/lib/cni/flannel/$containerid stores flannel cni plugin chain, it's like {"forceAddress":true,"ipMasq":false,"ipam":{"routes":[{"dst":"172.16.0.0/13"}],"subnet":"172.16.24.0/24","type":"host-local"},"isDefaultGateway":true,"mtu":1480,"name":"","routeSrc":"172.16.24.0","type":"galaxy-veth"}
 	// /var/lib/cni/galaxy/port/$containerid stores port infos, it's like [{"hostPort":52701,"containerPort":19998,"protocol":"tcp","podName":"loader-server-seanyulei-1","podIP":"172.16.24.119"}]
-	flagGCDirs = flag.String("gc_dirs", "/var/lib/cni/flannel,/var/lib/cni/galaxy,/var/lib/cni/galaxy/port", "Comma separated configure storage directory of cni plugin, the file names in this directory are container ids")
+	flagGCDirs = flag.String("gc_dirs", "/var/lib/cni/flannel,/var/lib/cni/galaxy,/var/lib/cni/galaxy/port", "Comma " +
+		"separated configure storage directory of cni plugin, the file names in this directory are container ids")
 )
 
 type flannelGC struct {
@@ -38,7 +41,8 @@ type flannelGC struct {
 	cleanPortFunc  func(containerID string) error
 }
 
-func NewFlannelGC(dockerCli *docker.DockerInterface, quit <-chan struct{}, cleanPortFunc func(containerID string) error) GC {
+func NewFlannelGC(dockerCli *docker.DockerInterface, quit <-chan struct{},
+		cleanPortFunc func(containerID string) error) GC {
 	dirs := strings.Split(*flagGCDirs, ",")
 	return &flannelGC{
 		allocatedIPDir: *flagAllocatedIPDir,
