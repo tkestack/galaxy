@@ -19,12 +19,12 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/keylock"
-	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
+	glog "k8s.io/klog"
 )
 
 const (
@@ -722,14 +722,18 @@ func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, pol
 	return nil
 }
 
-func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keylock.Keylock, replicas int, policy constant.ReleasePolicy, when string) error {
+func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keylock.Keylock, replicas int,
+	policy constant.ReleasePolicy, when string) error {
 	if policy == constant.ReleasePolicyPodDelete {
-		return releaseIP(ipam, key, deletedAndIPMutablePod)
+		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
 	} else if policy == constant.ReleasePolicyNever {
 		if key != prefixKey {
 			return reserveIP(key, prefixKey, ipam, fmt.Sprintf("never release policy %s", when))
 		}
 		return nil
+	}
+	if replicas == 0 {
+		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
 	}
 	lockIndex := dpLockPool.GetLockIndex([]byte(prefixKey))
 	dpLockPool.RawLock(lockIndex)
@@ -739,7 +743,7 @@ func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keyloc
 		return err
 	}
 	if len(fips) > replicas {
-		return releaseIP(ipam, key, deletedAndScaledDownDpPod)
+		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndScaledDownDpPod, when))
 	} else {
 		if key != prefixKey {
 			return reserveIP(key, prefixKey, ipam, fmt.Sprintf("allocated %d <= replicas %d %s", len(fips), replicas, when))

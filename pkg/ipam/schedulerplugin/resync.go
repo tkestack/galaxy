@@ -14,12 +14,12 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	tappv1 "git.tencent.com/tke/tapp-controller/pkg/apis/tappcontroller/v1"
-	glog "k8s.io/klog"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	glog "k8s.io/klog"
 )
 
 func (p *FloatingIPPlugin) storeReady() bool {
@@ -64,7 +64,8 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	if !p.storeReady() {
 		return nil
 	}
-	glog.V(4).Infof("resync pods")
+	glog.V(4).Infof("resync pods+")
+	defer glog.V(4).Infof("resync pods-")
 	all, err := ipam.ByPrefix("")
 	if err != nil {
 		return err
@@ -133,38 +134,51 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		glog.V(5).Infof("existPods %v", podMap)
 	}
 	if p.cloudProvider != nil {
-		for key, obj := range assignedPods {
-			if _, ok := existPods[key]; ok {
-				continue
-			}
-			// check with apiserver to confirm it really not exist
-			if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
-				continue
-			}
-			var attr Attr
-			if err := json.Unmarshal([]byte(obj.fip.Attr), &attr); err != nil {
-				glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.fip.Attr, key, err)
-				continue
-			}
-			if attr.NodeName == "" {
-				glog.Errorf("empty nodeName for %s in db", key)
-				continue
-			}
-			glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName, nets.IntToIP(obj.fip.IP).String(), key)
-			if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
-				NodeName:  attr.NodeName,
-				IPAddress: nets.IntToIP(obj.fip.IP).String(),
-			}); err != nil {
-				// delete this record from allocatedIPs map to have a retry
-				delete(allocatedIPs, key)
-				glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.fip.IP).String(), key, err)
-				continue
-			}
-			if err := ipam.ReserveIP(key, key, getAttr("")); err != nil {
-				glog.Errorf("failed to reserve %s ip: %v", key, err)
-			}
+		p.resyncCloudProviderIPs(ipam, assignedPods, allocatedIPs, existPods)
+	}
+	p.resyncAllocatedIPs(ipam, allocatedIPs, existPods, dpMap, tappMap, ssMap)
+	return nil
+}
+
+func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, assignedPods, allocatedIPs map[string]resyncObj,
+	existPods map[string]*corev1.Pod) {
+	for key, obj := range assignedPods {
+		if _, ok := existPods[key]; ok {
+			continue
+		}
+		// check with apiserver to confirm it really not exist
+		if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
+			continue
+		}
+		var attr Attr
+		if err := json.Unmarshal([]byte(obj.fip.Attr), &attr); err != nil {
+			glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.fip.Attr, key, err)
+			continue
+		}
+		if attr.NodeName == "" {
+			glog.Errorf("empty nodeName for %s in db", key)
+			continue
+		}
+		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName, nets.IntToIP(obj.fip.IP).String(), key)
+		if err := p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
+			NodeName:  attr.NodeName,
+			IPAddress: nets.IntToIP(obj.fip.IP).String(),
+		}); err != nil {
+			// delete this record from allocatedIPs map to have a retry
+			delete(allocatedIPs, key)
+			glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.fip.IP).String(), key, err)
+			continue
+		}
+		// for tapp and sts pod, we need to clean its node attr
+		if err := ipam.ReserveIP(key, key, getAttr("")); err != nil {
+			glog.Errorf("failed to reserve %s ip: %v", key, err)
 		}
 	}
+}
+
+func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, allocatedIPs map[string]resyncObj,
+	existPods map[string]*corev1.Pod, dpMap map[string]*appv1.Deployment, tappMap map[string]*tappv1.TApp,
+	ssMap map[string]*appv1.StatefulSet) {
 	for key, obj := range allocatedIPs {
 		if _, ok := existPods[key]; ok {
 			continue
@@ -199,40 +213,22 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 				continue
 			}
 			if should, reason := p.shouldReleaseDuringResync(obj.keyObj, releasePolicy, appExist, replicas); should {
-				if err := releaseIP(ipam, key, reason); err != nil {
+				if err := releaseIP(ipam, key, fmt.Sprintf("%s during resyncing", reason)); err != nil {
 					glog.Warningf("[%s] %v", ipam.Name(), err)
 				}
 			}
 			continue
 		}
+		var replicas int
 		dp, ok := dpMap[appFullName]
 		if ok {
-			if err := unbindDpPod(key, obj.keyObj.PoolPrefix(), ipam, p.dpLockPool, int(*dp.Spec.Replicas), releasePolicy, "resyncing"); err != nil {
-				glog.Error(err)
-			}
-			continue
-		} else {
-			fip, err := ipam.First(key)
-			if err != nil {
-				glog.Errorf("failed get key %s: %v", key, err)
-				continue
-			} else if fip == nil {
-				continue
-			}
-			if fip.FIP.Policy == uint16(constant.ReleasePolicyNever) {
-				keyObj := util.ParseKey(fip.FIP.Key)
-				if err := reserveIP(key, keyObj.PoolPrefix(), ipam, "never release policy during resyncing"); err != nil {
-					glog.Error(err)
-				}
-			} else {
-				if err = releaseIP(ipam, key, deletedAndIPMutablePod); err != nil {
-					glog.Errorf("failed release ip: %v", err)
-				}
-			}
-			continue
+			replicas = int(*dp.Spec.Replicas)
+		}
+		if err := unbindDpPod(key, obj.keyObj.PoolPrefix(), ipam, p.dpLockPool, replicas, releasePolicy,
+			"during resyncing"); err != nil {
+			glog.Error(err)
 		}
 	}
-	return nil
 }
 
 func (p *FloatingIPPlugin) shouldReleaseDuringResync(keyObj *util.KeyObj, releasePolicy constant.ReleasePolicy,
@@ -269,7 +265,7 @@ func (p *FloatingIPPlugin) podExist(podName, namespace string) bool {
 	return true
 }
 
-func TAppFullName(tapp *tappv1.TApp) string {
+func tAppFullName(tapp *tappv1.TApp) string {
 	return fmt.Sprintf("%s_%s", tapp.Namespace, tapp.Name)
 }
 
@@ -286,7 +282,7 @@ func (p *FloatingIPPlugin) getTAppMap() (map[string]*tappv1.TApp, error) {
 		if !p.hasResourceName(&tApps[i].Spec.Template.Spec) {
 			continue
 		}
-		key2App[TAppFullName(tApps[i])] = tApps[i]
+		key2App[tAppFullName(tApps[i])] = tApps[i]
 	}
 	glog.V(5).Infof("%v", key2App)
 	return key2App, nil
