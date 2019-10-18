@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 
 	"git.code.oa.com/tkestack/galaxy/e2e"
 	"git.code.oa.com/tkestack/galaxy/e2e/helper"
@@ -36,8 +37,7 @@ func NewFakeRequest(method string) (string, error) {
         "CNI_IFNAME": "eth0",
         "CNI_PATH": "%s",
         "CNI_ARGS": "IgnoreUnknown=true;K8S_POD_NAMESPACE=mynamespace;K8S_POD_NAME=mypod-0;K8S_POD_INFRA_CONTAINER_ID=%s"
-    },
-    "config":"eyJjYXBhYmlsaXRpZXMiOnsicG9ydE1hcHBpbmdzIjp0cnVlfSwiY25pVmVyc2lvbiI6IiIsIm5hbWUiOiIiLCJydW50aW1lQ29uZmlnIjp7InBvcnRNYXBwaW5ncyI6W3siaG9zdFBvcnQiOjMwMDAxLCJjb250YWluZXJQb3J0Ijo4MCwicHJvdG9jb2wiOiJ0Y3AiLCJob3N0SVAiOiIifV19fQ=="
+    }
 }`
 	req := fmt.Sprintf(rawReq, method, containerId, nsPath, pluginDir, containerId)
 	return req, nil
@@ -111,37 +111,32 @@ var _ = Describe("cni add request", func() {
 		helper.CleanupDummy()
 	})
 	It("test cni add request", func() {
-		req, err := NewFakeRequest(cniutil.COMMAND_ADD)
-		Expect(err).NotTo(HaveOccurred())
-
-		client := &http.Client{
-			Transport: &http.Transport{
-				Dial: func(proto, addr string) (net.Conn, error) {
-					return net.Dial("unix", private.GalaxySocketPath)
-				},
-			},
-		}
-		resp, err := client.Post("http://dummy/cni", "application/json", bytes.NewReader([]byte(req)))
-		Expect(err).NotTo(HaveOccurred())
-		content, err := ioutil.ReadAll(resp.Body)
-		Expect(err).NotTo(HaveOccurred())
-		glog.V(4).Infof("response is %s", string(content))
+		content := call(cniutil.COMMAND_ADD)
+		// the result ip may change, check other things.
+		Expect(strings.HasPrefix(content, `{"cniVersion":"0.2.0","ip4":{"ip":"172.16.59.`)).Should(BeTrue())
+		Expect(strings.HasSuffix(content, `/24","gateway":"172.16.59.1","routes":[{"dst":"172.16.0.0/13","gw":"172.16.59.1"},{"dst":"0.0.0.0/0","gw":"172.16.59.1"}]},"dns":{}}`)).
+			Should(BeTrue())
 	})
 	It("cni delete request", func() {
-		req, err := NewFakeRequest(cniutil.COMMAND_DEL)
-		Expect(err).NotTo(HaveOccurred())
-
-		client := &http.Client{
-			Transport: &http.Transport{
-				Dial: func(proto, addr string) (net.Conn, error) {
-					return net.Dial("unix", private.GalaxySocketPath)
-				},
-			},
-		}
-		resp, err := client.Post("http://dummy/cni", "application/json", bytes.NewReader([]byte(req)))
-		Expect(err).NotTo(HaveOccurred())
-		content, err := ioutil.ReadAll(resp.Body)
-		Expect(err).NotTo(HaveOccurred())
-		glog.V(4).Infof("response is %s", string(content))
+		content := call(cniutil.COMMAND_DEL)
+		Expect(content).Should(Equal(``), "result: %s", content)
 	})
 })
+
+func call(method string) string {
+	req, err := NewFakeRequest(method)
+	Expect(err).NotTo(HaveOccurred())
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			Dial: func(proto, addr string) (net.Conn, error) {
+				return net.Dial("unix", private.GalaxySocketPath)
+			},
+		},
+	}
+	resp, err := client.Post("http://dummy/cni", "application/json", bytes.NewReader([]byte(req)))
+	Expect(err).NotTo(HaveOccurred())
+	content, err := ioutil.ReadAll(resp.Body)
+	Expect(err).NotTo(HaveOccurred())
+	return string(content)
+}
