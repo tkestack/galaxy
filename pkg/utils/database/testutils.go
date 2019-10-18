@@ -9,7 +9,7 @@ const (
 {
   "database": {
     "protocol": "tcp",
-    "addr": "localhost:3306",
+    "addr": "127.0.0.1:3306",
     "username": "root",
     "password": "root",
     "driver": "mysql",

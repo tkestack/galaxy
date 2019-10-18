@@ -41,7 +41,7 @@ func NewSimpleClientset(objects ...runtime.Object) *Clientset {
 		}
 	}
 
-	cs := &Clientset{}
+	cs := &Clientset{tracker: o}
 	cs.discovery = &fakediscovery.FakeDiscovery{Fake: &cs.Fake}
 	cs.AddReactor("*", "*", testing.ObjectReaction(o))
 	cs.AddWatchReactor("*", func(action testing.Action) (handled bool, ret watch.Interface, err error) {
@@ -63,20 +63,20 @@ func NewSimpleClientset(objects ...runtime.Object) *Clientset {
 type Clientset struct {
 	testing.Fake
 	discovery *fakediscovery.FakeDiscovery
+	tracker   testing.ObjectTracker
 }
 
 func (c *Clientset) Discovery() discovery.DiscoveryInterface {
 	return c.discovery
 }
 
+func (c *Clientset) Tracker() testing.ObjectTracker {
+	return c.tracker
+}
+
 var _ clientset.Interface = &Clientset{}
 
 // GalaxyV1alpha1 retrieves the GalaxyV1alpha1Client
 func (c *Clientset) GalaxyV1alpha1() galaxyv1alpha1.GalaxyV1alpha1Interface {
-	return &fakegalaxyv1alpha1.FakeGalaxyV1alpha1{Fake: &c.Fake}
-}
-
-// Galaxy retrieves the GalaxyV1alpha1Client
-func (c *Clientset) Galaxy() galaxyv1alpha1.GalaxyV1alpha1Interface {
 	return &fakegalaxyv1alpha1.FakeGalaxyV1alpha1{Fake: &c.Fake}
 }

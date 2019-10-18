@@ -28,8 +28,6 @@ import (
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
 	GalaxyV1alpha1() galaxyv1alpha1.GalaxyV1alpha1Interface
-	// Deprecated: please explicitly pick a version if possible.
-	Galaxy() galaxyv1alpha1.GalaxyV1alpha1Interface
 }
 
 // Clientset contains the clients for groups. Each group has exactly one
@@ -41,12 +39,6 @@ type Clientset struct {
 
 // GalaxyV1alpha1 retrieves the GalaxyV1alpha1Client
 func (c *Clientset) GalaxyV1alpha1() galaxyv1alpha1.GalaxyV1alpha1Interface {
-	return c.galaxyV1alpha1
-}
-
-// Deprecated: Galaxy retrieves the default version of GalaxyClient.
-// Please explicitly pick a version.
-func (c *Clientset) Galaxy() galaxyv1alpha1.GalaxyV1alpha1Interface {
 	return c.galaxyV1alpha1
 }
 
