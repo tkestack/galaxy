@@ -10,8 +10,8 @@ import (
 )
 
 // CreateStatefulSetPodWithLabels creates a statefulset pod with labels as `labels` for testing
-func CreateStatefulSetPodWithLabels(name, namespace string, labels map[string]string) *corev1.Pod {
-	pod := CreateStatefulSetPod(name, namespace, nil)
+func CreateStatefulSetPodWithLabels(name, namespace string, labels, annotations map[string]string) *corev1.Pod {
+	pod := CreateStatefulSetPod(name, namespace, annotations)
 	pod.Labels = labels
 	return pod
 }

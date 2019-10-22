@@ -41,6 +41,9 @@ var (
 	secondIPLabel       = map[string]string{private.LabelKeyEnableSecondIP: private.LabelValueEnabled}
 	immutableAnnotation = map[string]string{constant.ReleasePolicyAnnotation: constant.Immutable}
 	neverAnnotation     = map[string]string{constant.ReleasePolicyAnnotation: constant.Never}
+
+	pod    = CreateStatefulSetPod("pod1-0", "ns1", immutableAnnotation)
+	podKey = util.FormatKey(pod)
 )
 
 func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}, []corev1.Node) {
@@ -69,7 +72,7 @@ func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlu
 func TestFilter(t *testing.T) {
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t)
 	defer func() { stopChan <- struct{}{} }()
-	// pod doesn't has no floating ip resource name, filter should return all nodes
+	// pod has no floating ip resource name, filter should return all nodes
 	filtered, failed, err := fipPlugin.Filter(&corev1.Pod{ObjectMeta: v1.ObjectMeta{Name: "pod1", Namespace: "ns1"}}, nodes)
 	if err != nil {
 		t.Fatal(err)
@@ -78,29 +81,40 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	// a pod has floating ip resource name, filter should return nodes that has floating ips
-	if filtered, failed, err = fipPlugin.Filter(CreateStatefulSetPod("pod1", "ns1", nil), nodes); err != nil {
+	if filtered, failed, err = fipPlugin.Filter(pod, nodes); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkFilterResult(filtered, failed, []string{node3, node4}, []string{drainedNode, nodeHasNoIP}); err != nil {
 		t.Fatal(err)
 	}
-	// the following is to check release policy
-	pod := CreateStatefulSetPod("pod1-0", "ns1", immutableAnnotation)
-	podKey := util.FormatKey(pod)
+	// test filter for reserve situation
 	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.KeyInDB, constant.ReleasePolicyPodDelete, expectAttrEmpty()); err != nil {
-		t.Fatal(err)
-	}
-	// check filter result is expected
-	if filtered, failed, err = fipPlugin.Filter(pod, nodes); err != nil {
+	filtered, failed, err = fipPlugin.Filter(pod, nodes)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if err := checkFilterResult(filtered, failed, []string{node4}, []string{drainedNode, nodeHasNoIP, node3}); err != nil {
 		t.Fatal(err)
 	}
-	// check pod allocated the previous ip and policy should be updated to AppDeleteOrScaleDown
+	// filter again on a new pod2, all good nodes should be filteredNodes
+	if filtered, failed, err = fipPlugin.Filter(CreateStatefulSetPod("pod2-1", "ns1", immutableAnnotation), nodes); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkFilterResult(filtered, failed, []string{node3, node4}, []string{drainedNode, nodeHasNoIP}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAllocateIP(t *testing.T) {
+	fipPlugin, stopChan, _ := createPluginTestNodes(t)
+	defer func() { stopChan <- struct{}{} }()
+
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyPodDelete, ""); err != nil {
+		t.Fatal(err)
+	}
+	// check update from ReleasePolicyPodDelete to ReleasePolicyImmutable
 	pod.Spec.NodeName = node4
 	ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, podKey.KeyInDB, pod.Spec.NodeName, pod)
 	if err != nil {
@@ -112,72 +126,22 @@ func TestFilter(t *testing.T) {
 	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.KeyInDB, constant.ReleasePolicyImmutable, expectAttrNotEmpty()); err != nil {
 		t.Fatal(err)
 	}
+}
 
-	// filter again on a new pod2, all good nodes should be filteredNodes
-	if filtered, failed, err = fipPlugin.Filter(CreateStatefulSetPod("pod2-1", "ns1", immutableAnnotation), nodes); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkFilterResult(filtered, failed, []string{node3, node4}, []string{drainedNode, nodeHasNoIP}); err != nil {
-		t.Fatal(err)
-	}
-	// forget the pod1, the ip should be reserved, because pod1 has immutable label attached
-	if err := fipPlugin.DeletePod(pod); err != nil {
-		t.Fatal(err)
-	}
-	if ipInfo, err := fipPlugin.ipam.First(podKey.KeyInDB); err != nil || ipInfo == nil {
-		t.Fatal(err, ipInfo)
-	} else {
-		if ipInfo.IPInfo.IP.String() != "10.173.13.2/24" {
-			t.Fatal(ipInfo)
-		}
-	}
-	// allocates all ips to pods of a new  statefulset
-	ipInfoSet := sets.NewString()
-	for i := 0; ; i++ {
-		newPod := CreateStatefulSetPod(fmt.Sprintf("temp-%d", i), "ns1", immutableAnnotation)
-		newPod.Spec.NodeName = node4
-		newPodKey := util.FormatKey(newPod)
-		if ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, newPodKey.KeyInDB, newPod.Spec.NodeName, newPod); err != nil {
-			if !strings.Contains(err.Error(), floatingip.ErrNoEnoughIP.Error()) {
-				t.Fatal(err)
-			}
-			break
-		} else {
-			if ipInfo == nil {
-				t.Fatal()
-			}
-			if ipInfoSet.Has(ipInfo.IP.String()) {
-				t.Fatal("allocates an previous allocated ip")
-			}
-			ipInfoSet.Insert(ipInfo.IP.String())
-		}
-		if i == 10 {
-			t.Fatal("should not have so many ips")
-		}
-	}
-	// see if we can allocate the reserved ip
-	if ipInfo, err = fipPlugin.allocateIP(fipPlugin.ipam, podKey.KeyInDB, pod.Spec.NodeName, pod); err != nil {
-		t.Fatal(err)
-	}
-	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
-		t.Fatal(ipInfo)
-	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.KeyInDB, constant.ReleasePolicyImmutable, expectAttrNotEmpty()); err != nil {
-		t.Fatal(err)
-	}
-	// check sync back into db according to pods annotation TODO move this to a separate test
+func TestUpdatePod(t *testing.T) {
+	fipPlugin, stopChan, _ := createPluginTestNodes(t)
+	defer func() { stopChan <- struct{}{} }()
+
 	pod.Status.Phase = corev1.PodRunning
-	if pod.Annotations == nil {
-		pod.Annotations = map[string]string{}
+	var ipInfo constant.IPInfo
+	if err := json.Unmarshal([]byte(`{"ip":"10.173.13.2/24","vlan":2,"gateway":"10.173.13.1","routable_subnet":"10.173.13.0/24"}`), &ipInfo); err != nil {
+		t.Fatal()
 	}
-	str, err := constant.FormatIPInfo([]constant.IPInfo{*ipInfo})
+	str, err := constant.FormatIPInfo([]constant.IPInfo{ipInfo})
 	if err != nil {
 		t.Fatal(err)
 	}
 	pod.Annotations[constant.ExtendedCNIArgsAnnotation] = str
-	if err := fipPlugin.releaseIP(podKey.KeyInDB, "", pod); err != nil {
-		t.Fatal(err)
-	}
 	if err := checkIPKey(fipPlugin.ipam, "10.173.13.2", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -185,6 +149,23 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := checkIPKey(fipPlugin.ipam, "10.173.13.2", podKey.KeyInDB); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReleaseIP(t *testing.T) {
+	fipPlugin, stopChan, _ := createPluginTestNodes(t)
+	defer func() { stopChan <- struct{}{} }()
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyPodDelete, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkIPKey(fipPlugin.ipam, "10.173.13.2", podKey.KeyInDB); err != nil {
+		t.Fatal(err)
+	}
+	if err := fipPlugin.releaseIP(podKey.KeyInDB, "", pod); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkIPKey(fipPlugin.ipam, "10.173.13.2", ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -260,6 +241,25 @@ func createDeployment(name, namespace string, podMeta v1.ObjectMeta, replicas in
 				ObjectMeta: podMeta,
 			},
 			Replicas: &replicas,
+		},
+	}
+}
+
+func CreateStatefulSet(podMeta v1.ObjectMeta, replicas int32) *appv1.StatefulSet {
+	return &appv1.StatefulSet{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      podMeta.OwnerReferences[0].Name,
+			Namespace: podMeta.GetNamespace(),
+			Labels:    podMeta.GetLabels(),
+		},
+		Spec: appv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: podMeta,
+			},
+			Replicas: &replicas,
+			Selector: &v1.LabelSelector{
+				MatchLabels: podMeta.GetLabels(),
+			},
 		},
 	}
 }
@@ -499,8 +499,8 @@ func newPlugin(t *testing.T, conf Conf, objs ...runtime.Object) (*FloatingIPPlug
 }
 
 func TestLoadConfigMap(t *testing.T) {
-	pod1 := CreateStatefulSetPodWithLabels("pod1", "demo", nil)
-	pod2 := CreateStatefulSetPodWithLabels("pod1", "demo", secondIPLabel) // want second ips
+	pod1 := CreateStatefulSetPodWithLabels("pod1", "demo", nil, nil)
+	pod2 := CreateStatefulSetPodWithLabels("pod1", "demo", secondIPLabel, nil) // want second ips
 	cm := &corev1.ConfigMap{
 		ObjectMeta: v1.ObjectMeta{Name: "testConf", Namespace: "demo"},
 		Data: map[string]string{
@@ -687,6 +687,23 @@ func TestUnBind(t *testing.T) {
 	}
 	if !fakeCP.invokedAssignIP || !fakeCP.invokedUnAssignIP {
 		t.Fatal()
+	}
+}
+
+func TestUnBindImmutablePod(t *testing.T) {
+	pod = CreateStatefulSetPodWithLabels("sts1-0", "ns1", map[string]string{"app": "sts1"}, immutableAnnotation)
+	podKey = util.FormatKey(pod)
+	fipPlugin, stopChan, _ := createPluginTestNodes(t, pod, CreateStatefulSet(pod.ObjectMeta, 1))
+	defer func() { stopChan <- struct{}{} }()
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyImmutable, ""); err != nil {
+		t.Fatal(err)
+	}
+	// unbind the pod, check ip should be reserved, because pod has is immutable
+	if err := fipPlugin.unbind(pod); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkIPKey(fipPlugin.ipam, "10.173.13.2", podKey.KeyInDB); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -680,7 +680,8 @@ func nameHash(data string) string {
 	return encoded[:16]
 }
 
-// SyncPodIPInIPSet ensures pod ip is expected in each policy's ipset. ipset is already created because we have these policies in memory
+// SyncPodIPInIPSet ensures pod ip is expected in each policy's ipset. ipset is already created because we have these 
+// policies in memory
 func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 	var polices []policy
 	p.Lock()
@@ -699,54 +700,33 @@ func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 				p.addOrDelIPSetEntry(add, &policy.egressRule.srcIPTable.IPSet, pod.Status.PodIP)
 			}
 		}
-		for i, ingress := range policy.np.Spec.Ingress {
-			for _, peer := range ingress.From {
-				if peer.PodSelector != nil {
-					peerPodLabelSelector, err := v1.LabelSelectorAsSelector(peer.PodSelector)
-					if err != nil {
-						glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
-						continue
-					}
-					if peerPodLabelSelector.Matches(labels.Set(pod.Labels)) {
-						p.addOrDelIPSetEntry(add, &policy.ingressRule.srcRules[i].ipTable.IPSet, pod.Status.PodIP)
-					}
-				} else if peer.NamespaceSelector != nil {
-					namespaces, err := p.getNamespaces(peer.NamespaceSelector)
-					if err != nil {
-						glog.Warning(err)
-						continue
-					}
-					for _, ns := range namespaces {
-						if ns.Name == pod.Namespace {
-							p.addOrDelIPSetEntry(add, &policy.ingressRule.srcRules[i].ipTable.IPSet, pod.Status.PodIP)
-							break
-						}
-					}
+		p.syncIngressInIPSet(&policy, pod, add)
+		p.syncEgressInIPSet(&policy, pod, add)
+	}
+}
+
+func (p *PolicyManager) syncIngressInIPSet(policy *policy, pod *corev1.Pod, add bool) {
+	for i, ingress := range policy.np.Spec.Ingress {
+		for _, peer := range ingress.From {
+			if peer.PodSelector != nil {
+				peerPodLabelSelector, err := v1.LabelSelectorAsSelector(peer.PodSelector)
+				if err != nil {
+					glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+					continue
 				}
-			}
-		}
-		for i, egress := range policy.np.Spec.Egress {
-			for _, peer := range egress.To {
-				if peer.PodSelector != nil {
-					peerPodLabelSelector, err := v1.LabelSelectorAsSelector(peer.PodSelector)
-					if err != nil {
-						glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
-						continue
-					}
-					if peerPodLabelSelector.Matches(labels.Set(pod.Labels)) {
-						p.addOrDelIPSetEntry(add, &policy.egressRule.dstRules[i].ipTable.IPSet, pod.Status.PodIP)
-					}
-				} else if peer.NamespaceSelector != nil {
-					namespaces, err := p.getNamespaces(peer.NamespaceSelector)
-					if err != nil {
-						glog.Warning(err)
-						continue
-					}
-					for _, ns := range namespaces {
-						if ns.Name == pod.Namespace {
-							p.addOrDelIPSetEntry(add, &policy.egressRule.dstRules[i].ipTable.IPSet, pod.Status.PodIP)
-							break
-						}
+				if peerPodLabelSelector.Matches(labels.Set(pod.Labels)) {
+					p.addOrDelIPSetEntry(add, &policy.ingressRule.srcRules[i].ipTable.IPSet, pod.Status.PodIP)
+				}
+			} else if peer.NamespaceSelector != nil {
+				namespaces, err := p.getNamespaces(peer.NamespaceSelector)
+				if err != nil {
+					glog.Warning(err)
+					continue
+				}
+				for _, ns := range namespaces {
+					if ns.Name == pod.Namespace {
+						p.addOrDelIPSetEntry(add, &policy.ingressRule.srcRules[i].ipTable.IPSet, pod.Status.PodIP)
+						break
 					}
 				}
 			}
@@ -754,38 +734,43 @@ func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 	}
 }
 
-// SyncPod ensures GLX-INGRESS/GLX-EGRESS/GLX-POD-XXXX iptable chains are expected
+func (p *PolicyManager) syncEgressInIPSet(policy *policy, pod *corev1.Pod, add bool) {
+	for i, egress := range policy.np.Spec.Egress {
+		for _, peer := range egress.To {
+			if peer.PodSelector != nil {
+				peerPodLabelSelector, err := v1.LabelSelectorAsSelector(peer.PodSelector)
+				if err != nil {
+					glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+					continue
+				}
+				if peerPodLabelSelector.Matches(labels.Set(pod.Labels)) {
+					p.addOrDelIPSetEntry(add, &policy.egressRule.dstRules[i].ipTable.IPSet, pod.Status.PodIP)
+				}
+			} else if peer.NamespaceSelector != nil {
+				namespaces, err := p.getNamespaces(peer.NamespaceSelector)
+				if err != nil {
+					glog.Warning(err)
+					continue
+				}
+				for _, ns := range namespaces {
+					if ns.Name == pod.Namespace {
+						p.addOrDelIPSetEntry(add, &policy.egressRule.dstRules[i].ipTable.IPSet, pod.Status.PodIP)
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+// SyncPodChains ensures GLX-INGRESS/GLX-EGRESS/GLX-POD-XXXX iptable chains are expected
 func (p *PolicyManager) SyncPodChains(pod *corev1.Pod) error {
 	glog.V(4).Infof("sync pod chain for %s_%s", pod.Name, pod.Namespace)
 	var policies []policy
 	p.Lock()
 	policies = p.policies
 	p.Unlock()
-	podChain := utiliptables.Chain(podChainName(pod))
-	var (
-		filteredIngressPolicy = sets.NewInt()
-		filteredEgressPolicy  = sets.NewInt()
-	)
-	for i, policy := range policies {
-		if policy.np.Namespace != pod.Namespace {
-			continue
-		}
-		podLabelSelector, err := v1.LabelSelectorAsSelector(&policy.np.Spec.PodSelector)
-		if err != nil {
-			glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
-			continue
-		}
-		if policy.ingressRule != nil {
-			if podLabelSelector.Matches(labels.Set(pod.Labels)) {
-				filteredIngressPolicy.Insert(i)
-			}
-		}
-		if policy.egressRule != nil {
-			if podLabelSelector.Matches(labels.Set(pod.Labels)) {
-				filteredEgressPolicy.Insert(i)
-			}
-		}
-	}
+	filteredIngressPolicy, filteredEgressPolicy := filterMatchingPolicies(pod, policies)
 	if filteredIngressPolicy.Len() == 0 && filteredEgressPolicy.Len() == 0 {
 		glog.V(4).Infof("pod %s_%s isn't a target pod of any ingress or egress network policy, ensuring its rules cleaned up", pod.Name, pod.Namespace)
 		// clean up old rules
@@ -798,6 +783,7 @@ func (p *PolicyManager) SyncPodChains(pod *corev1.Pod) error {
 		return err
 	}
 	podNameComment := fmt.Sprintf("%s_%s", pod.Name, pod.Namespace)
+	podChain := utiliptables.Chain(podChainName(pod))
 	filterChains := bytes.NewBuffer(nil)
 	filterRules := bytes.NewBuffer(nil)
 	writeLine(filterChains, "*filter")
@@ -838,6 +824,34 @@ func (p *PolicyManager) SyncPodChains(pod *corev1.Pod) error {
 	return nil
 }
 
+func filterMatchingPolicies(pod *corev1.Pod, policies []policy) (sets.Int, sets.Int) {
+	var (
+		filteredIngressPolicy = sets.NewInt()
+		filteredEgressPolicy  = sets.NewInt()
+	)
+	for i, policy := range policies {
+		if policy.np.Namespace != pod.Namespace {
+			continue
+		}
+		podLabelSelector, err := v1.LabelSelectorAsSelector(&policy.np.Spec.PodSelector)
+		if err != nil {
+			glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+			continue
+		}
+		if policy.ingressRule != nil {
+			if podLabelSelector.Matches(labels.Set(pod.Labels)) {
+				filteredIngressPolicy.Insert(i)
+			}
+		}
+		if policy.egressRule != nil {
+			if podLabelSelector.Matches(labels.Set(pod.Labels)) {
+				filteredEgressPolicy.Insert(i)
+			}
+		}
+	}
+	return filteredIngressPolicy, filteredEgressPolicy
+}
+
 func (p *PolicyManager) ensureBasicChain() error {
 	// -N GLX-INGRESS
 	if _, err := p.iptableHandle.EnsureChain(utiliptables.TableFilter, ingressChain); err != nil {
@@ -866,7 +880,7 @@ func (p *PolicyManager) ensureBasicChain() error {
 	return nil
 }
 
-// DeletePod deletes pod chain and rules in GLX-INGRESS/GLX-EGRESS chain
+// deletePodChains deletes pod chain and rules in GLX-INGRESS/GLX-EGRESS chain
 func (p *PolicyManager) deletePodChains(pod *corev1.Pod) error {
 	podChain := utiliptables.Chain(podChainName(pod))
 	// we don't know pod ip, so delete pod rules in GLX-INGRESS/GLX-EGRESS by keyword

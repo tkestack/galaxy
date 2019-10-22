@@ -277,38 +277,45 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		reserve = reserve || reserve2
 	}
 	if (reserve || isPoolSizeDefined) && subnetSet.Len() > 0 {
-		// Since bind is in a different goroutine than filter in scheduler, we can't ensure the first pod got binded before the next one got filtered.
-		// We'd better do the allocate in filter for reserve situation.
+		// Since bind is in a different goroutine than filter in scheduler, we can't ensure this pod got binded
+		// before the next one got filtered to ensure max size of allocated ips.
+		// So we'd better do the allocate in filter for reserve situation.
 		reserveSubnet := subnetSet.List()[0]
 		subnetSet = sets.NewString(reserveSubnet)
-		// we can't get nodename on filter, update attr on bind
-		attr := getAttr("")
-		if reserve {
-			if err := allocateInSubnetWithKey(p.ipam, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr); err != nil {
-				return nil, err
+		p.allocateDuringFilter(keyObj, p.enabledSecondIP(pod), reserve, isPoolSizeDefined, reserveSubnet, policy)
+	}
+	return subnetSet, nil
+}
+
+func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, enabledSecondIP, reserve, isPoolSizeDefined bool,
+	reserveSubnet string, policy constant.ReleasePolicy) error {
+	// we can't get nodename during filter, update attr on bind
+	attr := getAttr("")
+	if reserve {
+		if err := allocateInSubnetWithKey(p.ipam, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr, "filter"); err != nil {
+			return err
+		}
+		if enabledSecondIP {
+			if err := allocateInSubnetWithKey(p.secondIPAM, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr, "filter"); err != nil {
+				return err
 			}
-			if p.enabledSecondIP(pod) {
-				if err := allocateInSubnetWithKey(p.secondIPAM, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr); err != nil {
-					return nil, err
-				}
-			}
-		} else if isPoolSizeDefined {
-			// if pool size defined and we got no reserved IP, we need to allocate IP from empty key
-			_, ipNet, err := net.ParseCIDR(reserveSubnet)
-			if err != nil {
-				return nil, err
-			}
-			if err := allocateInSubnet(p.ipam, keyObj.KeyInDB, ipNet, policy, attr, "filter"); err != nil {
-				return nil, err
-			}
-			if p.enabledSecondIP(pod) {
-				if err := allocateInSubnet(p.secondIPAM, keyObj.KeyInDB, ipNet, policy, attr, "filter"); err != nil {
-					return nil, err
-				}
+		}
+	} else if isPoolSizeDefined {
+		// if pool size defined and we got no reserved IP, we need to allocate IP from empty key
+		_, ipNet, err := net.ParseCIDR(reserveSubnet)
+		if err != nil {
+			return err
+		}
+		if err := allocateInSubnet(p.ipam, keyObj.KeyInDB, ipNet, policy, attr, "filter"); err != nil {
+			return err
+		}
+		if enabledSecondIP {
+			if err := allocateInSubnet(p.secondIPAM, keyObj.KeyInDB, ipNet, policy, attr, "filter"); err != nil {
+				return err
 			}
 		}
 	}
-	return subnetSet, nil
+	return nil
 }
 
 func allocateInSubnet(ipam floatingip.IPAM, key string, subnet *net.IPNet, policy constant.ReleasePolicy, attr, when string) error {
@@ -320,7 +327,7 @@ func allocateInSubnet(ipam floatingip.IPAM, key string, subnet *net.IPNet, polic
 	return nil
 }
 
-func allocateInSubnetWithKey(ipam floatingip.IPAM, oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error {
+func allocateInSubnetWithKey(ipam floatingip.IPAM, oldK, newK, subnet string, policy constant.ReleasePolicy, attr, when string) error {
 	if err := ipam.AllocateInSubnetWithKey(oldK, newK, subnet, policy, attr); err != nil {
 		return err
 	}
@@ -328,7 +335,7 @@ func allocateInSubnetWithKey(ipam floatingip.IPAM, oldK, newK, subnet string, po
 	if err != nil {
 		return err
 	}
-	glog.Infof("[%s] allocated ip %s to %s from %s", ipam.Name(), fip.IPInfo.IP.String(), newK, oldK)
+	glog.Infof("[%s] allocated ip %s to %s from %s during %s", ipam.Name(), fip.IPInfo.IP.String(), newK, oldK, when)
 	return nil
 }
 
