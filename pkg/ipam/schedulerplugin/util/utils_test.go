@@ -2,12 +2,11 @@ package util
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 
 	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
+	. "git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/testing"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -40,7 +39,7 @@ func TestFormatKey(t *testing.T) {
 		expectPoolAppPrefix string
 	}{
 		{
-			pod: createStatefulSetPod("sts-1", "ns1", nil),
+			pod: CreateStatefulSetPod("sts-1", "ns1", nil),
 			expect: KeyObj{
 				KeyInDB:       "sts_ns1_sts_sts-1",
 				IsDeployment:  false,
@@ -54,7 +53,7 @@ func TestFormatKey(t *testing.T) {
 			expectPoolAppPrefix: "sts_ns1_sts_",
 		},
 		{
-			pod: createStatefulSetPod("sts-1", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
+			pod: CreateStatefulSetPod("sts-1", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
 			expect: KeyObj{
 				KeyInDB:       "pool__pl1_sts_ns1_sts_sts-1",
 				IsDeployment:  false,
@@ -68,7 +67,7 @@ func TestFormatKey(t *testing.T) {
 			expectPoolAppPrefix: "pool__pl1_sts_ns1_sts",
 		},
 		{
-			pod: createDeploymentPod("dp-xxx-yyy", "ns1", nil),
+			pod: CreateDeploymentPod("dp-xxx-yyy", "ns1", nil),
 			expect: KeyObj{
 				KeyInDB:       "dp_ns1_dp_dp-xxx-yyy",
 				IsDeployment:  true,
@@ -82,7 +81,7 @@ func TestFormatKey(t *testing.T) {
 			expectPoolAppPrefix: "dp_ns1_dp_",
 		},
 		{
-			pod: createDeploymentPod("dp-xxx-yyy", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
+			pod: CreateDeploymentPod("dp-xxx-yyy", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
 			expect: KeyObj{
 				KeyInDB:       "pool__pl1_dp_ns1_dp_dp-xxx-yyy",
 				IsDeployment:  true,
@@ -96,7 +95,7 @@ func TestFormatKey(t *testing.T) {
 			expectPoolAppPrefix: "pool__pl1_dp_ns1_dp_",
 		},
 		{
-			pod: createTAppPod("tapp-1", "ns1", nil),
+			pod: CreateTAppPod("tapp-1", "ns1", nil),
 			expect: KeyObj{
 				KeyInDB:       "tapp_ns1_tapp_tapp-1",
 				IsDeployment:  false,
@@ -110,7 +109,7 @@ func TestFormatKey(t *testing.T) {
 			expectPoolAppPrefix: "tapp_ns1_tapp_",
 		},
 		{
-			pod: createTAppPod("tapp-1", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
+			pod: CreateTAppPod("tapp-1", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
 			expect: KeyObj{
 				KeyInDB:       "pool__pl1_tapp_ns1_tapp_tapp-1",
 				IsDeployment:  false,
@@ -330,7 +329,7 @@ func TestParseKey(t *testing.T) {
 }
 
 func TestResolveDeploymentName(t *testing.T) {
-	longNamePod := createDeploymentPod("dp1234567890dp1234567890dp1234567890dp1234567890dp1234567848p74", "ns1", nil)
+	longNamePod := CreateDeploymentPod("dp1234567890dp1234567890dp1234567890dp1234567890dp1234567848p74", "ns1", nil)
 	longNamePod.OwnerReferences = []v1.OwnerReference{{
 		Kind: "ReplicaSet",
 		Name: "dp1234567890dp1234567890dp1234567890dp1234567890dp1234567890dp1-69fd8dbc5c",
@@ -339,9 +338,9 @@ func TestResolveDeploymentName(t *testing.T) {
 		pod    *corev1.Pod
 		expect string
 	}{
-		{pod: createDeploymentPod("dp1-1-2", "ns1", nil), expect: "dp1"},
-		{pod: createDeploymentPod("dp2-1-1-2", "ns1", nil), expect: "dp2-1"},
-		{pod: createDeploymentPod("baddp-2", "ns1", nil), expect: ""},
+		{pod: CreateDeploymentPod("dp1-1-2", "ns1", nil), expect: "dp1"},
+		{pod: CreateDeploymentPod("dp2-1-1-2", "ns1", nil), expect: "dp2-1"},
+		{pod: CreateDeploymentPod("baddp-2", "ns1", nil), expect: ""},
 		{pod: longNamePod, expect: "dp1234567890dp1234567890dp1234567890dp1234567890dp1234567890dp1"},
 	}
 	for i := range testCases {
@@ -351,45 +350,6 @@ func TestResolveDeploymentName(t *testing.T) {
 			t.Errorf("case %d, expect %v, got %v", i, testCase.expect, got)
 		}
 	}
-}
-
-func createTAppPod(name, namespace string, annotations map[string]string) *corev1.Pod {
-	pod := createStatefulSetPod(name, namespace, annotations)
-	pod.OwnerReferences[0].Kind = "TApp"
-	return pod
-}
-
-// createStatefulSetPod creates a statefulset pod, input name should be a valid statefulset pod name like 'a-1'
-func createStatefulSetPod(name, namespace string, annotations map[string]string) *corev1.Pod {
-	parts := strings.Split(name, "-")
-	quantity := resource.NewQuantity(1, resource.DecimalSI)
-	return &corev1.Pod{
-		ObjectMeta: v1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Annotations: annotations,
-			OwnerReferences: []v1.OwnerReference{{
-				Kind: "StatefulSet",
-				Name: strings.Join(parts[:len(parts)-1], "-"),
-			}}},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{corev1.ResourceName(constant.ResourceName): *quantity},
-				},
-			}},
-		},
-	}
-}
-
-func createDeploymentPod(name, namespace string, annotation map[string]string) *corev1.Pod {
-	parts := strings.Split(name, "-")
-	pod := createStatefulSetPod(name, namespace, annotation)
-	pod.OwnerReferences = []v1.OwnerReference{{
-		Kind: "ReplicaSet",
-		Name: strings.Join(parts[:len(parts)-1], "-"),
-	}}
-	return pod
 }
 
 func TestNewKeyObj(t *testing.T) {

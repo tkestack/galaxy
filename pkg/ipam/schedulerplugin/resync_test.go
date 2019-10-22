@@ -4,12 +4,13 @@ import (
 	"net"
 	"testing"
 
+	. "git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/testing"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
 func TestResyncAppNotExist(t *testing.T) {
-	pod1 := createDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
-	pod2 := createDeploymentPod("dp2-aaa-bbb", "ns2", immutableAnnotation)
+	pod1 := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
+	pod2 := CreateDeploymentPod("dp2-aaa-bbb", "ns2", immutableAnnotation)
 	fipPlugin, stopChan, _ := createPluginTestNodes(t)
 	defer func() { stopChan <- struct{}{} }()
 	pod1Key, pod2Key := util.FormatKey(pod1), util.FormatKey(pod2)

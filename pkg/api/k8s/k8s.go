@@ -31,25 +31,6 @@ const (
 	PortMappingPortsAnnotation = "network.kubernetes.io/portmappingports"
 )
 
-func ParseK8SCNIArgs(args string) (map[string]string, error) {
-	kvMap := make(map[string]string)
-	kvs := strings.Split(args, ";")
-	if len(kvs) == 0 {
-		return kvMap, fmt.Errorf("invalid args %s", args)
-	}
-	for _, kv := range kvs {
-		part := strings.SplitN(kv, "=", 2)
-		if len(part) != 2 {
-			continue
-		}
-		kvMap[strings.TrimSpace(part[0])] = strings.TrimSpace(part[1])
-	}
-	if _, ok := kvMap[K8S_POD_NAME]; !ok {
-		return kvMap, fmt.Errorf("invalid args, k8s_pod_name is unknown: %s", args)
-	}
-	return kvMap, nil
-}
-
 type Port struct {
 	// This must be a valid port number, 0 <= x < 65536.
 	// If HostNetwork is specified, this must match ContainerPort.

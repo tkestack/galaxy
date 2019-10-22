@@ -144,12 +144,7 @@ func testReleaseIPs(t *testing.T, ipam IPAM) {
 
 func testByKeyword(t *testing.T, ipam IPAM) {
 	now := time.Now().Add(-time.Second) // sub one second because db stores unix timestamp without of Nano time
-	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"), constant.ReleasePolicyNever, "212"); err != nil {
-		t.Fatal(err)
-	}
-	if err := ipam.AllocateSpecificIP("pod2", net.ParseIP("10.49.27.216"), constant.ReleasePolicyImmutable, "333"); err != nil {
-		t.Fatal(err)
-	}
+	allocateSomeIPs(t, ipam)
 	fips, err := ipam.ByKeyword("od")
 	if err != nil {
 		t.Fatal(err)
@@ -172,14 +167,18 @@ func testByKeyword(t *testing.T, ipam IPAM) {
 	}
 }
 
-func testByPrefix(t *testing.T, ipam IPAM) {
-	now := time.Now().Add(-time.Second) // sub one second because db stores unix timestamp without of Nano time
+func allocateSomeIPs(t *testing.T, ipam IPAM) {
 	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"), constant.ReleasePolicyNever, "212"); err != nil {
 		t.Fatal(err)
 	}
 	if err := ipam.AllocateSpecificIP("pod2", net.ParseIP("10.49.27.216"), constant.ReleasePolicyImmutable, "333"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func testByPrefix(t *testing.T, ipam IPAM) {
+	now := time.Now().Add(-time.Second) // sub one second because db stores unix timestamp without of Nano time
+	allocateSomeIPs(t, ipam)
 	fips, err := ipam.ByPrefix("od")
 	if err != nil {
 		t.Fatal(err)

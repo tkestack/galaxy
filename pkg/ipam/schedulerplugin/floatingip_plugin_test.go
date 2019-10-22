@@ -16,13 +16,13 @@ import (
 	crdInformer "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/informers/externalversions"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/floatingip"
+	. "git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/testing"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"github.com/jinzhu/gorm"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -78,14 +78,14 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	// a pod has floating ip resource name, filter should return nodes that has floating ips
-	if filtered, failed, err = fipPlugin.Filter(createStatefulSetPod("pod1", "ns1", nil), nodes); err != nil {
+	if filtered, failed, err = fipPlugin.Filter(CreateStatefulSetPod("pod1", "ns1", nil), nodes); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkFilterResult(filtered, failed, []string{node3, node4}, []string{drainedNode, nodeHasNoIP}); err != nil {
 		t.Fatal(err)
 	}
 	// the following is to check release policy
-	pod := createStatefulSetPod("pod1-0", "ns1", immutableAnnotation)
+	pod := CreateStatefulSetPod("pod1-0", "ns1", immutableAnnotation)
 	podKey := util.FormatKey(pod)
 	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
@@ -114,7 +114,7 @@ func TestFilter(t *testing.T) {
 	}
 
 	// filter again on a new pod2, all good nodes should be filteredNodes
-	if filtered, failed, err = fipPlugin.Filter(createStatefulSetPod("pod2-1", "ns1", immutableAnnotation), nodes); err != nil {
+	if filtered, failed, err = fipPlugin.Filter(CreateStatefulSetPod("pod2-1", "ns1", immutableAnnotation), nodes); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkFilterResult(filtered, failed, []string{node3, node4}, []string{drainedNode, nodeHasNoIP}); err != nil {
@@ -134,7 +134,7 @@ func TestFilter(t *testing.T) {
 	// allocates all ips to pods of a new  statefulset
 	ipInfoSet := sets.NewString()
 	for i := 0; ; i++ {
-		newPod := createStatefulSetPod(fmt.Sprintf("temp-%d", i), "ns1", immutableAnnotation)
+		newPod := CreateStatefulSetPod(fmt.Sprintf("temp-%d", i), "ns1", immutableAnnotation)
 		newPod.Spec.NodeName = node4
 		newPodKey := util.FormatKey(newPod)
 		if ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, newPodKey.KeyInDB, newPod.Spec.NodeName, newPod); err != nil {
@@ -190,8 +190,8 @@ func TestFilter(t *testing.T) {
 }
 
 func TestFilterForDeployment(t *testing.T) {
-	deadPod := createDeploymentPod("dp-aaa-bbb", "ns1", immutableAnnotation)
-	pod := createDeploymentPod("dp-xxx-yyy", "ns1", immutableAnnotation)
+	deadPod := CreateDeploymentPod("dp-aaa-bbb", "ns1", immutableAnnotation)
+	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", immutableAnnotation)
 	dp := createDeployment("dp", "ns1", pod.ObjectMeta, 1)
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, deadPod, dp)
 	defer func() { stopChan <- struct{}{} }()
@@ -243,16 +243,6 @@ func TestFilterForDeployment(t *testing.T) {
 	} else if fip.IP.String() != fip3.IPInfo.IP.String() {
 		t.Fatalf("allocate another ip, expect reserved one")
 	}
-}
-
-func createDeploymentPod(name, namespace string, annotation map[string]string) *corev1.Pod {
-	parts := strings.Split(name, "-")
-	pod := createStatefulSetPod(name, namespace, annotation)
-	pod.OwnerReferences = []v1.OwnerReference{{
-		Kind: "ReplicaSet",
-		Name: strings.Join(parts[:len(parts)-1], "-"),
-	}}
-	return pod
 }
 
 func poolAnnotation(poolName string) map[string]string {
@@ -310,8 +300,8 @@ func checkFilterCase(fipPlugin *FloatingIPPlugin, testCase filterCase, nodes []c
 }
 
 func TestFilterForDeploymentIPPool(t *testing.T) {
-	pod := createDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
-	pod2 := createDeploymentPod("dp2-abc-def", "ns2", poolAnnotation("pool1"))
+	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
+	pod2 := CreateDeploymentPod("dp2-abc-def", "ns2", poolAnnotation("pool1"))
 	podKey, pod2Key := util.FormatKey(pod), util.FormatKey(pod2)
 	dp1, dp2 := createDeployment("dp", "ns1", pod.ObjectMeta, 1), createDeployment("dp2", "ns2", pod2.ObjectMeta, 1)
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2, dp1, dp2)
@@ -447,35 +437,6 @@ func checkFailed(realFailed schedulerapi.FailedNodesMap, failed ...string) error
 	return nil
 }
 
-func createStatefulSetPodWithLabels(name, namespace string, labels map[string]string) *corev1.Pod {
-	pod := createStatefulSetPod(name, namespace, nil)
-	pod.Labels = labels
-	return pod
-}
-
-// createStatefulSetPod creates a statefulset pod, input name should be a valid statefulset pod name like 'a-1'
-func createStatefulSetPod(name, namespace string, annotations map[string]string) *corev1.Pod {
-	parts := strings.Split(name, "-")
-	quantity := resource.NewQuantity(1, resource.DecimalSI)
-	return &corev1.Pod{
-		ObjectMeta: v1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Annotations: annotations,
-			OwnerReferences: []v1.OwnerReference{{
-				Kind: "StatefulSet",
-				Name: strings.Join(parts[:len(parts)-1], "-"),
-			}}},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{corev1.ResourceName(constant.ResourceName): *quantity},
-				},
-			}},
-		},
-	}
-}
-
 func createNode(name string, labels map[string]string, address string) corev1.Node {
 	return corev1.Node{
 		ObjectMeta: v1.ObjectMeta{Name: name, Labels: labels},
@@ -538,8 +499,8 @@ func newPlugin(t *testing.T, conf Conf, objs ...runtime.Object) (*FloatingIPPlug
 }
 
 func TestLoadConfigMap(t *testing.T) {
-	pod1 := createStatefulSetPodWithLabels("pod1", "demo", nil)
-	pod2 := createStatefulSetPodWithLabels("pod1", "demo", secondIPLabel) // want second ips
+	pod1 := CreateStatefulSetPodWithLabels("pod1", "demo", nil)
+	pod2 := CreateStatefulSetPodWithLabels("pod1", "demo", secondIPLabel) // want second ips
 	cm := &corev1.ConfigMap{
 		ObjectMeta: v1.ObjectMeta{Name: "testConf", Namespace: "demo"},
 		Data: map[string]string{
@@ -581,7 +542,7 @@ func TestLoadConfigMap(t *testing.T) {
 
 func TestBind(t *testing.T) {
 	node := createNode("node1", nil, "10.49.27.2")
-	pod1 := createStatefulSetPod("sts1-1", "demo", nil)
+	pod1 := CreateStatefulSetPod("sts1-1", "demo", nil)
 	pod1Key := util.FormatKey(pod1)
 	var conf Conf
 	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
@@ -688,7 +649,7 @@ func (f *fakeCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssign
 }
 
 func TestUnBind(t *testing.T) {
-	pod1 := createStatefulSetPod("pod1-1", "demo", map[string]string{})
+	pod1 := CreateStatefulSetPod("pod1-1", "demo", map[string]string{})
 	keyObj := util.FormatKey(pod1)
 	node := createNode("TestUnBindNode", nil, "10.173.13.4")
 	var conf Conf
@@ -730,8 +691,8 @@ func TestUnBind(t *testing.T) {
 }
 
 func TestAllocateRecentIPs(t *testing.T) {
-	pod := createDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
-	pod2 := createDeploymentPod("dp2-aaa-bbb", "ns2", immutableAnnotation)
+	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
+	pod2 := CreateDeploymentPod("dp2-aaa-bbb", "ns2", immutableAnnotation)
 	dp := createDeployment("dp", "ns1", pod.ObjectMeta, 1)
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2, dp)
 	defer func() { stopChan <- struct{}{} }()

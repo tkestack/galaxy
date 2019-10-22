@@ -85,7 +85,7 @@ func CniRequestToPodRequest(data []byte) (*PodRequest, error) {
 		return nil, fmt.Errorf("missing %s", cniutil.CNI_ARGS)
 	}
 
-	cniArgs, err := k8s.ParseK8SCNIArgs(req.Args)
+	cniArgs, err := cniutil.ParseCNIArgs(req.Args)
 	if err != nil {
 		return nil, err
 	}
