@@ -157,102 +157,92 @@ func (e *Entry) Validate(set *IPSet) bool {
 	}
 	switch e.SetType {
 	case HashIP:
-		if net.ParseIP(e.IP) == nil {
-			glog.Errorf("Error parsing entry %v ip address %v for ipset %v", e, e.IP, set)
-			return false
-		}
+		return e.validateHashIP(set)
 	case HashIPPort:
-		// set default protocol to tcp if empty
-		if len(e.Protocol) == 0 {
-			e.Protocol = ProtocolTCP
-		}
-
-		if net.ParseIP(e.IP) == nil {
-			glog.Errorf("Error parsing entry %v ip address %v for ipset %v", e, e.IP, set)
-			return false
-		}
-
-		if valid := validateProtocol(e.Protocol); !valid {
-			return false
-		}
+		return e.validateHashIPPort(set)
 	case HashIPPortIP:
-		// set default protocol to tcp if empty
-		if len(e.Protocol) == 0 {
-			e.Protocol = ProtocolTCP
-		}
-
-		if net.ParseIP(e.IP) == nil {
-			glog.Errorf("Error parsing entry %v ip address %v for ipset %v", e, e.IP, set)
-			return false
-		}
-
-		if valid := validateProtocol(e.Protocol); !valid {
-			return false
-		}
-
-		// IP2 can not be empty for `hash:ip,port,ip` type ip set
-		if net.ParseIP(e.IP2) == nil {
-			glog.Errorf("Error parsing entry %v second ip address %v for ipset %v", e, e.IP2, set)
-			return false
-		}
+		return e.validateHashIPPortIP(set)
 	case HashIPPortNet:
-		// set default protocol to tcp if empty
-		if len(e.Protocol) == 0 {
-			e.Protocol = ProtocolTCP
-		}
-
-		if net.ParseIP(e.IP) == nil {
-			glog.Errorf("Error parsing entry %v ip address %v for ipset %v", e, e.IP, set)
-			return false
-		}
-
-		if valid := validateProtocol(e.Protocol); !valid {
-			return false
-		}
-
-		// Net can not be empty for `hash:ip,port,net` type ip set
-		if _, ipNet, _ := net.ParseCIDR(e.Net); ipNet == nil {
-			glog.Errorf("Error parsing entry %v ip net %v for ipset %v", e, e.Net, set)
-			return false
-		}
+		return e.validateHashIPPortNet(set)
 	case BitmapPort:
-		// check if port number satisfies its ipset's requirement of port range
-		if set == nil {
-			glog.Errorf("Unable to reference ip set where the entry %v exists", e)
-			return false
-		}
-		begin, end, err := parsePortRange(set.PortRange)
-		if err != nil {
-			glog.Errorf("Failed to parse set %v port range %s for ipset %v, error: %v", set, set.PortRange, set, err)
-			return false
-		}
-		if e.Port < begin || e.Port > end {
-			glog.Errorf("Entry %v port number %d is not in the port range %s of its ipset %v", e, e.Port, set.PortRange, set)
-			return false
-		}
+		return e.validateBitmapPort(set)
 	case HashNet:
-		// Net can not be empty for `hash:net,port` type ip set
-		if _, ipNet, _ := net.ParseCIDR(e.Net); ipNet == nil {
-			glog.Errorf("Error parsing entry %v ip net %v for ipset %v", e, e.Net, set)
-			return false
-		}
+		return e.validateHashNet(set)
 	case HashNetPort:
-		// set default protocol to tcp if empty
-		if len(e.Protocol) == 0 {
-			e.Protocol = ProtocolTCP
-		}
-
-		if valid := validateProtocol(e.Protocol); !valid {
-			return false
-		}
-
-		// Net can not be empty for `hash:net,port` type ip set
-		if _, ipNet, _ := net.ParseCIDR(e.Net); ipNet == nil {
-			glog.Errorf("Error parsing entry %v ip net %v for ipset %v", e, e.Net, set)
-			return false
-		}
+		return e.validateHashNetPort(set)
 	}
+	return true
+}
 
+func (e *Entry) validateHashIP(set *IPSet) bool {
+	if net.ParseIP(e.IP) == nil {
+		glog.Errorf("Error parsing entry %v ip address %v for ipset %v", e, e.IP, set)
+		return false
+	}
+	return true
+}
+
+func (e *Entry) validateHashNet(set *IPSet) bool {
+	// Net can not be empty for `hash:net,port` type ip set
+	if _, ipNet, _ := net.ParseCIDR(e.Net); ipNet == nil {
+		glog.Errorf("Error parsing entry %v ip net %v for ipset %v", e, e.Net, set)
+		return false
+	}
+	return false
+}
+
+func (e *Entry) validateHashIPPort(set *IPSet) bool {
+	if valid := e.validateProtocol(); !valid {
+		return false
+	}
+	return e.validateHashIP(set)
+}
+
+func (e *Entry) validateHashIPPortIP(set *IPSet) bool {
+	if valid := e.validateHashIPPort(set); !valid {
+		return false
+	}
+	// IP2 can not be empty for `hash:ip,port,ip` type ip set
+	if net.ParseIP(e.IP2) == nil {
+		glog.Errorf("Error parsing entry %v second ip address %v for ipset %v", e, e.IP2, set)
+		return false
+	}
+	return true
+}
+
+func (e *Entry) validateHashIPPortNet(set *IPSet) bool {
+	return e.validateHashIP(set) && e.validateHashNetPort(set)
+}
+
+func (e *Entry) validateBitmapPort(set *IPSet) bool {
+	// check if port number satisfies its ipset's requirement of port range
+	if set == nil {
+		glog.Errorf("Unable to reference ip set where the entry %v exists", e)
+		return false
+	}
+	begin, end, err := parsePortRange(set.PortRange)
+	if err != nil {
+		glog.Errorf("Failed to parse set %v port range %s for ipset %v, error: %v", set, set.PortRange, set, err)
+		return false
+	}
+	if e.Port < begin || e.Port > end {
+		glog.Errorf("Entry %v port number %d is not in the port range %s of its ipset %v", e, e.Port, set.PortRange, set)
+		return false
+	}
+	return true
+}
+
+func (e *Entry) validateHashNetPort(set *IPSet) bool {
+	return e.validateProtocol() && e.validateHashNet(set)
+}
+
+func (e *Entry) validateProtocol() bool {
+	if len(e.Protocol) == 0 {
+		e.Protocol = ProtocolTCP
+	}
+	if valid := validateProtocol(e.Protocol); !valid {
+		return false
+	}
 	return true
 }
 
