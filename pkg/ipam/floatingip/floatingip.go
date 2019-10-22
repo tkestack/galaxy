@@ -9,12 +9,14 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 )
 
+// FloatingIP is FloatingIP structure.
 type FloatingIP struct {
 	RoutableSubnet *net.IPNet // the node subnet
 	nets.SparseSubnet
 	sync.RWMutex
 }
 
+// FloatingIPConf is FloatingIP config structure.
 type FloatingIPConf struct {
 	RoutableSubnet *nets.IPNet `json:"routableSubnet"` // the node subnet
 	IPs            []string    `json:"ips"`
@@ -23,6 +25,7 @@ type FloatingIPConf struct {
 	Vlan           uint16      `json:"vlan,omitempty"`
 }
 
+// MarshalJSON can marshal FloatingIPConf to byte slice.
 func (fip *FloatingIP) MarshalJSON() ([]byte, error) {
 	conf := FloatingIPConf{}
 	conf.RoutableSubnet = nets.NetsIPNet(fip.RoutableSubnet)
@@ -36,6 +39,7 @@ func (fip *FloatingIP) MarshalJSON() ([]byte, error) {
 	return json.Marshal(conf)
 }
 
+// UnmarshalJSON can unmarshal byte slice to FloatingIPConf
 func (fip *FloatingIP) UnmarshalJSON(data []byte) error {
 	var conf FloatingIPConf
 	if err := json.Unmarshal(data, &conf); err != nil {
@@ -84,6 +88,7 @@ func fipCheck(fip *FloatingIP) error {
 	return nil
 }
 
+// String can transform FloatingIP to string.
 func (fip *FloatingIP) String() string {
 	data, err := fip.MarshalJSON()
 	if err != nil {
@@ -92,10 +97,12 @@ func (fip *FloatingIP) String() string {
 	return string(data)
 }
 
+// Key transform floatingIP's subnet to string.
 func (fip *FloatingIP) Key() string {
 	return fip.RoutableSubnet.String()
 }
 
+// Contains judge whether FloatingIP struct contains a given ip.
 func (fip *FloatingIP) Contains(ip net.IP) bool {
 	for _, ipr := range fip.IPRanges {
 		if ipr.Contains(ip) {
@@ -105,6 +112,7 @@ func (fip *FloatingIP) Contains(ip net.IP) bool {
 	return false
 }
 
+// InsertIP can insert a given ip to FloatingIP struct.
 func (fip *FloatingIP) InsertIP(ip net.IP) bool {
 	if !fip.SparseSubnet.IPNet().Contains(ip) {
 		return false
@@ -160,6 +168,7 @@ func (fip *FloatingIP) InsertIP(ip net.IP) bool {
 	return true
 }
 
+// RemoveIP can remove a given ip from FloatingIP struct.
 func (fip *FloatingIP) RemoveIP(ip net.IP) bool {
 	if !fip.IPNet().Contains(ip) {
 		return false
@@ -192,18 +201,24 @@ func (fip *FloatingIP) RemoveIP(ip net.IP) bool {
 	return false
 }
 
+// Minus compute how many ips between two given ip.
 func Minus(a, b net.IP) int64 {
 	return int64(nets.IPToInt(a)) - int64(nets.IPToInt(b))
 }
 
 type FloatingIPSlice []*FloatingIP
 
+// Len returns number of FloatingIPSlice.
 func (s FloatingIPSlice) Len() int {
 	return len(s)
 }
+
+// Swap can swap two ip in FloatingIPSlice.
 func (s FloatingIPSlice) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
+
+// Less compares two given ip.
 func (s FloatingIPSlice) Less(i, j int) bool {
 	i1, _ := nets.FirstAndLastIP(s[i].RoutableSubnet)
 	j1, _ := nets.FirstAndLastIP(s[j].RoutableSubnet)

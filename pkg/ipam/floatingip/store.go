@@ -8,11 +8,12 @@ import (
 
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
-	glog "k8s.io/klog"
 	"github.com/jinzhu/gorm"
+	glog "k8s.io/klog"
 )
 
 var (
+	// ErrNotUpdated is error when database update failed.
 	ErrNotUpdated = fmt.Errorf("not updated")
 )
 

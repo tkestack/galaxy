@@ -16,10 +16,12 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 )
 
+// Start will create dbIpam.
 func Start(t *testing.T) *dbIpam {
 	return CreateIPAMWithTableName(t, database.DefaultFloatingipTableName)
 }
 
+// CreateIPAMWithTableName can create fake dbIpam.
 func CreateIPAMWithTableName(t *testing.T, tableName string) *dbIpam {
 	var err error
 	db, err := database.NewTestDB()
@@ -51,6 +53,7 @@ func CreateIPAMWithTableName(t *testing.T, tableName string) *dbIpam {
 	return i.(*dbIpam)
 }
 
+// TestAllocateRelease can test floatingIP allocate.
 func TestAllocateRelease(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
@@ -116,6 +119,7 @@ func TestAllocateRelease(t *testing.T) {
 	}
 }
 
+// TestApplyFloatingIPs test ipam applyFloatingIPs function.
 func TestApplyFloatingIPs(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
@@ -165,6 +169,7 @@ func TestApplyFloatingIPs(t *testing.T) {
 	}
 }
 
+// TestRaceCondition test floatingIP allocation race.
 func TestRaceCondition(t *testing.T) {
 	var ipams []*dbIpam
 	for i := 0; i < 7; i++ {
@@ -203,6 +208,7 @@ func TestRaceCondition(t *testing.T) {
 	}
 }
 
+// TestEmptyFloatingIPConf test ConfigurePool function.
 func TestEmptyFloatingIPConf(t *testing.T) {
 	var err error
 	db, err := database.NewTestDB()
@@ -219,6 +225,7 @@ func TestEmptyFloatingIPConf(t *testing.T) {
 	}
 }
 
+// TestAllocateIPInSubnet test AllocateInSubnet function.
 func TestAllocateIPInSubnet(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
@@ -240,6 +247,7 @@ func TestAllocateIPInSubnet(t *testing.T) {
 	}
 }
 
+// TestRoutableSubnet test RoutableSubnet function.
 func TestRoutableSubnet(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
@@ -262,6 +270,7 @@ func TestRoutableSubnet(t *testing.T) {
 	}
 }
 
+// TestAllocateInSubnetAndQueryRoutableSubnetByKey test QueryRoutableSubnetByKey and AllocateInSubnet functions.
 func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
@@ -309,6 +318,7 @@ func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
 	}
 }
 
+// TestAllocateSpecificIP test AllocateSpecificIP function.
 func TestAllocateSpecificIP(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
@@ -327,6 +337,7 @@ func TestAllocateSpecificIP(t *testing.T) {
 	}
 }
 
+// TestMultipleIPAM test two dbIpam situation.
 func TestMultipleIPAM(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
@@ -405,6 +416,7 @@ func TestMultipleIPAM(t *testing.T) {
 	}
 }
 
+// TestGetRoutableSubnet test RoutableSubnet function.
 func TestGetRoutableSubnet(t *testing.T) {
 	var fips []*FloatingIP
 	if err := json.Unmarshal([]byte(`[{"routableSubnet":"10.239.228.0/22","ips":["10.239.238.3~10.239.238.6","10.239.238.11","10.239.238.26~10.239.238.61","10.239.238.115~10.239.238.116","10.239.238.164","10.239.238.166","10.239.238.207","10.239.238.226","10.239.238.236"],"subnet":"10.239.236.0/22","gateway":"10.239.236.1","vlan":13}]`), &fips); err != nil {
@@ -421,6 +433,7 @@ func TestGetRoutableSubnet(t *testing.T) {
 	}
 }
 
+// TestAllocateInSubnet test AllocateInSubnet function.
 func TestAllocateInSubnet(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
@@ -457,6 +470,7 @@ func TestAllocateInSubnet(t *testing.T) {
 	}
 }
 
+// TestUpdateKeyUpdatePolicy test UpdatePolicy function.
 func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
@@ -500,18 +514,21 @@ func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	}
 }
 
+// TestDBReleaseIPs test ReleaseIPs function.
 func TestDBReleaseIPs(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
 	testReleaseIPs(t, ipam)
 }
 
+// TestDBByKeyword test ByKeyword function.
 func TestDBByKeyword(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
 	testByKeyword(t, ipam)
 }
 
+// TestDBByPrefix test ByPrefix function.
 func TestDBByPrefix(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()

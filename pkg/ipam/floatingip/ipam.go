@@ -13,32 +13,50 @@ import (
 )
 
 var (
+	// ErrNoEnoughIP is error when there is no available floatingIPs
 	ErrNoEnoughIP     = fmt.Errorf("no enough available ips left")
 	ErrNoFIPForSubnet = fmt.Errorf("no fip configured for subnet")
 )
 
+// IPAM interface which implemented by database and kubernetes CRD
 type IPAM interface {
+	// ConfigurePool init floatingIP pool.
 	ConfigurePool([]*FloatingIP) error
 	// ReleaseIPs releases given ips as long as their keys match and returned released and unreleased map
 	// released and unreleased map are guaranteed to be none nil even if err is not nil
 	// unreleased map stores ip with its latest key if key changed
 	ReleaseIPs(map[string]string) (map[string]string, map[string]string, error)
+	// AllocateSpecificIP allocate pod a specific IP.
 	AllocateSpecificIP(string, net.IP, constant.ReleasePolicy, string) error
+	// AllocateInSubnet allocate subnet of IPs.
 	AllocateInSubnet(string, *net.IPNet, constant.ReleasePolicy, string) (net.IP, error)
+	// AllocateInSubnetWithKey allocate a floatingIP in given subnet and key.
 	AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error
+	// ReserveIP can reserve a IP entitled by a terminated pod.
 	ReserveIP(oldK, newK, attr string) error
+	// UpdatePolicy update floatingIP's release policy.
 	UpdatePolicy(string, net.IP, constant.ReleasePolicy, string) error
+	// Release release a given IP.
 	Release(string, net.IP) error
+	// First returns the first matched IP by key.
 	First(string) (*FloatingIPInfo, error) // returns nil,nil if key is not found
+	// ByIP transform a given IP to database.FloatingIP struct.
 	ByIP(net.IP) (database.FloatingIP, error)
+	// ByPrefix filter floatingIPs by prefix key.
 	ByPrefix(string) ([]database.FloatingIP, error)
+	// ByKeyword returns floatingIP set by a given keyword.
 	ByKeyword(string) ([]database.FloatingIP, error)
+	// RoutableSubnet returns node's net subnet.
 	RoutableSubnet(net.IP) *net.IPNet
+	// RoutableSubnet returns node's net subnet.
 	QueryRoutableSubnetByKey(key string) ([]string, error)
+	// Shutdown shutdowns IPAM.
 	Shutdown()
+	// Name returns IPAM's name.
 	Name() string
 }
 
+// FloatingIPInfo is floatingIP information
 type FloatingIPInfo struct {
 	IPInfo constant.IPInfo
 	FIP    database.FloatingIP
@@ -52,6 +70,7 @@ type dbIpam struct {
 	TableName   string
 }
 
+// NewIPAM init database IPAM
 func NewIPAM(store *database.DBRecorder) IPAM {
 	return NewIPAMWithTableName(store, database.DefaultFloatingipTableName)
 }
@@ -66,6 +85,7 @@ func NewIPAMWithTableName(store *database.DBRecorder, tableName string) IPAM {
 	}
 }
 
+// Name returns IPAM's name.
 func (i *dbIpam) Name() string {
 	return i.TableName
 }
@@ -118,6 +138,7 @@ func (i *dbIpam) mergeWithDB(fipMap map[string]*FloatingIP) error {
 	return nil
 }
 
+// ConfigurePool init floatingIP pool.
 func (i *dbIpam) ConfigurePool(floatingIPs []*FloatingIP) error {
 	sort.Sort(FloatingIPSlice(floatingIPs))
 	glog.Infof("floating ip config %v", floatingIPs)
@@ -170,6 +191,7 @@ func (i *dbIpam) allocate(keys []string) (allocated []net.IP, err error) {
 	return
 }
 
+// Release release a given IP.
 func (i *dbIpam) Release(key string, ip net.IP) error {
 	return i.releaseIP(key, nets.IPToInt(ip))
 }
@@ -186,6 +208,7 @@ func (i *dbIpam) first(key string) (*constant.IPInfo, error) {
 	return &fipInfo.IPInfo, nil
 }
 
+// First returns the first matched IP by key.
 func (i *dbIpam) First(key string) (*FloatingIPInfo, error) {
 	var fip database.FloatingIP
 	if err := i.findByKey(key, &fip); err != nil {
@@ -215,12 +238,14 @@ func (i *dbIpam) First(key string) (*FloatingIPInfo, error) {
 	return nil, nil
 }
 
+// Shutdown shutdowns IPAM.
 func (i *dbIpam) Shutdown() {
 	if i.store != nil {
 		i.store.Shutdown()
 	}
 }
 
+// AllocateInSubnet allocate subnet of IPs.
 func (i *dbIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy constant.ReleasePolicy, attr string) (allocated net.IP, err error) {
 	if routableSubnet == nil {
 		// this should never happen
@@ -296,6 +321,7 @@ func (i *dbIpam) toFIPSubnet(routableSubnet *net.IPNet) *net.IPNet {
 	return nil
 }
 
+// QueryByPrefix query map key:floatingIP by prefix key
 func (i *dbIpam) QueryByPrefix(prefix string) (map[string]string, error) {
 	fips, err := i.ByPrefix(prefix)
 	if err != nil {
@@ -308,6 +334,7 @@ func (i *dbIpam) QueryByPrefix(prefix string) (map[string]string, error) {
 	return ips, nil
 }
 
+// ByPrefix filter floatingIPs by prefix key.
 func (i *dbIpam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
 	var fips []database.FloatingIP
 	if err := i.findByPrefix(prefix, &fips); err != nil {
@@ -316,6 +343,7 @@ func (i *dbIpam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
 	return fips, nil
 }
 
+// RoutableSubnet returns node's net subnet.
 func (i *dbIpam) RoutableSubnet(nodeIP net.IP) *net.IPNet {
 	intIP := nets.IPToInt(nodeIP)
 	minIndex := sort.Search(len(i.FloatingIPs), func(j int) bool {
@@ -330,30 +358,37 @@ func (i *dbIpam) RoutableSubnet(nodeIP net.IP) *net.IPNet {
 	return nil
 }
 
+// RoutableSubnet returns node's net subnet.
 func (i *dbIpam) QueryRoutableSubnetByKey(key string) ([]string, error) {
 	return i.queryByKeyGroupBySubnet(key)
 }
 
+// ByIP transform a given IP to database.FloatingIP struct.
 func (i *dbIpam) ByIP(ip net.IP) (database.FloatingIP, error) {
 	return i.findByIP(nets.IPToInt(ip))
 }
 
+// AllocateSpecificIP allocate pod a specific IP.
 func (i *dbIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
 	return i.allocateSpecificIP(nets.IPToInt(ip), key, uint16(policy), attr)
 }
 
+// UpdatePolicy update floatingIP's release policy.
 func (i *dbIpam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
 	return i.updatePolicy(nets.IPToInt(ip), key, uint16(policy), attr)
 }
 
+// ReserveIP can reserve a IP entitled by a terminated pod.
 func (i *dbIpam) ReserveIP(oldK, newK, attr string) error {
 	return i.updateKey(oldK, newK, attr)
 }
 
+// AllocateInSubnetWithKey allocate a floatingIP in given subnet and key.
 func (i *dbIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error {
 	return i.updateOneInSubnet(oldK, newK, subnet, uint16(policy), attr)
 }
 
+// ByKeyword returns floatingIP set by a given keyword.
 func (i *dbIpam) ByKeyword(keyword string) ([]database.FloatingIP, error) {
 	var fips []database.FloatingIP
 	fips, err := i.getIPsByKeyword(i.TableName, keyword)
@@ -363,6 +398,7 @@ func (i *dbIpam) ByKeyword(keyword string) ([]database.FloatingIP, error) {
 	return fips, nil
 }
 
+// ReleaseIPs releases given ips
 func (i *dbIpam) ReleaseIPs(ipToKey map[string]string) (map[string]string, map[string]string, error) {
 	return i.deleteIPs(i.TableName, ipToKey)
 }

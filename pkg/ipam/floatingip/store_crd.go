@@ -6,8 +6,8 @@ import (
 
 	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
-	glog "k8s.io/klog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	glog "k8s.io/klog"
 )
 
 func (ci *crdIpam) listFloatingIPs() (*v1alpha1.FloatingIPList, error) {
