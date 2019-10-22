@@ -50,24 +50,9 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err := d.Init(); err != nil {
 		return fmt.Errorf("failed to setup bridge %v", err)
 	}
-	var result020s []*t020.Result
-	for i := 0; i < len(results); i++ {
-		result020, err := t020.GetResult(results[i])
-		if err != nil {
-			return err
-		}
-		result020s = append(result020s, result020)
-	}
-	if len(result020s) == 2 {
-		routes := result020s[0].IP4.Routes
-		for i := 0; i < len(routes); i++ {
-			if routes[i].Dst.String() == "0.0.0.0/0" {
-				routes = append(routes[:i], routes[i+1:]...)
-				break
-			}
-		}
-		routes = append(routes, types.Route{Dst: *pANet}, types.Route{Dst: *pBNet}, types.Route{Dst: *pCNet})
-		result020s[0].IP4.Routes = routes
+	result020s, err := resultConvert(results)
+	if err != nil {
+		return err
 	}
 
 	if d.MacVlanMode() {
@@ -88,28 +73,8 @@ func cmdAdd(args *skel.CmdArgs) error {
 		_ = utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
 	} else {
 		ifName := args.IfName
-		ifIndex := 0
-		for i := 0; i < len(result020s); i++ {
-			vlanId := vlanIds[i]
-			result020 := result020s[i]
-			bridgeName, err := d.CreateBridgeAndVlanDevice(vlanId)
-			if err != nil {
-				return err
-			}
-			suffix := ""
-			if i != 0 {
-				suffix = fmt.Sprintf("-%d", i+1)
-				ifIndex++
-				args.IfName = fmt.Sprintf("eth%d", ifIndex)
-				if args.IfName == ifName {
-					ifIndex++
-					args.IfName = fmt.Sprintf("eth%d", ifIndex)
-				}
-			}
-			if err := utils.VethConnectsHostWithContainer(result020, args, bridgeName, suffix); err != nil {
-				return err
-			}
-			_ = utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
+		if err := setupVlanDevice(result020s, vlanIds, args); err != nil {
+			return err
 		}
 		args.IfName = ifName
 	}
@@ -120,6 +85,57 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 	result020s[0].DNS = conf.DNS
 	return result020s[0].Print()
+}
+
+func setupVlanDevice(result020s []*t020.Result, vlanIds []uint16, args *skel.CmdArgs) error {
+	ifName := args.IfName
+	ifIndex := 0
+	for i := 0; i < len(result020s); i++ {
+		vlanId := vlanIds[i]
+		result020 := result020s[i]
+		bridgeName, err := d.CreateBridgeAndVlanDevice(vlanId)
+		if err != nil {
+			return err
+		}
+		suffix := ""
+		if i != 0 {
+			suffix = fmt.Sprintf("-%d", i+1)
+			ifIndex++
+			args.IfName = fmt.Sprintf("eth%d", ifIndex)
+			if args.IfName == ifName {
+				ifIndex++
+				args.IfName = fmt.Sprintf("eth%d", ifIndex)
+			}
+		}
+		if err := utils.VethConnectsHostWithContainer(result020, args, bridgeName, suffix); err != nil {
+			return err
+		}
+		_ = utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
+	}
+	return nil
+}
+
+func resultConvert(results []types.Result) ([]*t020.Result, error) {
+	var result020s []*t020.Result
+	for i := 0; i < len(results); i++ {
+		result020, err := t020.GetResult(results[i])
+		if err != nil {
+			return nil, err
+		}
+		result020s = append(result020s, result020)
+	}
+	if len(result020s) == 2 {
+		routes := result020s[0].IP4.Routes
+		for i := 0; i < len(routes); i++ {
+			if routes[i].Dst.String() == "0.0.0.0/0" {
+				routes = append(routes[:i], routes[i+1:]...)
+				break
+			}
+		}
+		routes = append(routes, types.Route{Dst: *pANet}, types.Route{Dst: *pBNet}, types.Route{Dst: *pCNet})
+		result020s[0].IP4.Routes = routes
+	}
+	return result020s, nil
 }
 
 func cmdDel(args *skel.CmdArgs) error {

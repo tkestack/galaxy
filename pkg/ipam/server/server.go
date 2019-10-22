@@ -19,11 +19,8 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/server/options"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/httputil"
 	pageutil "git.code.oa.com/tkestack/galaxy/pkg/utils/page"
-	tappVersioned "git.tencent.com/tke/tapp-controller/pkg/client/clientset/versioned"
-	tappInformers "git.tencent.com/tke/tapp-controller/pkg/client/informers/externalversions"
 	"github.com/emicklei/go-restful"
 	"github.com/emicklei/go-restful-swagger12"
-	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,6 +34,9 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/tools/record"
+	glog "k8s.io/klog"
+	tappVersioned "tkestack.io/tapp-controller/pkg/client/clientset/versioned"
+	tappInformers "tkestack.io/tapp-controller/pkg/client/informers/externalversions"
 )
 
 type JsonConf struct {

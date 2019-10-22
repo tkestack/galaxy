@@ -2,6 +2,7 @@
 /.idea
 *.iml
 /.vscode
+/vendor
 /go
 /tools/route_monitor/route_monitor
 /vendor/github.com/docker/distribution/contrib

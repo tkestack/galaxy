@@ -3,7 +3,6 @@ module git.code.oa.com/tkestack/galaxy
 go 1.13
 
 require (
-	git.tencent.com/tke/tapp-controller v0.0.0-20190903090859-2b03d3f3bbca
 	github.com/containernetworking/cni v0.6.0
 	github.com/containernetworking/plugins v0.6.0
 	github.com/coreos/go-iptables v0.4.3
@@ -41,6 +40,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d // indirect
 	k8s.io/kubernetes v1.16.0-alpha.0
 	k8s.io/utils v0.0.0-20191010214722-8d271d903fe4
+	tkestack.io/tapp-controller v0.0.0-20191017074115-bdf9b4742398
 )
 
 replace (

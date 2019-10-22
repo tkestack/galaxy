@@ -3,6 +3,7 @@ package vlan
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/vishvananda/netlink/nl"
 	"net"
 	"strings"
 	"sync"
@@ -11,7 +12,6 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/vishvananda/netlink"
-	"github.com/vishvananda/netlink/nl"
 )
 
 const (
@@ -82,13 +82,7 @@ func (d *VlanDriver) Init() error {
 		return nil
 	}
 	if d.PureMode() {
-		if err := utils.UnSetArpIgnore("all"); err != nil {
-			return err
-		}
-		if err := utils.UnSetArpIgnore(d.Device); err != nil {
-			return err
-		}
-		if err := utils.SetProxyArp(d.Device); err != nil {
+		if err := d.initPureModeArgs(); err != nil {
 			return err
 		}
 		return utils.EnableNonlocalBind()
@@ -110,56 +104,74 @@ func (d *VlanDriver) Init() error {
 			return fmt.Errorf("No available address found on device %s", d.Device)
 		}
 	} else {
-		bri, err := getOrCreateBridge(d.DefaultBridgeName, device.Attrs().HardwareAddr)
-		if err != nil {
+		if err := d.initVlanBridgeDevice(device, filteredAddr); err != nil {
 			return err
 		}
-		if err := netlink.LinkSetUp(bri); err != nil {
-			return fmt.Errorf("Failed to set up bridge device %s: %v", d.DefaultBridgeName, err)
-		}
-		rs, err := netlink.RouteList(device, nl.FAMILY_V4)
+	}
+	return nil
+}
+
+func (d *VlanDriver) initVlanBridgeDevice(device netlink.Link, filteredAddr []netlink.Addr) error {
+	bri, err := getOrCreateBridge(d.DefaultBridgeName, device.Attrs().HardwareAddr)
+	if err != nil {
+		return err
+	}
+	if err := netlink.LinkSetUp(bri); err != nil {
+		return fmt.Errorf("failed to set up bridge device %s: %v", d.DefaultBridgeName, err)
+	}
+	rs, err := netlink.RouteList(device, nl.FAMILY_V4)
+	if err != nil {
+		return fmt.Errorf("failed to list route of device %s", device.Attrs().Name)
+	}
+	defer func() {
 		if err != nil {
-			return fmt.Errorf("Failed to list route of device %s", device.Attrs().Name)
+			for i := range rs {
+				_ = netlink.RouteAdd(&rs[i])
+			}
 		}
+	}()
+	for i := range filteredAddr {
+		if err = netlink.AddrDel(device, &filteredAddr[i]); err != nil {
+			return fmt.Errorf("failed to remove v4address from device %s: %v", d.Device, err)
+		}
+		// nolint: errcheck
 		defer func() {
 			if err != nil {
-				for i := range rs {
-					_ = netlink.RouteAdd(&rs[i])
-				}
+				netlink.AddrAdd(device, &filteredAddr[i])
 			}
 		}()
-		for i := range filteredAddr {
-			if err = netlink.AddrDel(device, &filteredAddr[i]); err != nil {
-				return fmt.Errorf("Failed to remove v4address from device %s: %v", d.Device, err)
-			}
-			// nolint: errcheck
-			defer func() {
-				if err != nil {
-					netlink.AddrAdd(device, &filteredAddr[i])
-				}
-			}()
-			filteredAddr[i].Label = ""
-			if err = netlink.AddrAdd(bri, &filteredAddr[i]); err != nil {
-				if !strings.Contains(err.Error(), "file exists") {
-					return fmt.Errorf("Failed to add v4address to bridge device %s: %v, address %v", d.DefaultBridgeName, err, filteredAddr[i])
-				} else {
-					err = nil
-				}
+		filteredAddr[i].Label = ""
+		if err = netlink.AddrAdd(bri, &filteredAddr[i]); err != nil {
+			if !strings.Contains(err.Error(), "file exists") {
+				return fmt.Errorf("failed to add v4address to bridge device %s: %v, address %v", d.DefaultBridgeName, err, filteredAddr[i])
+			} else {
+				err = nil
 			}
 		}
-		if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: d.DefaultBridgeName}}); err != nil {
-			return fmt.Errorf("Failed to add device %s to bridge device %s: %v", d.Device, d.DefaultBridgeName, err)
-		}
-		for i := range rs {
-			newRoute := netlink.Route{Gw: rs[i].Gw, LinkIndex: bri.Attrs().Index, Dst: rs[i].Dst, Src: rs[i].Src, Scope: rs[i].Scope}
-			if err = netlink.RouteAdd(&newRoute); err != nil {
-				if !strings.Contains(err.Error(), "file exists") {
-					return fmt.Errorf("failed to add route %s", newRoute.String())
-				} else {
-					err = nil
-				}
+	}
+	if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: d.DefaultBridgeName}}); err != nil {
+		return fmt.Errorf("failed to add device %s to bridge device %s: %v", d.Device, d.DefaultBridgeName, err)
+	}
+	for i := range rs {
+		newRoute := netlink.Route{Gw: rs[i].Gw, LinkIndex: bri.Attrs().Index, Dst: rs[i].Dst, Src: rs[i].Src, Scope: rs[i].Scope}
+		if err = netlink.RouteAdd(&newRoute); err != nil {
+			if !strings.Contains(err.Error(), "file exists") {
+				return fmt.Errorf("failed to add route %s", newRoute.String())
 			}
 		}
+	}
+	return nil
+}
+
+func (d *VlanDriver) initPureModeArgs() error {
+	if err := utils.UnSetArpIgnore("all"); err != nil {
+		return err
+	}
+	if err := utils.UnSetArpIgnore(d.Device); err != nil {
+		return err
+	}
+	if err := utils.SetProxyArp(d.Device); err != nil {
+		return err
 	}
 	return nil
 }

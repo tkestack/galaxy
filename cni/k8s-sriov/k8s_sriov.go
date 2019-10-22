@@ -17,8 +17,8 @@ import (
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/containernetworking/plugins/pkg/ns"
-	glog "k8s.io/klog"
 	"github.com/vishvananda/netlink"
+	glog "k8s.io/klog"
 )
 
 type NetConf struct {
@@ -107,89 +107,30 @@ func main() {
 func setupVF(conf *NetConf, result *t020.Result, podifName string, vlan int, netns ns.NetNS) error {
 	cpus := runtime.NumCPU()
 	ifName := conf.Device
-	var vfIdx int
-	var infos []os.FileInfo
 
 	m, err := netlink.LinkByName(ifName)
 	if err != nil {
 		return fmt.Errorf("failed to lookup master %q: %v", conf.Device, err)
 	}
-
 	// get the ifname sriov vf num
-	vfTotal, err := getSriovNumVfs(ifName, kindTotalVfs)
+	minVfNum, err := getSriovVfNum(conf)
 	if err != nil {
 		return err
 	}
-
-	if vfTotal <= 0 {
-		return fmt.Errorf("no virtual function in the device %q", ifName)
-	}
-
-	vfNums, err := getSriovNumVfs(ifName, kindNumVfs)
+	infos, vfIdx, vfDev, vfName, err := findAvailableVf(minVfNum, conf)
 	if err != nil {
 		return err
 	}
-
-	minVfNum := min(vfTotal, conf.VFNum)
-	// only set vf when `sriov_numvfs` is 0
-	if vfNums == 0 {
-		if err := setSriovNumVfs(ifName, minVfNum); err != nil {
-			return err
-		}
-	} else if vfNums < minVfNum {
-		glog.Warning("sriov_numvfs is set but small")
-	}
-
-	for vf := 0; vf <= (minVfNum - 1); vf++ {
-		vfDir := fmt.Sprintf("/sys/class/net/%s/device/virtfn%d/net", ifName, vf)
-		if _, err := os.Lstat(vfDir); err != nil {
-			if vf == (minVfNum - 1) {
-				return fmt.Errorf("failed to open the virtfn%d dir of the device %q: %v", vf, ifName, err)
-			}
-			continue
-		}
-
-		infos, err = ioutil.ReadDir(vfDir)
-		if err != nil {
-			return fmt.Errorf("failed to read the virtfn%d dir of the device %q: %v", vf, ifName, err)
-		}
-
-		if (len(infos) == 0) && (vf == (minVfNum - 1)) {
-			return fmt.Errorf("no Virtual function exist in directory %s, last vf is virtfn%d", vfDir, vf)
-		}
-
-		if (len(infos) == 0) && (vf != (minVfNum - 1)) {
-			continue
-		}
-		vfIdx = vf
-		break
-
-	}
-
-	// VF NIC name
-	if len(infos) != 1 {
-		return fmt.Errorf("no virtual network resources available for the %q", conf.Device)
-	}
-	vfName := infos[0].Name()
-
-	vfDev, err := netlink.LinkByName(vfName)
-	if err != nil {
-		return fmt.Errorf("failed to lookup vf device %q: %v", vfName, err)
-	}
-
 	if err = netlink.LinkSetVfVlan(m, vfIdx, vlan); err != nil {
 		return fmt.Errorf("failed to set vf %d vlan: %v", vfIdx, err)
 	}
-
 	if err = netlink.LinkSetUp(vfDev); err != nil {
 		return fmt.Errorf("failed to setup vf %d device: %v", vfIdx, err)
 	}
-
 	// move VF device to ns
 	if err = netlink.LinkSetNsFd(vfDev, int(netns.Fd())); err != nil {
 		return fmt.Errorf("failed to move vf %d to netns: %v", vfIdx, err)
 	}
-
 	if err = netns.Do(func(_ ns.NetNS) error {
 		err := renameLink(vfName, podifName)
 		if err != nil {
@@ -213,6 +154,70 @@ func setupVF(conf *NetConf, result *t020.Result, podifName string, vlan int, net
 		}
 	}
 	return nil
+}
+
+func findAvailableVf(minVfNum int, conf *NetConf) ([]os.FileInfo, int, netlink.Link, string, error) {
+	ifName := conf.Device
+	var infos []os.FileInfo
+	var err error
+	var vfIdx int
+	for vf := 0; vf <= (minVfNum - 1); vf++ {
+		vfDir := fmt.Sprintf("/sys/class/net/%s/device/virtfn%d/net", ifName, vf)
+		if _, err := os.Lstat(vfDir); err != nil {
+			if vf == (minVfNum - 1) {
+				return nil, 0, nil, "", fmt.Errorf("failed to open the virtfn%d dir of the device %q: %v", vf, ifName, err)
+			}
+			continue
+		}
+		infos, err = ioutil.ReadDir(vfDir)
+		if err != nil {
+			return nil, 0, nil, "", fmt.Errorf("failed to read the virtfn%d dir of the device %q: %v", vf, ifName, err)
+		}
+		if (len(infos) == 0) && (vf == (minVfNum - 1)) {
+			return nil, 0, nil, "", fmt.Errorf("no Virtual function exist in directory %s, last vf is virtfn%d", vfDir, vf)
+		}
+		if (len(infos) == 0) && (vf != (minVfNum - 1)) {
+			continue
+		}
+		vfIdx = vf
+		break
+	}
+
+	// VF NIC name
+	if len(infos) != 1 {
+		return nil, 0, nil, "", fmt.Errorf("no virtual network resources available for the %q", ifName)
+	}
+	vfName := infos[0].Name()
+	vfDev, err := netlink.LinkByName(vfName)
+	if err != nil {
+		return nil, 0, nil, "", fmt.Errorf("failed to lookup vf device %q: %v", vfName, err)
+	}
+	return infos, vfIdx, vfDev, vfName, nil
+}
+
+func getSriovVfNum(conf *NetConf) (int, error) {
+	ifName := conf.Device
+	vfTotal, err := getSriovNumVfs(ifName, kindTotalVfs)
+	if err != nil {
+		return 0, err
+	}
+	if vfTotal <= 0 {
+		return 0, fmt.Errorf("no virtual function in the device %q", ifName)
+	}
+	vfNums, err := getSriovNumVfs(ifName, kindNumVfs)
+	if err != nil {
+		return 0, err
+	}
+	minVfNum := min(vfTotal, conf.VFNum)
+	// only set vf when `sriov_numvfs` is 0
+	if vfNums == 0 {
+		if err := setSriovNumVfs(ifName, minVfNum); err != nil {
+			return 0, err
+		}
+	} else if vfNums < minVfNum {
+		glog.Warning("sriov_numvfs is set but small")
+	}
+	return minVfNum, nil
 }
 
 func releaseVF(podifName string, netns ns.NetNS) error {

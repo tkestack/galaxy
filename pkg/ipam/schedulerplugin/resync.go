@@ -13,13 +13,13 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
-	tappv1 "git.tencent.com/tke/tapp-controller/pkg/apis/tappcontroller/v1"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	glog "k8s.io/klog"
+	tappv1 "tkestack.io/tapp-controller/pkg/apis/tappcontroller/v1"
 )
 
 func (p *FloatingIPPlugin) storeReady() bool {

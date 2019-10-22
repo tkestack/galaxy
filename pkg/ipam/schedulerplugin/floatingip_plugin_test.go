@@ -18,8 +18,6 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
-	fakeTAppCli "git.tencent.com/tke/tapp-controller/pkg/client/clientset/versioned/fake"
-	tappInformer "git.tencent.com/tke/tapp-controller/pkg/client/informers/externalversions"
 	"github.com/jinzhu/gorm"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,6 +29,8 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	fakeV1 "k8s.io/client-go/kubernetes/typed/core/v1/fake"
+	fakeTAppCli "tkestack.io/tapp-controller/pkg/client/clientset/versioned/fake"
+	tappInformer "tkestack.io/tapp-controller/pkg/client/informers/externalversions"
 )
 
 const (

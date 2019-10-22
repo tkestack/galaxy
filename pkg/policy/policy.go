@@ -14,7 +14,6 @@ import (
 	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s/eventhandler"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/ipset"
 	utiliptables "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables"
-	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +26,7 @@ import (
 	corev1Lister "k8s.io/client-go/listers/core/v1"
 	networkingv1Lister "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
+	glog "k8s.io/klog"
 	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/utils/exec"
 )
@@ -447,65 +447,11 @@ func (p *PolicyManager) syncRules(polices []policy) error {
 		return fmt.Errorf("failed to list ipsets: %v", err)
 	}
 	// build new ipset table map
-	newIPSetMap := make(map[string]*ipsetTable)
-	for _, policy := range polices {
-		ingress := policy.ingressRule
-		egress := policy.egressRule
-		if ingress != nil {
-			newIPSetMap[ingress.dstIPTable.Name] = ingress.dstIPTable
-			for _, rule := range ingress.srcRules {
-				if rule.ipTable != nil {
-					newIPSetMap[rule.ipTable.Name] = rule.ipTable
-				}
-				if rule.netTable != nil {
-					newIPSetMap[rule.netTable.Name] = rule.netTable
-				}
-			}
-		}
-		if egress != nil {
-			newIPSetMap[egress.srcIPTable.Name] = egress.srcIPTable
-			for _, rule := range egress.dstRules {
-				if rule.ipTable != nil {
-					newIPSetMap[rule.ipTable.Name] = rule.ipTable
-				}
-				if rule.netTable != nil {
-					newIPSetMap[rule.netTable.Name] = rule.netTable
-				}
-			}
-		}
-	}
+	newIPSetMap := initIPSetMap(polices)
+
 	// create ipset
-	for name, set := range newIPSetMap {
-		if err := p.ipsetHandle.CreateSet(&set.IPSet, true); err != nil {
-			return fmt.Errorf("failed to create ipset %s %s: %v", set.Name, string(set.SetType), err)
-		}
-		oldEntries, err := p.ipsetHandle.ListEntries(name)
-		if err != nil {
-			glog.Warningf("failed to list entries %s: %v", name, err)
-			continue
-		}
-		oldEntriesSet := sets.NewString(oldEntries...)
-		newEntries := sets.NewString()
-		for _, entry := range set.entries {
-			newEntryStr := strings.Join(append([]string{entry.String()}, entry.Options...), " ")
-			newEntries.Insert(newEntryStr)
-			if oldEntriesSet.Has(newEntryStr) {
-				continue
-			}
-			if err := p.ipsetHandle.AddEntryWithOptions(&entry, &set.IPSet, true); err != nil {
-				glog.Warningf("failed to add entry %v: %v", entry, err)
-			}
-		}
-		glog.V(5).Infof("old entries %s, new entries %s", strings.Join(oldEntries, ","), strings.Join(newEntries.List(), ","))
-		// clean up stale entries
-		for _, old := range oldEntries {
-			if !newEntries.Has(old) {
-				parts := strings.Split(old, " ")
-				if err := p.ipsetHandle.DelEntryWithOptions(name, parts[0], parts[1:]...); err != nil {
-					glog.Warningf("failed to del entry %s from set %s: %v", old, name, err)
-				}
-			}
-		}
+	if err := p.createIPSet(newIPSetMap); err != nil {
+		return err
 	}
 	// nolint: errcheck
 	defer func() {
@@ -521,6 +467,10 @@ func (p *PolicyManager) syncRules(polices []policy) error {
 	}()
 
 	// sync iptables
+	return p.syncIptables(polices)
+}
+
+func (p *PolicyManager) syncIptables(polices []policy) error {
 	iptablesSaveRaw := bytes.NewBuffer(nil)
 	// Get iptables-save output so we can check for existing chains and rules.
 	// This will be a map of chain name to chain with rules as stored in iptables-save/iptables-restore
@@ -591,9 +541,76 @@ func (p *PolicyManager) syncRules(polices []policy) error {
 	writeLine(filterRules, "COMMIT")
 
 	lines := append(filterChains.Bytes(), filterRules.Bytes()...)
-	err = p.iptableHandle.RestoreAll(lines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
+	err := p.iptableHandle.RestoreAll(lines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
 	if err != nil {
 		return fmt.Errorf("failed to execute iptables-restore for ruls %s: %v", string(lines), err)
+	}
+	return nil
+}
+
+func initIPSetMap(polices []policy) map[string]*ipsetTable {
+	newIPSetMap := make(map[string]*ipsetTable)
+	for _, policy := range polices {
+		ingress := policy.ingressRule
+		egress := policy.egressRule
+		if ingress != nil {
+			newIPSetMap[ingress.dstIPTable.Name] = ingress.dstIPTable
+			for _, rule := range ingress.srcRules {
+				if rule.ipTable != nil {
+					newIPSetMap[rule.ipTable.Name] = rule.ipTable
+				}
+				if rule.netTable != nil {
+					newIPSetMap[rule.netTable.Name] = rule.netTable
+				}
+			}
+		}
+		if egress != nil {
+			newIPSetMap[egress.srcIPTable.Name] = egress.srcIPTable
+			for _, rule := range egress.dstRules {
+				if rule.ipTable != nil {
+					newIPSetMap[rule.ipTable.Name] = rule.ipTable
+				}
+				if rule.netTable != nil {
+					newIPSetMap[rule.netTable.Name] = rule.netTable
+				}
+			}
+		}
+	}
+	return newIPSetMap
+}
+
+func (p *PolicyManager) createIPSet(newIPSetMap map[string]*ipsetTable) error {
+	for name, set := range newIPSetMap {
+		if err := p.ipsetHandle.CreateSet(&set.IPSet, true); err != nil {
+			return fmt.Errorf("failed to create ipset %s %s: %v", set.Name, string(set.SetType), err)
+		}
+		oldEntries, err := p.ipsetHandle.ListEntries(name)
+		if err != nil {
+			glog.Warningf("failed to list entries %s: %v", name, err)
+			continue
+		}
+		oldEntriesSet := sets.NewString(oldEntries...)
+		newEntries := sets.NewString()
+		for _, entry := range set.entries {
+			newEntryStr := strings.Join(append([]string{entry.String()}, entry.Options...), " ")
+			newEntries.Insert(newEntryStr)
+			if oldEntriesSet.Has(newEntryStr) {
+				continue
+			}
+			if err := p.ipsetHandle.AddEntryWithOptions(&entry, &set.IPSet, true); err != nil {
+				glog.Warningf("failed to add entry %v: %v", entry, err)
+			}
+		}
+		glog.V(5).Infof("old entries %s, new entries %s", strings.Join(oldEntries, ","), strings.Join(newEntries.List(), ","))
+		// clean up stale entries
+		for _, old := range oldEntries {
+			if !newEntries.Has(old) {
+				parts := strings.Split(old, " ")
+				if err := p.ipsetHandle.DelEntryWithOptions(name, parts[0], parts[1:]...); err != nil {
+					glog.Warningf("failed to del entry %s from set %s: %v", old, name, err)
+				}
+			}
+		}
 	}
 	return nil
 }
