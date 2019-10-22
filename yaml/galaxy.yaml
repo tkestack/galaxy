@@ -11,7 +11,7 @@ rules:
   - namespaces
   - nodes
   - pods/binding
-  verbs: ["list", "watch", "get", "patch", "create"]
+  verbs: ["list", "watch", "get", "patch", "create", "update"]
 - apiGroups: ["apps", "extensions"]
   resources:
   - statefulsets
