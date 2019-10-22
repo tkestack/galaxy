@@ -179,3 +179,11 @@ func Curl(ip, port string) ([]byte, error) {
 func CleanupCNIData(networkName string) error {
 	return os.RemoveAll(path.Join("/var/lib/cni/networks/", networkName))
 }
+
+func NewDummyVlan(cidrIPNet *net.IPNet, vlanId int) *LinkDevice {
+	return NewLinkDevice(nil, fmt.Sprintf("dummy0.%d", vlanId), "vlan").SetMaster(
+		NewLinkDevice(nil, fmt.Sprintf("br%d", vlanId), "bridge"),
+	).SetParent(
+		NewLinkDevice(cidrIPNet, "dummy0", "dummy"),
+	)
+}

@@ -24,6 +24,21 @@ func newTestPolicyManager() *PolicyManager {
 	}
 }
 
+var (
+	ipTable1 = &ipsetTable{
+		IPSet: ipset.IPSet{Name: "GLX-sip-0-XX2", SetType: ipset.HashIP},
+		entries: []ipset.Entry{
+			{IP: "1.1.0.1", SetType: ipset.HashIP}, {IP: "1.1.0.2", SetType: ipset.HashIP},
+		},
+	}
+	natTable1 = &ipsetTable{
+		IPSet: ipset.IPSet{Name: "GLX-snet-1-XX3", SetType: ipset.HashNet},
+		entries: []ipset.Entry{
+			{Net: "2.1.0.0/24", SetType: ipset.HashNet}, {Net: "2.1.0.2/32", SetType: ipset.HashNet, Options: []string{"nomatch"}}, {Net: "2.1.1.2/32", SetType: ipset.HashNet},
+		},
+	}
+)
+
 func TestSyncRules(t *testing.T) {
 	pm := newTestPolicyManager()
 	policies := []policy{
@@ -48,18 +63,8 @@ func TestSyncRules(t *testing.T) {
 			ingressRule: &ingressRule{
 				srcRules: []rule{
 					{
-						ipTable: &ipsetTable{
-							IPSet: ipset.IPSet{Name: "GLX-sip-0-XX2", SetType: ipset.HashIP},
-							entries: []ipset.Entry{
-								{IP: "1.1.0.1", SetType: ipset.HashIP}, {IP: "1.1.0.2", SetType: ipset.HashIP},
-							},
-						},
-						netTable: &ipsetTable{
-							IPSet: ipset.IPSet{Name: "GLX-snet-1-XX3", SetType: ipset.HashNet},
-							entries: []ipset.Entry{
-								{Net: "2.1.0.0/24", SetType: ipset.HashNet}, {Net: "2.1.0.2/32", SetType: ipset.HashNet, Options: []string{"nomatch"}}, {Net: "2.1.1.2/32", SetType: ipset.HashNet},
-							},
-						},
+						ipTable: ipTable1,
+						netTable: natTable1,
 						tcpPorts: []string{"53", "80"},
 						udpPorts: []string{"53", "80"},
 					},
@@ -189,18 +194,8 @@ func TestSyncPodChains(t *testing.T) {
 			ingressRule: &ingressRule{
 				srcRules: []rule{
 					{
-						ipTable: &ipsetTable{
-							IPSet: ipset.IPSet{Name: "GLX-sip-0-XX2", SetType: ipset.HashIP},
-							entries: []ipset.Entry{
-								{IP: "1.1.0.1", SetType: ipset.HashIP}, {IP: "1.1.0.2", SetType: ipset.HashIP},
-							},
-						},
-						netTable: &ipsetTable{
-							IPSet: ipset.IPSet{Name: "GLX-snet-1-XX3", SetType: ipset.HashNet},
-							entries: []ipset.Entry{
-								{Net: "2.1.0.0/24", SetType: ipset.HashNet}, {Net: "2.1.0.2/32", SetType: ipset.HashNet, Options: []string{"nomatch"}}, {Net: "2.1.1.2/32", SetType: ipset.HashNet},
-							},
-						},
+						ipTable: ipTable1,
+						netTable: natTable1,
 						tcpPorts: []string{"80"},
 					},
 				},

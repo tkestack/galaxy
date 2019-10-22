@@ -68,24 +68,7 @@ func (h *PortMappingHandler) SetupPortMapping(ports []k8s.Port) error {
 		args = append(args, "-j", string(hostportChain))
 		kubeHostportsChainRules = append(kubeHostportsChainRules, args)
 
-		// Assuming kubelet is syncing iptables KUBE-MARK-MASQ chain
-		// If the request comes from the pod that is serving the hostport, then SNAT
-		args = []string{
-			"-A", string(hostportChain),
-			"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
-			"-s", containerPort.PodIP, "-j", string(KubeMarkMasqChain),
-		}
-		writeLine(natRules, args...)
-
-		// Create hostport chain to DNAT traffic to final destination
-		// IPTables will maintained the stats for this chain
-		args = []string{
-			"-A", string(hostportChain),
-			"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
-			"-m", protocol, "-p", protocol,
-			"-j", "DNAT", fmt.Sprintf("--to-destination=%s:%d", containerPort.PodIP, containerPort.ContainerPort),
-		}
-		writeLine(natRules, args...)
+		containerPortChainRules(&containerPort, protocol, hostportChain, natRules)
 	}
 
 	writeLine(natRules, "COMMIT")
@@ -102,6 +85,27 @@ func (h *PortMappingHandler) SetupPortMapping(ports []k8s.Port) error {
 		}
 	}
 	return nil
+}
+
+func containerPortChainRules(containerPort *k8s.Port, protocol string, hostportChain utiliptables.Chain, natRules *bytes.Buffer) {
+	// Assuming kubelet is syncing iptables KUBE-MARK-MASQ chain
+	// If the request comes from the pod that is serving the hostport, then SNAT
+	args := []string{
+		"-A", string(hostportChain),
+		"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
+		"-s", containerPort.PodIP, "-j", string(KubeMarkMasqChain),
+	}
+	writeLine(natRules, args...)
+
+	// Create hostport chain to DNAT traffic to final destination
+	// IPTables will maintained the stats for this chain
+	args = []string{
+		"-A", string(hostportChain),
+		"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
+		"-m", protocol, "-p", protocol,
+		"-j", "DNAT", fmt.Sprintf("--to-destination=%s:%d", containerPort.PodIP, containerPort.ContainerPort),
+	}
+	writeLine(natRules, args...)
 }
 
 func (h *PortMappingHandler) CleanPortMapping(ports []k8s.Port) {
@@ -198,24 +202,7 @@ func (h *PortMappingHandler) SetupPortMappingForAllPods(ports []k8s.Port) error 
 		}
 		writeLine(natRules, args...)
 
-		// Assuming kubelet is syncing iptables KUBE-MARK-MASQ chain
-		// If the request comes from the pod that is serving the hostport, then SNAT
-		args = []string{
-			"-A", string(hostportChain),
-			"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
-			"-s", containerPort.PodIP, "-j", string(KubeMarkMasqChain),
-		}
-		writeLine(natRules, args...)
-
-		// Create hostport chain to DNAT traffic to final destination
-		// IPTables will maintained the stats for this chain
-		args = []string{
-			"-A", string(hostportChain),
-			"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
-			"-m", protocol, "-p", protocol,
-			"-j", "DNAT", fmt.Sprintf("--to-destination=%s:%d", containerPort.PodIP, containerPort.ContainerPort),
-		}
-		writeLine(natRules, args...)
+		containerPortChainRules(&containerPort, protocol, hostportChain, natRules)
 	}
 
 	// Delete chains no longer in use.

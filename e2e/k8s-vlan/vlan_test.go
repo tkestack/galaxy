@@ -16,6 +16,11 @@ var _ = Describe("galaxy-k8s-vlan vlan test", func() {
 	ifaceCidr := "192.168.0.66/26"
 	containerCidr := "192.168.0.68/26"
 	containerId := helper.NewContainerId()
+	cidrIPNet,_ := ips.ParseCIDR(ifaceCidr)
+	hostVeth1 := helper.NewLinkDevice(nil, utils.HostVethName(containerId, ""), "veth").SetMaster(
+		helper.NewLinkDevice(nil, "br2", "bridge"),
+	)
+	dummyVlan2 := helper.NewDummyVlan(cidrIPNet, 2)
 	AfterEach(func() {
 		helper.CleanupNetNS()
 		helper.CleanupDummy()
@@ -40,19 +45,8 @@ var _ = Describe("galaxy-k8s-vlan vlan test", func() {
 		//Expect(err).To(HaveOccurred()) // vlan is not reachable on host
 
 		// check host iface topology, route, neigh, ip address is expected
-		cidrIPNet, err := ips.ParseCIDR(ifaceCidr)
-		Expect(err).NotTo(HaveOccurred())
 		err = (&helper.NetworkTopology{
-			LeaveDevices: []*helper.LinkDevice{
-				helper.NewLinkDevice(nil, utils.HostVethName(containerId, ""), "veth").SetMaster(
-					helper.NewLinkDevice(nil, "br2", "bridge"),
-				),
-				helper.NewLinkDevice(nil, "dummy0.2", "vlan").SetMaster(
-					helper.NewLinkDevice(nil, "br2", "bridge"),
-				).SetParent(
-					helper.NewLinkDevice(cidrIPNet, "dummy0", "dummy"),
-				),
-			},
+			LeaveDevices: []*helper.LinkDevice{hostVeth1,dummyVlan2},
 		}).Verify()
 		Expect(err).Should(BeNil(), "%v", err)
 
@@ -78,27 +72,14 @@ var _ = Describe("galaxy-k8s-vlan vlan test", func() {
 			`{"cniVersion":"0.2.0","ip4":{"ip":"192.168.0.68/26","gateway":"192.168.0.65","routes":[{"dst":"10.0.0.0/8"},{"dst":"172.16.0.0/12"},{"dst":"192.168.0.0/16"}]},"dns":{}}`, netConf)
 
 		// check host iface topology, route, neigh, ip address is expected
-		cidrIPNet, err := ips.ParseCIDR(ifaceCidr)
-		Expect(err).NotTo(HaveOccurred())
 		err = (&helper.NetworkTopology{
 			LeaveDevices: []*helper.LinkDevice{
-				helper.NewLinkDevice(nil, utils.HostVethName(containerId, ""), "veth").SetMaster(
-					helper.NewLinkDevice(nil, "br2", "bridge"),
-				),
-				helper.NewLinkDevice(nil, "dummy0.2", "vlan").SetMaster(
-					helper.NewLinkDevice(nil, "br2", "bridge"),
-				).SetParent(
-					helper.NewLinkDevice(cidrIPNet, "dummy0", "dummy"),
-				),
-
+				hostVeth1,
+				dummyVlan2,
 				helper.NewLinkDevice(nil, utils.HostVethName(containerId, "-2"), "veth").SetMaster(
 					helper.NewLinkDevice(nil, "br3", "bridge"),
 				),
-				helper.NewLinkDevice(nil, "dummy0.3", "vlan").SetMaster(
-					helper.NewLinkDevice(nil, "br3", "bridge"),
-				).SetParent(
-					helper.NewLinkDevice(cidrIPNet, "dummy0", "dummy"),
-				),
+				helper.NewDummyVlan(cidrIPNet, 3),
 			},
 		}).Verify()
 		Expect(err).Should(BeNil(), "%v", err)
