@@ -26,6 +26,7 @@ import (
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// FloatingIP provides configuration for floatingIP.
 type FloatingIP struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -34,6 +35,7 @@ type FloatingIP struct {
 	Spec FloatingIPSpec `json:"spec"`
 }
 
+// FloatingIPSpec is spec of FloatingIP.
 type FloatingIPSpec struct {
 	//key can be resolved as pool, namespace name, app name, app type and pod name
 	Key string `json:"key"`
@@ -49,6 +51,7 @@ type FloatingIPSpec struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// FloatingIPList is list of FloatingIP.
 type FloatingIPList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
@@ -60,6 +63,7 @@ type FloatingIPList struct {
 // +genclient:noStatus
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// Pool provides configuration for FloatingIP pool which used to store FloatingIP.
 type Pool struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -71,6 +75,7 @@ type Pool struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// PoolList is list of Pool struct.
 type PoolList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
