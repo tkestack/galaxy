@@ -343,64 +343,18 @@ func TestMultipleIPAM(t *testing.T) {
 	defer ipam.Shutdown()
 	secondIPAM := CreateIPAMWithTableName(t, "test_table")
 	defer secondIPAM.Shutdown()
-	var check = func(ip net.IP, expectKey string) {
-		t.Logf("testing expectKey %s, ip %s", expectKey, ip.String())
-		t.Logf("secondIPAM...")
-		// check secondIPAM query result is not empty
-		secondFip, err := secondIPAM.ByIP(ip)
-		if err != nil || secondFip.Key != expectKey {
-			t.Fatalf("key %s, err %v", secondFip.Key, err)
-		}
-		ipInfo, err := secondIPAM.first(expectKey)
-		if err != nil || ipInfo.IP.IP.String() != ip.String() {
-			t.Fatalf("ipInfo %v, err %v", ipInfo, err)
-		}
-		m, err := secondIPAM.QueryByPrefix(expectKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(m) == 0 || m[ip.String()] != expectKey {
-			t.Fatalf("%v", m)
-		}
-		subnets, err := secondIPAM.QueryRoutableSubnetByKey(expectKey)
-		if err != nil || len(subnets) == 0 {
-			t.Fatalf("%v err %v", subnets, err)
-		}
-		// check ipam query result is empty
-		t.Logf("ipam...")
-		secondFip, err = ipam.ByIP(ip)
-		if err != nil || secondFip.Key != "" {
-			t.Fatalf("key %s, err %v", secondFip.Key, err)
-		}
-		ipInfo, err = ipam.first(expectKey)
-		if err != nil || ipInfo != nil {
-			t.Fatalf("ipInfo %v, err %v", ipInfo, err)
-		}
-		m, err = ipam.QueryByPrefix(expectKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(m) != 0 {
-			t.Fatalf("%v", m)
-		}
-		subnets, err = ipam.QueryRoutableSubnetByKey(expectKey)
-		if err != nil || len(subnets) != 0 {
-			t.Fatalf("%v err %v", subnets, err)
-		}
-	}
 	ip := net.ParseIP("10.49.27.216")
 	if err := secondIPAM.AllocateSpecificIP("pod1", ip, constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
-	check(ip, "pod1")
+	checkMultipleIPAM(t, ipam, secondIPAM, ip, "pod1")
 
 	_, routableSubnet, _ := net.ParseCIDR("10.173.13.0/24")
 	ip2, err := secondIPAM.AllocateInSubnet("pod2", routableSubnet, constant.ReleasePolicyPodDelete, "")
 	if err != nil || ip2 == nil {
 		t.Fatalf("ip %v, err %v", ip2, err)
 	}
-	check(ip2, "pod2")
-
+	checkMultipleIPAM(t, ipam, secondIPAM, ip2, "pod2")
 	// check release ips
 	if err := secondIPAM.Release("pod1", ip); err != nil {
 		t.Fatal(err)
@@ -414,6 +368,64 @@ func TestMultipleIPAM(t *testing.T) {
 	if ipInfo, err := secondIPAM.first("pod2"); err != nil || ipInfo != nil {
 		t.Fatalf("ipInfo %v, err %v", ipInfo, err)
 	}
+}
+
+func checkMultipleIPAM(t *testing.T, ipam, secondIPAM *dbIpam, ip net.IP, expectKey string) {
+	t.Logf("testing expectKey %s, ip %s", expectKey, ip.String())
+	t.Logf("secondIPAM...")
+	// check secondIPAM query result is not empty
+	secondFip, err := secondIPAM.ByIP(ip)
+	if err != nil || secondFip.Key != expectKey {
+		t.Fatalf("key %s, err %v", secondFip.Key, err)
+	}
+	ipInfo, err := secondIPAM.first(expectKey)
+	if err != nil || ipInfo.IP.IP.String() != ip.String() {
+		t.Fatalf("ipInfo %v, err %v", ipInfo, err)
+	}
+	if err := checkByPrefix(secondIPAM, expectKey, expectKey); err != nil {
+		t.Fatal(err)
+	}
+	subnets, err := secondIPAM.QueryRoutableSubnetByKey(expectKey)
+	if err != nil || len(subnets) == 0 {
+		t.Fatalf("%v err %v", subnets, err)
+	}
+	// check ipam query result is empty
+	t.Logf("ipam...")
+	secondFip, err = ipam.ByIP(ip)
+	if err != nil || secondFip.Key != "" {
+		t.Fatalf("key %s, err %v", secondFip.Key, err)
+	}
+	ipInfo, err = ipam.first(expectKey)
+	if err != nil || ipInfo != nil {
+		t.Fatalf("ipInfo %v, err %v", ipInfo, err)
+	}
+	if err := checkByPrefix(ipam, expectKey); err != nil {
+		t.Fatal(err)
+	}
+	subnets, err = ipam.QueryRoutableSubnetByKey(expectKey)
+	if err != nil || len(subnets) != 0 {
+		t.Fatalf("%v err %v", subnets, err)
+	}
+}
+
+func checkByPrefix(ipam IPAM, prefix string, expectKeys ...string) error {
+	fips, err := ipam.ByPrefix(prefix)
+	if err != nil {
+		return err
+	}
+	if len(fips) != len(expectKeys) {
+		return fmt.Errorf("%v", fips)
+	}
+	expectMap := make(map[string]string)
+	for _, expect := range expectKeys {
+		expectMap[expect] = ""
+	}
+	for _, fip := range fips {
+		if _, ok := expectMap[fip.Key]; !ok {
+			return fmt.Errorf("expect %v, got %v", expectKeys, fips)
+		}
+	}
+	return nil
 }
 
 // TestGetRoutableSubnet test RoutableSubnet function.

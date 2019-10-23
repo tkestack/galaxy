@@ -321,19 +321,6 @@ func (i *dbIpam) toFIPSubnet(routableSubnet *net.IPNet) *net.IPNet {
 	return nil
 }
 
-// QueryByPrefix query map key:floatingIP by prefix key
-func (i *dbIpam) QueryByPrefix(prefix string) (map[string]string, error) {
-	fips, err := i.ByPrefix(prefix)
-	if err != nil {
-		return nil, err
-	}
-	ips := make(map[string]string, len(fips))
-	for i := range fips {
-		ips[nets.IntToIP(fips[i].IP).String()] = fips[i].Key
-	}
-	return ips, nil
-}
-
 // ByPrefix filter floatingIPs by prefix key.
 func (i *dbIpam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
 	var fips []database.FloatingIP

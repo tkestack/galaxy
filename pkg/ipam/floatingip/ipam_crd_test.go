@@ -177,35 +177,14 @@ func allocateSomeIPs(t *testing.T, ipam IPAM) {
 }
 
 func testByPrefix(t *testing.T, ipam IPAM) {
-	now := time.Now().Add(-time.Second) // sub one second because db stores unix timestamp without of Nano time
 	allocateSomeIPs(t, ipam)
-	fips, err := ipam.ByPrefix("od")
-	if err != nil {
+	if err := checkByPrefix(ipam, "od"); err != nil {
 		t.Fatal(err)
 	}
-	if len(fips) != 0 {
-		t.Fatal(len(fips))
-	}
-
-	fips, err = ipam.ByPrefix("pod")
-	if err != nil {
+	if err := checkByPrefix(ipam, "pod", "pod1", "pod2"); err != nil {
 		t.Fatal(err)
 	}
-	if len(fips) != 2 {
-		t.Fatal(len(fips))
-	}
-
-	fips, err = ipam.ByPrefix("pod2")
-	if err != nil {
+	if err := checkByPrefix(ipam, "pod2", "pod2"); err != nil {
 		t.Fatal(err)
-	}
-	if len(fips) != 1 {
-		t.Fatal(len(fips))
-	}
-	if fips[0].Key != "pod2" {
-		t.Fatal(fips)
-	}
-	if !fips[0].UpdatedAt.After(now) {
-		t.Fatal(fips[0].UpdatedAt)
 	}
 }
