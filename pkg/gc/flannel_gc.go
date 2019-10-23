@@ -87,25 +87,16 @@ func (gc *flannelGC) cleanupIP() error {
 		return err
 	}
 	for _, fi := range fis {
-		if fi.IsDir() {
-			continue
-		}
-		ip := net.ParseIP(fi.Name())
-		if len(ip) == 0 {
+		if fi.IsDir() || len(net.ParseIP(fi.Name())) == 0 {
 			continue
 		}
 		ipFile := filepath.Join(gc.allocatedIPDir, fi.Name())
 		containerIdData, err := ioutil.ReadFile(ipFile)
-		if os.IsNotExist(err) || len(containerIdData) == 0 {
+		if err != nil || len(containerIdData) == 0 {
 			continue
 		}
+
 		containerId := string(containerIdData)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				glog.Warningf("Error read file %s: %v", fi.Name(), err)
-			}
-			continue
-		}
 		if c, err := gc.dockerCli.InspectContainer(containerId); err != nil {
 			if _, ok := err.(docker.ContainerNotFoundError); ok {
 				glog.Infof("container %s not found", containerId)
