@@ -15,6 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+const (
+	pod1CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod1","attribute":"212","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`
+	pod2CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.216","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod2","attribute":"333","policy":1,"subnet":"10.49.27.0/24","updateTime":null}}`
+)
+
 func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
 	galaxyCli := fakeGalaxyCli.NewSimpleClientset(objs...)
 	crdIPAM := NewCrdIPAM(galaxyCli, InternalIp).(*crdIpam)
@@ -71,41 +76,52 @@ func TestCRDAllocateSpecificIP(t *testing.T) {
 	if `&{key:pod1 att:212 policy:2 subnet:10.49.27.0/24 updateTime:{wall:0 ext:0 loc:<nil>}}` != fmt.Sprintf("%+v", allocated) {
 		t.Fatal(allocated)
 	}
-	fip, err := ipam.client.GalaxyV1alpha1().FloatingIPs().Get("10.49.27.205", v1.GetOptions{})
-	if err != nil {
+	if err := checkFIP(ipam, pod1CRD); err != nil {
 		t.Fatal(err)
 	}
-	if !fip.Spec.UpdateTime.After(now) {
-		t.Fatal(fip.Spec.UpdateTime)
+}
+
+func checkFIP(ipam *crdIpam, expect string) error {
+	fips, err := ipam.client.GalaxyV1alpha1().FloatingIPs().List(v1.ListOptions{})
+	if err != nil {
+		return err
 	}
+	if len(fips.Items) != 1 {
+		return fmt.Errorf("expect 1 fip, found %v", fips)
+	}
+	fip := fips.Items[0]
 	fip.Spec.UpdateTime = v1.Time{time.Time{}}
 	data, err := json.Marshal(fip)
 	if err != nil {
+		return err
+	}
+	if expect != string(data) {
+		return fmt.Errorf("expect %s, found %s", expect, string(data))
+	}
+	return nil
+}
+
+func TestCRDReserveIP(t *testing.T) {
+	ipam := createTestCrdIPAM(t)
+	testReserveIP(t, ipam)
+	if err := checkFIP(ipam, `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"p1","attribute":"this is p1","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`); err != nil {
 		t.Fatal(err)
 	}
-	if `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod1","attribute":"212","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}` != string(data) {
-		t.Fatal(string(data))
+}
+
+func TestCRDRelease(t *testing.T) {
+	ipam := createTestCrdIPAM(t)
+	testRelease(t, ipam)
+	if err := checkFIP(ipam, pod1CRD); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestCRDReleaseIPs(t *testing.T) {
 	ipam := createTestCrdIPAM(t)
 	testReleaseIPs(t, ipam)
-	fips, err := ipam.client.GalaxyV1alpha1().FloatingIPs().List(v1.ListOptions{})
-	if err != nil {
+	if err := checkFIP(ipam, pod2CRD); err != nil {
 		t.Fatal(err)
-	}
-	if len(fips.Items) != 1 {
-		t.Fatal(fips)
-	}
-	fip := fips.Items[0]
-	fip.Spec.UpdateTime = v1.Time{time.Time{}}
-	data, err := json.Marshal(fip)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.216","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod2","attribute":"333","policy":1,"subnet":"10.49.27.0/24","updateTime":null}}` != string(data) {
-		t.Fatal(string(data))
 	}
 }
 
@@ -119,13 +135,41 @@ func TestCRDByPrefix(t *testing.T) {
 	testByPrefix(t, ipam)
 }
 
-func testReleaseIPs(t *testing.T, ipam IPAM) {
+func testRelease(t *testing.T, ipam IPAM) {
+	allocateSomeIPs(t, ipam)
+	// test key ip mismatch
+	if err := ipam.Release("pod1", net.ParseIP("10.49.27.216")); err == nil {
+		t.Fatal(err)
+	}
+	if err := checkIPKey(ipam, "10.49.27.216", "pod2"); err != nil {
+		t.Fatal(err)
+	}
+	// test key ip match
+	if err := ipam.Release("pod2", net.ParseIP("10.49.27.216")); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkIPKey(ipam, "10.49.27.205", "pod1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkIPKey(ipam, "10.49.27.216", ""); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testReserveIP(t *testing.T, ipam IPAM) {
 	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"), constant.ReleasePolicyNever, "212"); err != nil {
 		t.Fatal(err)
 	}
-	if err := ipam.AllocateSpecificIP("pod2", net.ParseIP("10.49.27.216"), constant.ReleasePolicyImmutable, "333"); err != nil {
+	if err := ipam.ReserveIP("pod1", "p1", "this is p1"); err != nil {
 		t.Fatal(err)
 	}
+	if err := checkIPKeyAttr(ipam, "10.49.27.205", "p1", "this is p1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testReleaseIPs(t *testing.T, ipam IPAM) {
+	allocateSomeIPs(t, ipam)
 	relesed, unreleased, err := ipam.ReleaseIPs(map[string]string{
 		"10.49.27.205": "pod1",  // key match, expect to be released
 		"10.49.27.216": "pod3",  // key mismatch, expect not to be released, and returned key should be updated
@@ -187,4 +231,32 @@ func testByPrefix(t *testing.T, ipam IPAM) {
 	if err := checkByPrefix(ipam, "pod2", "pod2"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func checkIPKey(ipam IPAM, checkIP, expectKey string) error {
+	return checkByIP(ipam, checkIP, expectKey, nil)
+}
+
+func checkIPKeyAttr(ipam IPAM, checkIP, expectKey, expectAttr string) error {
+	return checkByIP(ipam, checkIP, expectKey, &expectAttr)
+}
+
+func checkByIP(ipam IPAM, checkIP, expectKey string, expectAttr *string) error {
+	ip := net.ParseIP(checkIP)
+	if ip == nil {
+		return fmt.Errorf("bad check ip: %s", checkIP)
+	}
+	fip, err := ipam.ByIP(ip)
+	if err != nil {
+		return err
+	}
+	if fip.Key != expectKey {
+		return fmt.Errorf("expect key: %s, got %s, ip %s", expectKey, fip.Key, checkIP)
+	}
+	if expectAttr != nil {
+		if fip.Attr != *expectAttr {
+			return fmt.Errorf("expect attr: %s, got %s, ip %s", *expectAttr, fip.Attr, checkIP)
+		}
+	}
+	return nil
 }

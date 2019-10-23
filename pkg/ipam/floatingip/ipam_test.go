@@ -53,72 +53,6 @@ func CreateIPAMWithTableName(t *testing.T, tableName string) *dbIpam {
 	return i.(*dbIpam)
 }
 
-// TestAllocateRelease can test floatingIP allocate.
-func TestAllocateRelease(t *testing.T) {
-	ipam := Start(t)
-	defer ipam.Shutdown()
-	ips, err := ipam.allocate([]string{"pod1-1", "pod1-2", "pod1-3"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fmt.Sprintf("%v", ips) != "[10.49.27.205 10.49.27.216 10.49.27.217]" {
-		t.Fatal(ips)
-	}
-	ipInfo, err := ipam.first("pod1-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ipInfo == nil {
-		t.Fatal()
-	}
-	if ipInfo.IP.String() != "10.49.27.205/24" {
-		t.Fatal(ipInfo.IP.String())
-	}
-	if ipInfo.Gateway.String() != "10.49.27.1" {
-		t.Fatal(ipInfo.Gateway.String())
-	}
-	if ipInfo.Vlan != 2 {
-		t.Fatal(ipInfo.Vlan)
-	}
-	ipInfo, err = ipam.first("pod1-4")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ipInfo != nil {
-		t.Fatal(ipInfo)
-	}
-	if err := ipam.Release("pod1-2", net.ParseIP("10.49.27.216")); err != nil {
-		t.Fatal(err)
-	}
-	ips, err = ipam.allocate([]string{"pod1-2", "pod1-4", "pod2-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fmt.Sprintf("%v", ips) != "[10.49.27.216 10.49.27.218 10.173.13.2]" {
-		t.Fatal(ips)
-	}
-	var fips []database.FloatingIP
-	if err := ipam.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Limit(100).Where("`key` = \"\"").Find(&fips).Error
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(fips) != 9 {
-		t.Fatal(len(fips))
-	}
-	if err := ipam.ReleaseByPrefix("pod1-"); err != nil {
-		t.Fatal(err)
-	}
-	if err := ipam.store.Transaction(func(tx *gorm.DB) error {
-		return tx.Where("`key` != \"\"").Find(&fips).Error
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(fips) != 1 {
-		t.Fatal(len(fips))
-	}
-}
-
 // TestApplyFloatingIPs test ipam applyFloatingIPs function.
 func TestApplyFloatingIPs(t *testing.T) {
 	ipam := Start(t)
@@ -327,9 +261,8 @@ func TestAllocateSpecificIP(t *testing.T) {
 	if err := ipam.AllocateSpecificIP("pod1", ip, constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
-	fip, err := ipam.ByIP(ip)
-	if err != nil || fip.Key != "pod1" {
-		t.Fatalf("key %s, err %v", fip.Key, err)
+	if err := checkIPKey(ipam, "10.49.27.216", "pod1"); err != nil {
+		t.Fatal(err)
 	}
 	// check if an allocated ip can be allocated again, should return an ErrNotUpdated error
 	if err := ipam.AllocateSpecificIP("pod2", ip, constant.ReleasePolicyPodDelete, ""); err == nil || err != ErrNotUpdated {
@@ -524,6 +457,20 @@ func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	if fmt.Sprintf("%+v", ipInfo) != "&{IPInfo:{IP:10.173.13.2/24 Vlan:2 Gateway:10.173.13.1 RoutableSubnet:10.173.13.0/24} FIP:{Table: Key:pod3 Subnet:10.173.13.0/24 Attr:111 IP:179113218 Policy:2 UpdatedAt:0001-01-01 00:00:00 +0000 UTC}}" {
 		t.Error(fmt.Sprintf("%+v", ipInfo))
 	}
+}
+
+// TestDBReserveIP test ReserveIP function.
+func TestDBReserveIP(t *testing.T) {
+	ipam := Start(t)
+	defer ipam.Shutdown()
+	testReserveIP(t, ipam)
+}
+
+// TestDBRelease test Release function.
+func TestDBRelease(t *testing.T) {
+	ipam := Start(t)
+	defer ipam.Shutdown()
+	testRelease(t, ipam)
 }
 
 // TestDBReleaseIPs test ReleaseIPs function.

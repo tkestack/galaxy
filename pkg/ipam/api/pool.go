@@ -113,53 +113,58 @@ func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Resp
 		}
 	}
 	if pool.PreAllocateIP {
-		poolPrefix := util.NewKeyObj(util.DeploymentPrefixKey, "", "", "", pool.Name).PoolPrefix()
-		lockIndex := c.LockPool.GetLockIndex([]byte(poolPrefix))
-		c.LockPool.RawLock(lockIndex)
-		defer c.LockPool.RawUnlock(lockIndex)
-		fips, err := c.IPAM.ByPrefix(poolPrefix)
-		if err != nil {
-			httputil.InternalError(resp, err)
-			return
-		}
-		subnets, err := c.IPAM.QueryRoutableSubnetByKey("")
-		if err != nil {
-			httputil.InternalError(resp, err)
-			return
-		}
-		if len(subnets) == 0 {
-			resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: len(fips)})
-			return
-		}
-		j := 0
-		_, subnetIPNet, _ := net.ParseCIDR(subnets[j])
-		if pool.Size <= len(fips) {
-			resp.WriteEntity(UpdatePoolResp{Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: len(fips)})
-			return
-		}
-		needAllocateIPs := pool.Size - len(fips)
-		for i := 0; i < needAllocateIPs; i++ {
-			ip, err := c.IPAM.AllocateInSubnet(poolPrefix, subnetIPNet, constant.ReleasePolicyNever, "")
-			if err == nil {
-				glog.Infof("allocated ip %s to %s during creating or updating pool", ip.String(), poolPrefix)
-				continue
-			} else if err == floatingip.ErrNoEnoughIP {
-				j++
-				if j == len(subnets) {
-					resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: pool.Size - needAllocateIPs + i})
-					return
-				}
-				_, subnetIPNet, _ = net.ParseCIDR(subnets[j])
-				i--
-			} else {
-				httputil.InternalError(resp, err)
-				return
-			}
-		}
-		resp.WriteEntity(UpdatePoolResp{Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: pool.Size})
+		c.preAllocateIP(req, resp, &pool)
 		return
 	}
 	httputil.Ok(resp)
+	return
+}
+
+func (c *PoolController) preAllocateIP(req *restful.Request, resp *restful.Response, pool *Pool) {
+	poolPrefix := util.NewKeyObj(util.DeploymentPrefixKey, "", "", "", pool.Name).PoolPrefix()
+	lockIndex := c.LockPool.GetLockIndex([]byte(poolPrefix))
+	c.LockPool.RawLock(lockIndex)
+	defer c.LockPool.RawUnlock(lockIndex)
+	fips, err := c.IPAM.ByPrefix(poolPrefix)
+	if err != nil {
+		httputil.InternalError(resp, err)
+		return
+	}
+	subnets, err := c.IPAM.QueryRoutableSubnetByKey("")
+	if err != nil {
+		httputil.InternalError(resp, err)
+		return
+	}
+	if len(subnets) == 0 {
+		resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: len(fips)})
+		return
+	}
+	j := 0
+	_, subnetIPNet, _ := net.ParseCIDR(subnets[j])
+	if pool.Size <= len(fips) {
+		resp.WriteEntity(UpdatePoolResp{Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: len(fips)})
+		return
+	}
+	needAllocateIPs := pool.Size - len(fips)
+	for i := 0; i < needAllocateIPs; i++ {
+		ip, err := c.IPAM.AllocateInSubnet(poolPrefix, subnetIPNet, constant.ReleasePolicyNever, "")
+		if err == nil {
+			glog.Infof("allocated ip %s to %s during creating or updating pool", ip.String(), poolPrefix)
+			continue
+		} else if err == floatingip.ErrNoEnoughIP {
+			j++
+			if j == len(subnets) {
+				resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: pool.Size - needAllocateIPs + i})
+				return
+			}
+			_, subnetIPNet, _ = net.ParseCIDR(subnets[j])
+			i--
+		} else {
+			httputil.InternalError(resp, err)
+			return
+		}
+	}
+	resp.WriteEntity(UpdatePoolResp{Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: pool.Size})
 	return
 }
 

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"git.code.oa.com/tkestack/galaxy/pkg/network"
-	log glog "k8s.io/klog"
+	log "k8s.io/klog"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 )

@@ -61,17 +61,39 @@ type resyncObj struct {
 // 4. deleted pods whose parent statefulset/tapp exist but pod index > .spec.replica
 // 5. existing pods but its status is evicted
 func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
-	if !p.storeReady() {
-		return nil
-	}
 	glog.V(4).Infof("resync pods+")
 	defer glog.V(4).Infof("resync pods-")
+	resyncMeta := &resyncMeta{
+		allocatedIPs: make(map[string]resyncObj),
+		assignedPods: make(map[string]resyncObj),
+	}
+	if err := p.fetchChecklist(ipam, resyncMeta); err != nil {
+		return err
+	}
+	if err := p.fetchAppAndPodMeta(resyncMeta); err != nil {
+		return err
+	}
+	if p.cloudProvider != nil {
+		p.resyncCloudProviderIPs(ipam, resyncMeta)
+	}
+	p.resyncAllocatedIPs(ipam, resyncMeta)
+	return nil
+}
+
+type resyncMeta struct {
+	assignedPods map[string]resyncObj // pods assigned ENI ips from cloudprovider
+	allocatedIPs map[string]resyncObj // allocated ips from galaxy pool
+	existPods    map[string]*corev1.Pod
+	dpMap        map[string]*appv1.Deployment
+	tappMap      map[string]*tappv1.TApp
+	ssMap        map[string]*appv1.StatefulSet
+}
+
+func (p *FloatingIPPlugin) fetchChecklist(ipam floatingip.IPAM, meta *resyncMeta) error {
 	all, err := ipam.ByPrefix("")
 	if err != nil {
 		return err
 	}
-	allocatedIPs := make(map[string]resyncObj)
-	assignedPods := make(map[string]resyncObj) // syncing ips with cloudprovider
 	for i := range all {
 		fip := all[i]
 		if fip.Key == "" {
@@ -87,63 +109,47 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 		}
 		if p.cloudProvider != nil {
 			// we send unassign request to cloud provider for any release policy
-			assignedPods[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
+			meta.assignedPods[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
 		}
 		if fip.Policy == uint16(constant.ReleasePolicyNever) {
 			// never release these ips
 			// for deployment, put back to deployment
 			// we do nothing for statefulset or tapp pod, because we preserve ip according to its pod name
 			if keyObj.Deployment() {
-				allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
+				meta.allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
 			}
 			// skip if it is a statefulset key and is ReleasePolicyNever
 			continue
 		}
-		allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
+		meta.allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
 	}
-	pods, err := p.listWantedPods()
-	if err != nil {
-		return err
-	}
-	existPods := map[string]*corev1.Pod{}
-	for i := range pods {
-		if evicted(pods[i]) {
-			// for evicted pod, treat as not exist
-			continue
-		}
-		keyObj := util.FormatKey(pods[i])
-		existPods[keyObj.KeyInDB] = pods[i]
-	}
-	ssMap, err := p.getSSMap()
-	if err != nil {
-		return err
-	}
-	dpMap, err := p.getDPMap()
-	if err != nil {
-		return err
-	}
-	tappMap, err := p.getTAppMap()
-	if err != nil {
-		return err
-	}
-	if glog.V(5) {
-		podMap := make(map[string]string, len(existPods))
-		for k, v := range existPods {
-			podMap[k] = util.PodName(v)
-		}
-		glog.V(5).Infof("existPods %v", podMap)
-	}
-	if p.cloudProvider != nil {
-		p.resyncCloudProviderIPs(ipam, assignedPods, allocatedIPs, existPods)
-	}
-	p.resyncAllocatedIPs(ipam, allocatedIPs, existPods, dpMap, tappMap, ssMap)
 	return nil
 }
 
-func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, assignedPods, allocatedIPs map[string]resyncObj,
-	existPods map[string]*corev1.Pod) {
-	for key, obj := range assignedPods {
-		if _, ok := existPods[key]; ok {
+func (p *FloatingIPPlugin) fetchAppAndPodMeta(meta *resyncMeta) error {
+	var err error
+	meta.existPods, err = p.listWantedPodsToMap()
+	if err != nil {
+		return err
+	}
+	meta.ssMap, err = p.getSSMap()
+	if err != nil {
+		return err
+	}
+	meta.dpMap, err = p.getDPMap()
+	if err != nil {
+		return err
+	}
+	meta.tappMap, err = p.getTAppMap()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, meta *resyncMeta) {
+	for key, obj := range meta.assignedPods {
+		if _, ok := meta.existPods[key]; ok {
 			continue
 		}
 		// check with apiserver to confirm it really not exist
@@ -165,7 +171,7 @@ func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, assigned
 			IPAddress: nets.IntToIP(obj.fip.IP).String(),
 		}); err != nil {
 			// delete this record from allocatedIPs map to have a retry
-			delete(allocatedIPs, key)
+			delete(meta.allocatedIPs, key)
 			glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.fip.IP).String(), key, err)
 			continue
 		}
@@ -176,11 +182,9 @@ func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, assigned
 	}
 }
 
-func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, allocatedIPs map[string]resyncObj,
-	existPods map[string]*corev1.Pod, dpMap map[string]*appv1.Deployment, tappMap map[string]*tappv1.TApp,
-	ssMap map[string]*appv1.StatefulSet) {
-	for key, obj := range allocatedIPs {
-		if _, ok := existPods[key]; ok {
+func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, meta *resyncMeta) {
+	for key, obj := range meta.allocatedIPs {
+		if _, ok := meta.existPods[key]; ok {
 			continue
 		}
 		// check with apiserver to confirm it really not exist
@@ -194,7 +198,7 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, allocatedIPs
 			var appExist bool
 			var replicas int32
 			if obj.keyObj.StatefulSet() {
-				ss, ok := ssMap[appFullName]
+				ss, ok := meta.ssMap[appFullName]
 				if ok {
 					appExist = true
 					replicas = 1
@@ -203,7 +207,7 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, allocatedIPs
 					}
 				}
 			} else if obj.keyObj.TApp() {
-				tapp, ok := tappMap[appFullName]
+				tapp, ok := meta.tappMap[appFullName]
 				if ok {
 					appExist = true
 					replicas = tapp.Spec.Replicas
@@ -220,7 +224,7 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, allocatedIPs
 			continue
 		}
 		var replicas int
-		dp, ok := dpMap[appFullName]
+		dp, ok := meta.dpMap[appFullName]
 		if ok {
 			replicas = int(*dp.Spec.Replicas)
 		}
@@ -339,12 +343,26 @@ func (p *FloatingIPPlugin) listWantedPods() ([]*corev1.Pod, error) {
 	return filtered, nil
 }
 
+func (p *FloatingIPPlugin) listWantedPodsToMap() (map[string]*corev1.Pod, error) {
+	pods, err := p.listWantedPods()
+	if err != nil {
+		return nil, err
+	}
+	existPods := map[string]*corev1.Pod{}
+	for i := range pods {
+		if evicted(pods[i]) {
+			// for evicted pod, treat as not exist
+			continue
+		}
+		keyObj := util.FormatKey(pods[i])
+		existPods[keyObj.KeyInDB] = pods[i]
+	}
+	return existPods, nil
+}
+
 // syncPodIPs sync all pods' ips with db, if a pod has PodIP and its ip is unallocated, allocate the ip to it
 func (p *FloatingIPPlugin) syncPodIPsIntoDB() {
 	glog.V(4).Infof("sync pod ips into DB")
-	if !p.storeReady() {
-		return
-	}
 	pods, err := p.listWantedPods()
 	if err != nil {
 		glog.Warning(err)
