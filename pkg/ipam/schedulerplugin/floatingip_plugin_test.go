@@ -69,6 +69,7 @@ func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlu
 	return fipPlugin, stopChan, nodes
 }
 
+// #lizard forgives
 func TestFilter(t *testing.T) {
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t)
 	defer func() { stopChan <- struct{}{} }()
@@ -170,6 +171,7 @@ func TestReleaseIP(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 func TestFilterForDeployment(t *testing.T) {
 	deadPod := CreateDeploymentPod("dp-aaa-bbb", "ns1", immutableAnnotation)
 	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", immutableAnnotation)
@@ -299,6 +301,7 @@ func checkFilterCase(fipPlugin *FloatingIPPlugin, testCase filterCase, nodes []c
 	return nil
 }
 
+// #lizard forgives
 func TestFilterForDeploymentIPPool(t *testing.T) {
 	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
 	pod2 := CreateDeploymentPod("dp2-abc-def", "ns2", poolAnnotation("pool1"))
@@ -648,6 +651,7 @@ func (f *fakeCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssign
 	return &rpc.UnAssignIPReply{Success: true}, nil
 }
 
+// #lizard forgives
 func TestUnBind(t *testing.T) {
 	pod1 := CreateStatefulSetPod("pod1-1", "demo", map[string]string{})
 	keyObj := util.FormatKey(pod1)
@@ -707,6 +711,7 @@ func TestUnBindImmutablePod(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 func TestAllocateRecentIPs(t *testing.T) {
 	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
 	pod2 := CreateDeploymentPod("dp2-aaa-bbb", "ns2", immutableAnnotation)

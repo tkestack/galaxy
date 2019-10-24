@@ -1,18 +1,15 @@
 package schedulerplugin
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
 
 	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/cloudprovider/rpc"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/floatingip"
 	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
@@ -147,6 +144,7 @@ func (p *FloatingIPPlugin) fetchAppAndPodMeta(meta *resyncMeta) error {
 	return nil
 }
 
+// #lizard forgives
 func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, meta *resyncMeta) {
 	for key, obj := range meta.allocatedIPs {
 		if _, ok := meta.existPods[key]; ok {

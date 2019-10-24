@@ -130,19 +130,8 @@ func (gc *flannelGC) cleanupGCDirs() error {
 			if fi.IsDir() {
 				continue
 			}
-			file := filepath.Join(dir, fi.Name())
-			if c, err := gc.dockerCli.InspectContainer(fi.Name()); err != nil {
-				if _, ok := err.(docker.ContainerNotFoundError); ok {
-					glog.Infof("container %s not found", fi.Name())
-					gc.removeLeakyStateFile(file)
-				} else {
-					glog.Warningf("Error inspect container %s: %v", fi.Name(), err)
-				}
-			} else {
-				if c.State != nil && (c.State.Status == ContainerExited || c.State.Status == ContainerDead) {
-					glog.Infof("container %s(%s) exited %s", c.ID, c.Name, c.State.Status)
-					gc.removeLeakyStateFile(file)
-				}
+			if gc.shouldCleanup(fi.Name()) {
+				gc.removeLeakyStateFile(filepath.Join(dir, fi.Name()))
 			}
 		}
 	}
@@ -169,23 +158,31 @@ func (gc *flannelGC) cleanupVeth() error {
 		} else {
 			continue
 		}
-		if c, err := gc.dockerCli.InspectContainer(cid); err != nil {
-			if _, ok := err.(docker.ContainerNotFoundError); ok {
-				glog.Infof("container %s not found, should remove link %s", cid, link.Attrs().Name)
-				if err = netlink.LinkDel(link); err != nil {
-					glog.Warningf("failed remove link %s: %v; try next time", link.Attrs().Name, err)
-				}
+		if gc.shouldCleanup(cid) {
+			if err = netlink.LinkDel(link); err != nil {
+				glog.Warningf("failed remove link %s: %v; try next time", link.Attrs().Name, err)
 			}
-		} else {
-			if c.State != nil && (c.State.Status == ContainerExited || c.State.Status == ContainerDead) {
-				glog.Infof("container %s(%s) exited %s, should remove link %s", c.ID, c.Name, c.State.Status, link.Attrs().Name)
-				if err = netlink.LinkDel(link); err != nil {
-					glog.Warningf("failed remove link %s: %v; try next time", link.Attrs().Name, err)
-				}
-			}
+			glog.Infof("removed link %s for container %s", cid, link.Attrs().Name, cid)
 		}
 	}
 	return nil
+}
+
+func (gc *flannelGC) shouldCleanup(cid string) bool {
+	if c, err := gc.dockerCli.InspectContainer(cid); err != nil {
+		if _, ok := err.(docker.ContainerNotFoundError); ok {
+			glog.Infof("container %s not found", cid)
+			return true
+		} else {
+			glog.Warningf("Error inspect container %s: %v", cid, err)
+		}
+	} else {
+		if c.State != nil && (c.State.Status == ContainerExited || c.State.Status == ContainerDead) {
+			glog.Infof("container %s(%s) exited %s", c.ID, c.Name, c.State.Status)
+			return true
+		}
+	}
+	return false
 }
 
 func removeLeakyIPFile(ipFile, containerId string) {

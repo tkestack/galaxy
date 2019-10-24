@@ -19,38 +19,9 @@ func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyO
 	} else if policy == constant.ReleasePolicyNever {
 		return p.reserveIP(key, key, "never policy", p.enabledSecondIP(pod))
 	} else if policy == constant.ReleasePolicyImmutable {
-		var appExist bool
-		var replicas int32
-		// In test, p.StatefulSetLister may be nil
-		if keyObj.StatefulSet() && p.StatefulSetLister != nil {
-			statefulSet, err := p.StatefulSetLister.GetPodStatefulSets(pod)
-			if err != nil {
-				if !metaErrs.IsNotFound(err) {
-					return err
-				}
-			} else {
-				appExist = true
-				if len(statefulSet) > 1 {
-					glog.Warningf("multiple ss found for pod %s", util.PodName(pod))
-				}
-				ss := statefulSet[0]
-				replicas = 1
-				if ss.Spec.Replicas != nil {
-					replicas = *ss.Spec.Replicas
-				}
-			}
-		} else if keyObj.TApp() && p.TAppLister != nil {
-			tapp, err := p.TAppLister.TApps(pod.Namespace).Get(keyObj.AppName)
-			if err != nil {
-				if !metaErrs.IsNotFound(err) {
-					return err
-				}
-			} else {
-				appExist = true
-				replicas = tapp.Spec.Replicas
-			}
-		} else {
-			return nil
+		appExist, replicas, err := p.checkAppAndReplicas(pod, keyObj)
+		if err != nil {
+			return err
 		}
 		shouldReserve, reason, err := p.shouldReserve(pod, keyObj, appExist, replicas)
 		if err != nil {
@@ -63,6 +34,39 @@ func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyO
 		}
 	}
 	return nil
+}
+
+func (p *FloatingIPPlugin) checkAppAndReplicas(pod *corev1.Pod, keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
+	if keyObj.StatefulSet() {
+		return p.getStsReplicas(pod, keyObj)
+	} else if keyObj.TApp() {
+		return p.getTAppReplicas(pod, keyObj)
+	} else {
+		retErr = fmt.Errorf("Unknown app")
+		return
+	}
+	return
+}
+
+func (p *FloatingIPPlugin) getStsReplicas(pod *corev1.Pod, keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
+	statefulSet, err := p.StatefulSetLister.GetPodStatefulSets(pod)
+	if err != nil {
+		if !metaErrs.IsNotFound(err) {
+			retErr = err
+			return
+		}
+	} else {
+		appExist = true
+		if len(statefulSet) > 1 {
+			glog.Warningf("multiple ss found for pod %s", util.PodName(pod))
+		}
+		ss := statefulSet[0]
+		replicas = 1
+		if ss.Spec.Replicas != nil {
+			replicas = *ss.Spec.Replicas
+		}
+	}
+	return
 }
 
 func (p *FloatingIPPlugin) shouldReserve(pod *corev1.Pod, keyObj *util.KeyObj, appExist bool, replicas int32) (bool, string, error) {

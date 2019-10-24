@@ -255,16 +255,6 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 		req.Ports[i].PodIP = result.IP4.IP.IP.To4().String()
 		req.Ports[i].PodName = req.PodName
 	}
-	var newPorts []k8s.Port
-	for i := range req.Ports {
-		if req.Ports[i].HostPort != 0 {
-			newPorts = append(newPorts, req.Ports[i])
-		}
-	}
-	if len(newPorts) == 0 {
-		return nil
-	}
-	req.Ports = newPorts
 	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), true, req.Ports); err != nil {
 		return err
 	}
@@ -278,7 +268,14 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 	if err := g.pmhandler.SetupPortMapping(req.Ports); err != nil {
 		return fmt.Errorf("failed to setup port mapping %v: %v", req.Ports, err)
 	}
-	if err := wait.Poll(10*time.Millisecond, 1*time.Minute, func() (bool, error) {
+	if err := g.updatePortMappingAnnotation(req, data); err != nil {
+		return fmt.Errorf("failed to update pod %s annotation: %v", k8s.GetPodFullName(req.PodName, req.PodNamespace), err)
+	}
+	return nil
+}
+
+func (g *Galaxy) updatePortMappingAnnotation(req *galaxyapi.PodRequest, data []byte) error {
+	return wait.Poll(10*time.Millisecond, 1*time.Minute, func() (bool, error) {
 		pod, err := g.client.CoreV1().Pods(req.PodNamespace).Get(req.PodName, v1.GetOptions{})
 		if err != nil {
 			return false, err
@@ -296,10 +293,7 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 			return false, nil
 		}
 		return false, err
-	}); err != nil {
-		return fmt.Errorf("failed to update pod %s annotation: %v", k8s.GetPodFullName(req.PodName, req.PodNamespace), err)
-	}
-	return nil
+	})
 }
 
 func (g *Galaxy) cleanupPortMapping(req *galaxyapi.PodRequest) error {

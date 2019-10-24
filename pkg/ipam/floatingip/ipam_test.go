@@ -53,6 +53,7 @@ func CreateIPAMWithTableName(t *testing.T, tableName string) *dbIpam {
 	return i.(*dbIpam)
 }
 
+// #lizard forgives
 // TestApplyFloatingIPs test ipam applyFloatingIPs function.
 func TestApplyFloatingIPs(t *testing.T) {
 	ipam := Start(t)
@@ -103,6 +104,7 @@ func TestApplyFloatingIPs(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 // TestRaceCondition test floatingIP allocation race.
 func TestRaceCondition(t *testing.T) {
 	var ipams []*dbIpam
@@ -204,6 +206,7 @@ func TestRoutableSubnet(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 // TestAllocateInSubnetAndQueryRoutableSubnetByKey test QueryRoutableSubnetByKey and AllocateInSubnet functions.
 func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
 	ipam := Start(t)
@@ -270,6 +273,7 @@ func TestAllocateSpecificIP(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 // TestMultipleIPAM test two dbIpam situation.
 func TestMultipleIPAM(t *testing.T) {
 	ipam := Start(t)
@@ -303,6 +307,7 @@ func TestMultipleIPAM(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 func checkMultipleIPAM(t *testing.T, ipam, secondIPAM *dbIpam, ip net.IP, expectKey string) {
 	t.Logf("testing expectKey %s, ip %s", expectKey, ip.String())
 	t.Logf("secondIPAM...")

@@ -245,19 +245,8 @@ func (p *PolicyManager) policyResult(np *networkv1.NetworkPolicy) (*ingressRule,
 	var (
 		inRules         *ingressRule
 		eRules          *egressRule
-		ingress, egress bool
 	)
-	for _, pt := range np.Spec.PolicyTypes {
-		if pt == networkv1.PolicyTypeIngress {
-			ingress = true
-		} else if pt == networkv1.PolicyTypeEgress {
-			egress = true
-		}
-	}
-	if !ingress && !egress {
-		ingress = true
-		egress = len(np.Spec.Egress) > 0
-	}
+	ingress, egress := ingressOrEgress(np)
 	if ingress {
 		inRules = &ingressRule{dstIPTable: tbl}
 		for i := range np.Spec.Ingress {
@@ -287,6 +276,21 @@ func (p *PolicyManager) policyResult(np *networkv1.NetworkPolicy) (*ingressRule,
 		}
 	}
 	return inRules, eRules, nil
+}
+
+func ingressOrEgress(np *networkv1.NetworkPolicy) (ingress bool, egress bool) {
+	for _, pt := range np.Spec.PolicyTypes {
+		if pt == networkv1.PolicyTypeIngress {
+			ingress = true
+		} else if pt == networkv1.PolicyTypeEgress {
+			egress = true
+		}
+	}
+	if !ingress && !egress {
+		ingress = true
+		egress = len(np.Spec.Egress) > 0
+	}
+	return
 }
 
 func (p *PolicyManager) peerRule(ports []networkv1.NetworkPolicyPort, peers []networkv1.NetworkPolicyPeer) *rule {
