@@ -11,27 +11,11 @@ import (
 )
 
 func TestDB(t *testing.T) {
-	db, err := NewTestDB()
-	if err != nil {
-		if strings.Contains(err.Error(), "Failed to open") {
-			t.Skipf("skip testing db due to %q", err.Error())
-		}
-		t.Fatal(err)
+	db := dbInit(t)
+	if db == nil {
+		return
 	}
 	defer db.Shutdown()
-	if err := db.CreateTableIfNotExist(&FloatingIP{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.CreateTableIfNotExist(&FloatingIP{Table: "second_fip_table"}); err != nil {
-		t.Fatal(err)
-	} else if !db.GetConn().HasTable("second_fip_table") {
-		t.Fatal("table with name specific not create")
-	}
-	if err := db.Transaction(func(tx *gorm.DB) error {
-		return tx.Exec(fmt.Sprintf("TRUNCATE %s;", DefaultFloatingipTableName)).Error
-	}); err != nil {
-		t.Fatal(err)
-	}
 
 	fip := FloatingIP{Key: fmt.Sprintf("pod1"), IP: nets.IPToInt(net.IPv4(10, 0, 0, 1))}
 	if err := db.GetConn().Debug().Create(&fip).Error; err != nil {
@@ -71,4 +55,29 @@ func TestDB(t *testing.T) {
 	if len(fips) != 1 {
 		t.Fatal()
 	}
+}
+
+func dbInit(t *testing.T) *DBRecorder {
+	db, err := NewTestDB()
+	if err != nil {
+		if strings.Contains(err.Error(), "Failed to open") {
+			t.Skipf("skip testing db due to %q", err.Error())
+			return nil
+		}
+		t.Fatal(err)
+	}
+	if err := db.CreateTableIfNotExist(&FloatingIP{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateTableIfNotExist(&FloatingIP{Table: "second_fip_table"}); err != nil {
+		t.Fatal(err)
+	} else if !db.GetConn().HasTable("second_fip_table") {
+		t.Fatal("table with name specific not create")
+	}
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		return tx.Exec(fmt.Sprintf("TRUNCATE %s;", DefaultFloatingipTableName)).Error
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return db
 }

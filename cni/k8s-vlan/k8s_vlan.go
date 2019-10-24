@@ -54,23 +54,22 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
+	if err := setupNetwork(result020s, vlanIds, args); err != nil {
+		return err
+	}
+	result020s[0].DNS = conf.DNS
+	return result020s[0].Print()
+}
 
+func setupNetwork(result020s []*t020.Result, vlanIds []uint16, args *skel.CmdArgs) error {
 	if d.MacVlanMode() {
-		if err := d.MaybeCreateVlanDevice(vlanIds[0]); err != nil {
+		if err := setupMacvlan(result020s[0], vlanIds[0], args); err != nil {
 			return err
 		}
-		if err := utils.MacVlanConnectsHostWithContainer(result020s[0], args, d.DeviceIndex); err != nil {
-			return err
-		}
-		_ = utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
 	} else if d.IPVlanMode() {
-		if err := d.MaybeCreateVlanDevice(vlanIds[0]); err != nil {
+		if err := setupIPVlan(result020s[0], vlanIds[0], args); err != nil {
 			return err
 		}
-		if err := utils.IPVlanConnectsHostWithContainer(result020s[0], args, d.DeviceIndex); err != nil {
-			return err
-		}
-		_ = utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns)
 	} else {
 		ifName := args.IfName
 		if err := setupVlanDevice(result020s, vlanIds, args); err != nil {
@@ -83,8 +82,29 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if d.PureMode() {
 		_ = utils.SendGratuitousARP(d.Device, result020s[0].IP4.IP.IP.String(), "")
 	}
-	result020s[0].DNS = conf.DNS
-	return result020s[0].Print()
+	return nil
+}
+
+func setupMacvlan(result *t020.Result, vlanId uint16, args *skel.CmdArgs) error {
+	if err := d.MaybeCreateVlanDevice(vlanId); err != nil {
+		return err
+	}
+	if err := utils.MacVlanConnectsHostWithContainer(result, args, d.DeviceIndex); err != nil {
+		return err
+	}
+	_ = utils.SendGratuitousARP(args.IfName, result.IP4.IP.IP.String(), args.Netns)
+	return nil
+}
+
+func setupIPVlan(result *t020.Result, vlanId uint16, args *skel.CmdArgs) error {
+	if err := d.MaybeCreateVlanDevice(vlanId); err != nil {
+		return err
+	}
+	if err := utils.IPVlanConnectsHostWithContainer(result, args, d.DeviceIndex); err != nil {
+		return err
+	}
+	_ = utils.SendGratuitousARP(args.IfName, result.IP4.IP.IP.String(), args.Netns)
+	return nil
 }
 
 func setupVlanDevice(result020s []*t020.Result, vlanIds []uint16, args *skel.CmdArgs) error {
