@@ -130,6 +130,15 @@ func (d *VlanDriver) initVlanBridgeDevice(device netlink.Link, filteredAddr []ne
 			}
 		}
 	}()
+	err = d.moveAddrAndRoute(device, bri, filteredAddr, rs)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *VlanDriver) moveAddrAndRoute(device netlink.Link, bri netlink.Link, filteredAddr []netlink.Addr, rs []netlink.Route) error {
+	var err error
 	for i := range filteredAddr {
 		if err = netlink.AddrDel(device, &filteredAddr[i]); err != nil {
 			return fmt.Errorf("failed to remove v4address from device %s: %v", d.Device, err)

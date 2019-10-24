@@ -476,7 +476,7 @@ func (p *PolicyManager) syncIptables(polices []policy) error {
 	// This will be a map of chain name to chain with rules as stored in iptables-save/iptables-restore
 	existingChains := make(map[utiliptables.Chain]string) // nolint: staticcheck
 	if err := p.iptableHandle.SaveInto(utiliptables.TableFilter, iptablesSaveRaw); err != nil {
-		return fmt.Errorf("Failed to execute iptables-save, syncing all rules: %v", err)
+		return fmt.Errorf("failed to execute iptables-save, syncing all rules: %v", err)
 	} else { // otherwise parse the output
 		existingChains = utiliptables.GetChainLines(utiliptables.TableFilter, iptablesSaveRaw.Bytes())
 	}
@@ -486,6 +486,39 @@ func (p *PolicyManager) syncIptables(polices []policy) error {
 
 	// Accumulate chains to keep.
 	activeChains := map[utiliptables.Chain]bool{}
+	p.writeRules(polices, existingChains, filterChains, activeChains, filterRules)
+
+	p.writeChains(existingChains, activeChains, filterChains, filterRules)
+	writeLine(filterRules, "COMMIT")
+
+	lines := append(filterChains.Bytes(), filterRules.Bytes()...)
+	err := p.iptableHandle.RestoreAll(lines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
+	if err != nil {
+		return fmt.Errorf("failed to execute iptables-restore for ruls %s: %v", string(lines), err)
+	}
+	return nil
+}
+
+func (p *PolicyManager) writeChains(existingChains map[utiliptables.Chain]string, activeChains map[utiliptables.Chain]bool, filterChains *bytes.Buffer, filterRules *bytes.Buffer) {
+	// Delete chains no longer in use.
+	// TODO fix if any pod reference this policy chain
+	for chain := range existingChains {
+		if !activeChains[chain] {
+			chainString := string(chain)
+			if !strings.HasPrefix(chainString, policyChainPrefix) {
+				// Ignore chains that aren't ours.
+				continue
+			}
+			// We must (as per iptables) write a chain-line for it, which has
+			// the nice effect of flushing the chain.  Then we can remove the
+			// chain.
+			writeLine(filterChains, existingChains[chain])
+			writeLine(filterRules, "-X", chainString)
+		}
+	}
+}
+
+func (p *PolicyManager) writeRules(polices []policy, existingChains map[utiliptables.Chain]string, filterChains *bytes.Buffer, activeChains map[utiliptables.Chain]bool, filterRules *bytes.Buffer) {
 	for _, policy := range polices {
 		policyNameComment := fmt.Sprintf("%s_%s", policy.np.Name, policy.np.Namespace)
 		policyChain := utiliptables.Chain(policyChainName(policy.np))
@@ -521,31 +554,6 @@ func (p *PolicyManager) syncIptables(polices []policy) error {
 			}
 		}
 	}
-
-	// Delete chains no longer in use.
-	// TODO fix if any pod reference this policy chain
-	for chain := range existingChains {
-		if !activeChains[chain] {
-			chainString := string(chain)
-			if !strings.HasPrefix(chainString, policyChainPrefix) {
-				// Ignore chains that aren't ours.
-				continue
-			}
-			// We must (as per iptables) write a chain-line for it, which has
-			// the nice effect of flushing the chain.  Then we can remove the
-			// chain.
-			writeLine(filterChains, existingChains[chain])
-			writeLine(filterRules, "-X", chainString)
-		}
-	}
-	writeLine(filterRules, "COMMIT")
-
-	lines := append(filterChains.Bytes(), filterRules.Bytes()...)
-	err := p.iptableHandle.RestoreAll(lines, utiliptables.NoFlushTables, utiliptables.RestoreCounters)
-	if err != nil {
-		return fmt.Errorf("failed to execute iptables-restore for ruls %s: %v", string(lines), err)
-	}
-	return nil
 }
 
 func initIPSetMap(polices []policy) map[string]*ipsetTable {
@@ -680,7 +688,7 @@ func nameHash(data string) string {
 	return encoded[:16]
 }
 
-// SyncPodIPInIPSet ensures pod ip is expected in each policy's ipset. ipset is already created because we have these 
+// SyncPodIPInIPSet ensures pod ip is expected in each policy's ipset. ipset is already created because we have these
 // policies in memory
 func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 	var polices []policy

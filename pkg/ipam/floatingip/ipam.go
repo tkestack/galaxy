@@ -120,6 +120,10 @@ func (i *dbIpam) mergeWithDB(fipMap map[string]*FloatingIP) error {
 		glog.Infof("expect to delete %d ips from ips from %v, deleted %d", len(toBeDelete), toBeDelete, deleted)
 	}
 	// insert new floating ips
+	return i.insertNewFips(fipMap)
+}
+
+func (i *dbIpam) insertNewFips(fipMap map[string]*FloatingIP) error {
 	for _, fipConf := range fipMap {
 		subnet := fipConf.RoutableSubnet.String()
 		for _, ipr := range fipConf.IPRanges {
