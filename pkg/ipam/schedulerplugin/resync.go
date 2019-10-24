@@ -32,7 +32,8 @@ func (p *FloatingIPPlugin) storeReady() bool {
 		glog.V(3).Infof("the deployment store has not been synced yet")
 		return false
 	}
-	if _, err := p.ExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("tapps.tke.cloud.tencent.com", v1.GetOptions{}); err == nil {
+	if _, err := p.ExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("tapps.tke.cloud.tencent.com",
+		v1.GetOptions{}); err == nil {
 		//If TApp CRD created, waits for tapp
 		if !p.TAppHasSynced() {
 			glog.V(3).Infof("the tapp store has not been synced yet")
@@ -261,7 +262,8 @@ func (p *FloatingIPPlugin) syncPodIPsIntoDB() {
 }
 
 // #lizard forgives
-// syncPodIP sync pod ip with db, if the pod has ipinfos annotation and the ip is unallocated in db, allocate the ip to the pod
+// syncPodIP sync pod ip with db, if the pod has ipinfos annotation and the ip is unallocated in db, allocate the ip
+// to the pod
 func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 	if pod.Status.Phase != corev1.PodRunning {
 		return nil
@@ -303,7 +305,8 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, p
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
 		}
 	} else {
-		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta), getAttr(pod.Spec.NodeName)); err != nil {
+		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta),
+			getAttr(pod.Spec.NodeName)); err != nil {
 			return err
 		}
 		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)

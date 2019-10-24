@@ -110,7 +110,8 @@ func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.Rel
 }
 
 // AllocateInSubnet allocate subnet of IPs.
-func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy constant.ReleasePolicy, attr string) (allocated net.IP, err error) {
+func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy constant.ReleasePolicy,
+	attr string) (allocated net.IP, err error) {
 	if routableSubnet == nil {
 		// this should never happen
 		return nil, fmt.Errorf("nil routableSubnet")
@@ -121,7 +122,8 @@ func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, polic
 		for j := range ci.FloatingIPs {
 			allRoutableSubnet = append(allRoutableSubnet, ci.FloatingIPs[j].RoutableSubnet.String())
 		}
-		glog.V(3).Infof("can't find fit routableSubnet %s, all routableSubnets %v", routableSubnet.String(), allRoutableSubnet)
+		glog.V(3).Infof("can't find fit routableSubnet %s, all routableSubnets %v", routableSubnet.String(),
+			allRoutableSubnet)
 		err = ErrNoFIPForSubnet
 		return
 	}
@@ -156,7 +158,8 @@ func (ci *crdIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, polic
 }
 
 // AllocateInSubnetWithKey allocate a floatingIP in given subnet and key.
-func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error {
+func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy,
+	attr string) error {
 	ci.caches.cacheLock.Lock()
 	defer ci.caches.cacheLock.Unlock()
 	var (
@@ -468,7 +471,8 @@ func (ci *crdIpam) toFIPSubnet(routableSubnet *net.IPNet) *net.IPNet {
 
 // cacheLock is used when the function called,
 // don't use lock inner function, otherwise deadlock will be caused
-func (ci *crdIpam) syncCacheAfterCreate(ip string, key string, att string, policy constant.ReleasePolicy, subnet string, date time.Time) {
+func (ci *crdIpam) syncCacheAfterCreate(ip string, key string, att string, policy constant.ReleasePolicy,
+	subnet string, date time.Time) {
 	tmp := &FloatingIPObj{
 		key:        key,
 		att:        att,

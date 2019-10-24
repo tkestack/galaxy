@@ -31,8 +31,10 @@ func NewServerRunOptions() *ServerRunOptions {
 func (s *ServerRunOptions) AddFlags(fs *pflag.FlagSet) {
 	// TODO the options for legacy galaxy is api-servers and kubeconf
 	fs.StringVar(&s.Master, "master", s.Master, "The address and port of the Kubernetes API server")
-	fs.StringVar(&s.KubeConf, "kubeconfig", s.KubeConf, "The kube config file location of APISwitch, used to support TLS")
-	fs.BoolVar(&s.BridgeNFCallIptables, "bridge-nf-call-iptables", s.BridgeNFCallIptables, "Ensure bridge-nf-call-iptables is set/unset")
+	fs.StringVar(&s.KubeConf, "kubeconfig", s.KubeConf, "The kube config file location of APISwitch, used to "+
+		"support TLS")
+	fs.BoolVar(&s.BridgeNFCallIptables, "bridge-nf-call-iptables", s.BridgeNFCallIptables, "Ensure "+
+		"bridge-nf-call-iptables is set/unset")
 	fs.BoolVar(&s.IPForward, "ip-forward", s.IPForward, "Ensure ip-forward is set/unset")
 	fs.BoolVar(&s.RouteENI, "route-eni", s.RouteENI, "Ensure route-eni is set/unset")
 	fs.StringVar(&s.JsonConfigPath, "json-config-path", s.JsonConfigPath, "The json config file location of galaxy")

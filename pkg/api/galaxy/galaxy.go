@@ -114,7 +114,8 @@ func CniRequestToPodRequest(data []byte) (*PodRequest, error) {
 }
 
 func (req *PodRequest) String() string {
-	return fmt.Sprintf("%s %s_%s, %s, %s, %v", req.Command, req.PodName, req.PodNamespace, req.ContainerID, req.Netns, req.Ports)
+	return fmt.Sprintf("%s %s_%s, %s, %s, %v", req.Command, req.PodName, req.PodNamespace, req.ContainerID, req.Netns,
+		req.Ports)
 }
 
 func cleanDuplicate(ports []k8s.Port) []k8s.Port {

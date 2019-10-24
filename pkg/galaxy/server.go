@@ -158,7 +158,8 @@ func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]
 		//init networkInfo
 		for idx, network := range networks {
 			if _, ok := g.netConf[network.Name]; !ok {
-				return nil, fmt.Errorf("pod %s_%s requires network %s which is not configured", pod.Name, pod.Namespace, network.Name)
+				return nil, fmt.Errorf("pod %s_%s requires network %s which is not configured", pod.Name,
+					pod.Namespace, network.Name)
 			}
 			networkInfo := cniutil.NewNetworkInfo(network.Name, map[string]string{}, g.netConf[network.Name],
 				setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName))
@@ -224,7 +225,8 @@ func (g *Galaxy) setupIPtables() error {
 		}
 		var ports []k8s.Port
 		if err := json.Unmarshal([]byte(pod.Annotations[k8s.PortMappingPortsAnnotation]), &ports); err != nil {
-			glog.Warningf("failed to unmarshal %s_%s annotation %s: %v", pod.Name, pod.Namespace, k8s.PortMappingPortsAnnotation, err)
+			glog.Warningf("failed to unmarshal %s_%s annotation %s: %v", pod.Name, pod.Namespace,
+				k8s.PortMappingPortsAnnotation, err)
 			continue
 		}
 		// open ports on start
@@ -249,7 +251,8 @@ func (g *Galaxy) setupIPtables() error {
 	return nil
 }
 
-func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string, result *t020.Result, pod *corev1.Pod) error {
+func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string, result *t020.Result,
+	pod *corev1.Pod) error {
 	if len(req.Ports) == 0 {
 		return nil
 	}
@@ -257,7 +260,8 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 		req.Ports[i].PodIP = result.IP4.IP.IP.To4().String()
 		req.Ports[i].PodName = req.PodName
 	}
-	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), true, req.Ports); err != nil {
+	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), true,
+		req.Ports); err != nil {
 		return err
 	}
 	data, err := json.Marshal(req.Ports)
@@ -271,7 +275,8 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 		return fmt.Errorf("failed to setup port mapping %v: %v", req.Ports, err)
 	}
 	if err := g.updatePortMappingAnnotation(req, data); err != nil {
-		return fmt.Errorf("failed to update pod %s annotation: %v", k8s.GetPodFullName(req.PodName, req.PodNamespace), err)
+		return fmt.Errorf("failed to update pod %s annotation: %v", k8s.GetPodFullName(req.PodName,
+			req.PodNamespace), err)
 	}
 	return nil
 }

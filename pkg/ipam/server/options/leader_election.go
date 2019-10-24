@@ -38,7 +38,8 @@ type LeaderElectionConfiguration struct {
 	ResourceLock string
 }
 
-// copied from kubernetes k8s.io/kubernetes/pkg/client/leaderelectionconfig/config.go in order not to vendoring kubernetes
+// copied from kubernetes k8s.io/kubernetes/pkg/client/leaderelectionconfig/config.go in order not to vendoring
+// kubernetes
 
 const (
 	DefaultLeaseDuration = 15 * time.Second

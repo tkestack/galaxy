@@ -129,11 +129,13 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 	cm, err := p.Client.CoreV1().ConfigMaps(p.conf.ConfigMapNamespace).Get(p.conf.ConfigMapName, v1.GetOptions{})
 	if err != nil {
-		return false, fmt.Errorf("failed to get floatingip configmap %s_%s: %v", p.conf.ConfigMapName, p.conf.ConfigMapNamespace, err)
+		return false, fmt.Errorf("failed to get floatingip configmap %s_%s: %v", p.conf.ConfigMapName,
+			p.conf.ConfigMapNamespace, err)
 	}
 	val, ok := cm.Data[p.conf.FloatingIPKey]
 	if !ok {
-		return false, fmt.Errorf("configmap %s_%s doesn't have a key floatingips", p.conf.ConfigMapName, p.conf.ConfigMapNamespace)
+		return false, fmt.Errorf("configmap %s_%s doesn't have a key floatingips", p.conf.ConfigMapName,
+			p.conf.ConfigMapNamespace)
 	}
 	if err := ensureIPAMConf(p.ipam, &p.lastIPConf, val); err != nil {
 		return false, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
@@ -151,7 +153,8 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 
 // Filter marks nodes which have no available ips as FailedNodes
 // If the given pod doesn't want floating IP, none failedNodes returns
-func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev1.Node, schedulerapi.FailedNodesMap, error) {
+func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev1.Node, schedulerapi.FailedNodesMap,
+	error) {
 	failedNodesMap := schedulerapi.FailedNodesMap{}
 	if !p.hasResourceName(&pod.Spec) {
 		return nodes, failedNodesMap, nil
@@ -239,11 +242,13 @@ func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, enabledSeco
 	// we can't get nodename during filter, update attr on bind
 	attr := getAttr("")
 	if reserve {
-		if err := allocateInSubnetWithKey(p.ipam, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr, "filter"); err != nil {
+		if err := allocateInSubnetWithKey(p.ipam, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr,
+			"filter"); err != nil {
 			return err
 		}
 		if enabledSecondIP {
-			if err := allocateInSubnetWithKey(p.secondIPAM, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr, "filter"); err != nil {
+			if err := allocateInSubnetWithKey(p.secondIPAM, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy,
+				attr, "filter"); err != nil {
 				return err
 			}
 		}
@@ -274,7 +279,8 @@ func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*sc
 	return list, nil
 }
 
-func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName string, pod *corev1.Pod) (*constant.IPInfo, error) {
+func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName string,
+	pod *corev1.Pod) (*constant.IPInfo, error) {
 	var how string
 	ipInfo, err := ipam.First(key)
 	if err != nil {
@@ -316,7 +322,8 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 			return nil, fmt.Errorf("failed to update floating ip release policy: %v", err)
 		}
 	}
-	glog.Infof("[%s] started at %d %s ip %s, policy %v, attr %s for %s", ipam.Name(), started.UnixNano(), how, ipInfo.IPInfo.IP.String(), policy, attr, key)
+	glog.Infof("[%s] started at %d %s ip %s, policy %v, attr %s for %s", ipam.Name(), started.UnixNano(), how,
+		ipInfo.IPInfo.IP.String(), policy, attr, key)
 	return &ipInfo.IPInfo, nil
 }
 
@@ -354,7 +361,8 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	if err := wait.PollImmediate(time.Millisecond*500, 3*time.Second, func() (bool, error) {
 		// It's the extender's response to bind pods to nodes since it is a binder
 		if err := p.Client.CoreV1().Pods(args.PodNamespace).Bind(&corev1.Binding{
-			ObjectMeta: v1.ObjectMeta{Namespace: args.PodNamespace, Name: args.PodName, UID: args.PodUID, Annotations: bindAnnotation},
+			ObjectMeta: v1.ObjectMeta{Namespace: args.PodNamespace, Name: args.PodName, UID: args.PodUID,
+				Annotations: bindAnnotation},
 			Target: corev1.ObjectReference{
 				Kind: "Node",
 				Name: args.Node,
@@ -363,7 +371,8 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 			err1 = err
 			return false, nil
 		}
-		glog.Infof("bind pod %s to %s with ip %v", keyObj.KeyInDB, args.Node, bindAnnotation[constant.ExtendedCNIArgsAnnotation])
+		glog.Infof("bind pod %s to %s with ip %v", keyObj.KeyInDB, args.Node,
+			bindAnnotation[constant.ExtendedCNIArgsAnnotation])
 		return true, nil
 	}); err != nil {
 		// If fails to update, depending on resync to update
@@ -385,7 +394,8 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		}
 		ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
 		if err != nil || len(ipInfos) == 0 || ipInfos[0].IP == nil {
-			return fmt.Errorf("bad format of %s: %s, err %v", key, pod.Annotations[constant.ExtendedCNIArgsAnnotation], err)
+			return fmt.Errorf("bad format of %s: %s, err %v", key,
+				pod.Annotations[constant.ExtendedCNIArgsAnnotation], err)
 		} else {
 			glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", pod.Spec.NodeName, ipInfos[0].IP.IP.String(), key)
 			if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{

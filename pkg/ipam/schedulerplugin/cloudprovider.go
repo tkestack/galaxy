@@ -67,7 +67,7 @@ func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, meta *re
 			glog.Errorf("empty nodeName for %s in db", key)
 			continue
 		}
-		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName, 
+		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName,
 			nets.IntToIP(obj.fip.IP).String(), key)
 		if err := p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
 			NodeName:  attr.NodeName,

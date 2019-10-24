@@ -52,7 +52,8 @@ func (i *dbIpam) findByPrefix(prefix string, fips *[]database.FloatingIP) error 
 
 func allocateOp(fip *database.FloatingIP, tableName string) database.ActionFunc {
 	return func(tx *gorm.DB) error {
-		ret := tx.Table(tableName).Model(fip).Where("`key` = \"\"").UpdateColumn(`key`, fip.Key, `updated_at`, time.Now())
+		ret := tx.Table(tableName).Model(fip).Where("`key` = \"\"").UpdateColumn(`key`, fip.Key,
+			`updated_at`, time.Now())
 		if ret.Error != nil {
 			return ret.Error
 		}
@@ -65,7 +66,8 @@ func allocateOp(fip *database.FloatingIP, tableName string) database.ActionFunc 
 
 func (i *dbIpam) updateOneInSubnet(oldK, newK, subnet string, policy uint16, attr string) error {
 	return i.store.Transaction(func(tx *gorm.DB) error {
-		// UPDATE `ip_pool` SET `key` = 'newK', `policy` = '0', `attr` = ''  WHERE (`key` = "oldK" AND subnet = '10.180.1.3/32') ORDER BY updated_at desc LIMIT 1
+		// UPDATE `ip_pool` SET `key` = 'newK', `policy` = '0', `attr` = ''  WHERE (`key` = "oldK"
+		// AND subnet = '10.180.1.3/32') ORDER BY updated_at desc LIMIT 1
 		ret := tx.Table(i.Name()).Where("`key` = ? AND subnet = ?", oldK, subnet).
 			Order("updated_at desc").Limit(1).
 			UpdateColumns(map[string]interface{}{`key`: newK, "policy": policy, "attr": attr, `updated_at`: time.Now()})

@@ -46,7 +46,7 @@ func (p *grpcCloudProvider) connect() {
 		conn, err := grpc.Dial(p.cloudProviderAddr, grpc.WithDialer(
 			func(addr string, timeout time.Duration) (net.Conn, error) {
 				return net.DialTimeout("tcp", addr, timeout)
-		}), grpc.WithInsecure(), grpc.WithKeepaliveParams(kacp))
+			}), grpc.WithInsecure(), grpc.WithKeepaliveParams(kacp))
 		if err != nil {
 			glog.Fatalf("failed to connect to cloud provider %s: %v", p.cloudProviderAddr, err)
 		}

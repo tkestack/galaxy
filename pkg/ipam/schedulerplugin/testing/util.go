@@ -16,7 +16,8 @@ func CreateStatefulSetPodWithLabels(name, namespace string, labels, annotations 
 	return pod
 }
 
-// CreateStatefulSetPod creates a statefulset pod for testing, input name should be a valid statefulset pod name like 'a-1'
+// CreateStatefulSetPod creates a statefulset pod for testing, input name should be a valid statefulset
+// pod name like 'a-1'
 func CreateStatefulSetPod(name, namespace string, annotations map[string]string) *corev1.Pod {
 	parts := strings.Split(name, "-")
 	quantity := resource.NewQuantity(1, resource.DecimalSI)

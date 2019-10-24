@@ -58,7 +58,8 @@ func (h *PortMappingHandler) SetupPortMapping(ports []k8s.Port) error {
 		// don't hold a lock before executing iptables-restore. So we have to
 		// execute add or delete rules of KUBE-HOSTPORTS chain separately
 		args := []string{
-			"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
+			"-m", "comment", "--comment",
+			fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
 			"-m", protocol, "-p", protocol,
 			"--dport", fmt.Sprintf("%d", containerPort.HostPort),
 		}
@@ -87,7 +88,8 @@ func (h *PortMappingHandler) SetupPortMapping(ports []k8s.Port) error {
 	return nil
 }
 
-func containerPortChainRules(containerPort *k8s.Port, protocol string, hostportChain utiliptables.Chain, natRules *bytes.Buffer) {
+func containerPortChainRules(containerPort *k8s.Port, protocol string, hostportChain utiliptables.Chain,
+	natRules *bytes.Buffer) {
 	// Assuming kubelet is syncing iptables KUBE-MARK-MASQ chain
 	// If the request comes from the pod that is serving the hostport, then SNAT
 	args := []string{
@@ -121,7 +123,8 @@ func (h *PortMappingHandler) CleanPortMapping(ports []k8s.Port) {
 		writeLine(natChains, utiliptables.MakeChainLine(hostportChain))
 		writeLine(natRules, "-X", string(hostportChain))
 		args := []string{
-			"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
+			"-m", "comment", "--comment",
+			fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
 			"-m", protocol, "-p", protocol,
 			"--dport", fmt.Sprintf("%d", containerPort.HostPort),
 			"-j", string(hostportChain),
@@ -195,7 +198,8 @@ func (h *PortMappingHandler) SetupPortMappingForAllPods(ports []k8s.Port) error 
 		// Redirect to hostport chain
 		args := []string{
 			"-A", string(kubeHostportsChain),
-			"-m", "comment", "--comment", fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
+			"-m", "comment", "--comment",
+			fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
 			"-m", protocol, "-p", protocol,
 			"--dport", fmt.Sprintf("%d", containerPort.HostPort),
 			"-j", string(hostportChain),
@@ -241,17 +245,20 @@ func writeLine(buf *bytes.Buffer, words ...string) {
 // this because IPTables Chain Names must be <= 28 chars long, and the longer
 // they are the harder they are to read.
 func hostportChainName(port k8s.Port, podFullName string) utiliptables.Chain {
-	hash := sha256.Sum256([]byte(strconv.Itoa(int(port.HostPort)) + port.Protocol + strconv.Itoa(int(port.ContainerPort)) + podFullName))
+	hash := sha256.Sum256([]byte(strconv.Itoa(int(port.HostPort)) + port.Protocol +
+		strconv.Itoa(int(port.ContainerPort)) + podFullName))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return utiliptables.Chain(kubeHostportChainPrefix + encoded[:16])
 }
 
 func (h *PortMappingHandler) EnsureBasicRule() error {
 	if err := h.Interface.EnsurePolicy(utiliptables.TableFilter, utiliptables.ChainForward, "ACCEPT"); err != nil {
-		glog.Warningf("set policy for %v/%v failed: %v", utiliptables.TableFilter, utiliptables.ChainForward, err.Error())
+		glog.Warningf("set policy for %v/%v failed: %v", utiliptables.TableFilter,
+			utiliptables.ChainForward, err.Error())
 	}
 	if _, err := h.Interface.EnsureChain(utiliptables.TableNAT, kubeHostportsChain); err != nil {
-		return fmt.Errorf("Failed to ensure that %s chain %s exists: %v", utiliptables.TableNAT, kubeHostportsChain, err)
+		return fmt.Errorf("Failed to ensure that %s chain %s exists: %v", utiliptables.TableNAT,
+			kubeHostportsChain, err)
 	}
 	tableChainsNeedJumpServices := []struct {
 		table utiliptables.Table
@@ -265,14 +272,19 @@ func (h *PortMappingHandler) EnsureBasicRule() error {
 		"-j", string(kubeHostportsChain)}
 	for _, tc := range tableChainsNeedJumpServices {
 		if _, err := h.Interface.EnsureRule(utiliptables.Prepend, tc.table, tc.chain, args...); err != nil {
-			return fmt.Errorf("Failed to ensure that %s chain %s jumps to %s: %v", tc.table, tc.chain, kubeHostportsChain, err)
+			return fmt.Errorf("Failed to ensure that %s chain %s jumps to %s: %v", tc.table, tc.chain,
+				kubeHostportsChain, err)
 		}
 	}
 	if h.natInterfaceName != "" {
 		// Need to SNAT traffic from localhost
-		args = []string{"-m", "comment", "--comment", "SNAT for localhost access to hostports", "-o", h.natInterfaceName, "-s", "127.0.0.0/8", "-j", "MASQUERADE"}
-		if _, err := h.Interface.EnsureRule(utiliptables.Append, utiliptables.TableNAT, utiliptables.ChainPostrouting, args...); err != nil {
-			return fmt.Errorf("Failed to ensure that %s chain %s jumps to MASQUERADE: %v", utiliptables.TableNAT, utiliptables.ChainPostrouting, err)
+		args = []string{
+			"-m", "comment", "--comment", "SNAT for localhost access to hostports",
+			"-o", h.natInterfaceName, "-s", "127.0.0.0/8", "-j", "MASQUERADE"}
+		if _, err := h.Interface.EnsureRule(utiliptables.Append, utiliptables.TableNAT, utiliptables.ChainPostrouting,
+			args...); err != nil {
+			return fmt.Errorf("Failed to ensure that %s chain %s jumps to MASQUERADE: %v", utiliptables.TableNAT,
+				utiliptables.ChainPostrouting, err)
 		}
 	}
 	return nil

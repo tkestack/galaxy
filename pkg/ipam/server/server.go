@@ -230,9 +230,12 @@ func (s *Server) startServer() {
 		Path("/v1").
 		Consumes(restful.MIME_JSON).
 		Produces(restful.MIME_JSON)
-	ws.Route(ws.POST("/filter").To(s.filter).Reads(schedulerapi.ExtenderArgs{}).Writes(schedulerapi.ExtenderFilterResult{}))
-	ws.Route(ws.POST("/priority").To(s.priority).Reads(schedulerapi.ExtenderArgs{}).Writes(schedulerapi.HostPriorityList{}))
-	ws.Route(ws.POST("/bind").To(s.bind).Reads(schedulerapi.ExtenderBindingArgs{}).Writes(schedulerapi.ExtenderBindingResult{}))
+	ws.Route(ws.POST("/filter").To(s.filter).Reads(schedulerapi.ExtenderArgs{}).
+		Writes(schedulerapi.ExtenderFilterResult{}))
+	ws.Route(ws.POST("/priority").To(s.priority).Reads(schedulerapi.ExtenderArgs{}).
+		Writes(schedulerapi.HostPriorityList{}))
+	ws.Route(ws.POST("/bind").To(s.bind).Reads(schedulerapi.ExtenderBindingArgs{}).
+		Writes(schedulerapi.ExtenderBindingResult{}))
 	health := new(restful.WebService)
 	health.Route(health.GET("/healthy").To(s.healthy))
 	container := restful.NewContainer()
@@ -257,16 +260,22 @@ func (s *Server) startAPIServer() {
 		Param(ws.QueryParameter("appName", "app name").DataType("string")).
 		Param(ws.QueryParameter("podName", "pod name").DataType("string")).
 		Param(ws.QueryParameter("namespace", "namespace").DataType("string")).
-		Param(ws.QueryParameter("isDeployment", "listing deployments or statefulsets. Deprecated, please set appType").DataType("boolean")).
+		Param(ws.QueryParameter("isDeployment", "listing deployments or statefulsets. Deprecated, please set appType").
+			DataType("boolean")).
 		Param(ws.QueryParameter("appType", "app type, deployment, statefulset or tapp").DataType("string")).
 		Param(ws.QueryParameter("page", "page number, valid range [0,99999]").DataType("integer")).
 		Param(ws.QueryParameter("size", "page size, valid range (0,9999]").DataType("integer").DefaultValue("10")).
-		Param(ws.QueryParameter("sort", "sort by which field, supports ip/namespace/podname/policy asc/desc").DataType("string").DefaultValue("ip asc")).
+		Param(ws.QueryParameter("sort", "sort by which field, supports ip/namespace/podname/policy asc/desc").
+			DataType("string").DefaultValue("ip asc")).
 		Returns(http.StatusOK, "request succeed", api.ListIPResp{
-			Page: pageutil.Page{Last: true, TotalElements: 2, TotalPages: 1, First: true, NumberOfElements: 2, Size: 10, Number: 0},
+			Page: pageutil.Page{Last: true, TotalElements: 2, TotalPages: 1, First: true, NumberOfElements: 2,
+				Size: 10, Number: 0},
 			Content: []api.FloatingIP{
-				{IP: "10.0.70.93", PoolName: "sample-pool", Policy: 2, UpdateTime: time.Unix(1555924386, 0), Releasable: true, AppType: "deployment"},
-				{IP: "10.0.70.118", PoolName: "sample-pool2", Namespace: "default", AppName: "app", PodName: "app-xxx-yyy", Policy: 2, UpdateTime: time.Unix(1555924279, 0), Status: "Running", AppType: "deployment"},
+				{IP: "10.0.70.93", PoolName: "sample-pool", Policy: 2, UpdateTime: time.Unix(1555924386, 0),
+					Releasable: true, AppType: "deployment"},
+				{IP: "10.0.70.118", PoolName: "sample-pool2", Namespace: "default", AppName: "app",
+					PodName: "app-xxx-yyy", Policy: 2, UpdateTime: time.Unix(1555924279, 0), Status: "Running",
+					AppType: "deployment"},
 			}}).
 		Writes(api.ListIPResp{}))
 
@@ -276,18 +285,21 @@ func (s *Server) startAPIServer() {
 		Returns(http.StatusBadRequest, "10.0.0 is not a valid ip", nil).
 		Returns(http.StatusBadRequest, "10.0.0.2 is not releasable", nil).
 		Returns(http.StatusInternalServerError, "internal server error", nil).
-		Returns(http.StatusAccepted, "Unreleased ips have been released or allocated to other pods, or are not within valid range", api.ReleaseIPResp{Unreleased: []string{"10.0.70.32"}}).
+		Returns(http.StatusAccepted, "Unreleased ips have been released or allocated to other pods, or are not "+
+			"within valid range", api.ReleaseIPResp{Unreleased: []string{"10.0.70.32"}}).
 		Returns(http.StatusOK, "request succeed", api.ReleaseIPResp{Resp: httputil.Resp{Code: http.StatusOK}}).
 		Writes(api.ReleaseIPResp{Resp: httputil.Resp{Code: http.StatusOK}}))
 
-	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient, LockPool: s.plugin.GetLockPool(), IPAM: s.plugin.GetIpam(), SecondIPAM: s.plugin.GetSecondIpam()}
+	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient,
+		LockPool: s.plugin.GetLockPool(), IPAM: s.plugin.GetIpam(), SecondIPAM: s.plugin.GetSecondIpam()}
 	ws.Route(ws.GET("/pool/{name}").To(poolController.Get).
 		Doc("Get pool by name").
 		Param(ws.PathParameter("name", "pool name").DataType("string").Required(true)).
 		Returns(http.StatusNotFound, "pool not found", nil).
 		Returns(http.StatusBadRequest, "pool name is empty", nil).
 		Returns(http.StatusInternalServerError, "internal server error", nil).
-		Returns(http.StatusOK, "request succeed", api.GetPoolResp{Resp: httputil.NewResp(http.StatusOK, ""), Pool: api.Pool{Name: "sample-pool", Size: 4}}).
+		Returns(http.StatusOK, "request succeed", api.GetPoolResp{Resp: httputil.NewResp(http.StatusOK, ""),
+			Pool: api.Pool{Name: "sample-pool", Size: 4}}).
 		Writes(api.GetPoolResp{}))
 
 	ws.Route(ws.POST("/pool").To(poolController.CreateOrUpdate).
@@ -295,8 +307,10 @@ func (s *Server) startAPIServer() {
 		Reads(api.Pool{Name: "sample-pool"}).
 		Returns(http.StatusBadRequest, "pool name is empty", nil).
 		Returns(http.StatusInternalServerError, "internal server error", nil).
-		Returns(http.StatusAccepted, "No enough IPs", api.UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: 3}).
-		Returns(http.StatusOK, "request succeed", api.UpdatePoolResp{Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: 3}).
+		Returns(http.StatusAccepted, "No enough IPs", api.UpdatePoolResp{
+			Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: 3}).
+		Returns(http.StatusOK, "request succeed", api.UpdatePoolResp{
+			Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: 3}).
 		Writes(httputil.Resp{Code: http.StatusOK}))
 
 	ws.Route(ws.DELETE("/pool/{name}").To(poolController.Delete).

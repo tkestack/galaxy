@@ -23,7 +23,8 @@ func (h *PortMappingHandler) OpenHostports(podFullName string, randomPortMapping
 			port:     k8sPorts[i].HostPort,
 			protocol: strings.ToLower(k8sPorts[i].Protocol),
 		}
-		// we bind to :0 if portmapping == true && hostport == 0 which asks kernel to allocate an unused port from its ip_local_port_range
+		// we bind to :0 if portmapping == true && hostport == 0 which asks kernel to allocate an unused port from its
+		// ip_local_port_range
 		socket, err := openLocalPort(&hp)
 		if err != nil {
 			retErr = fmt.Errorf("cannot open hostport %d for %s: %v", k8sPorts[i].HostPort, podFullName, err)

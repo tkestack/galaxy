@@ -145,7 +145,7 @@ type NetworkInfo struct {
 
 // NewNetworkInfo creates a NetworkInfo
 func NewNetworkInfo(networkType string, args map[string]string, conf map[string]interface{},
-		ifName string) *NetworkInfo {
+	ifName string) *NetworkInfo {
 	return &NetworkInfo{NetworkType: networkType, Args: args, Conf: conf, IfName: ifName}
 }
 

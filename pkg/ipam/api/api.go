@@ -305,8 +305,8 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 			http.StatusInternalServerError, fmt.Sprintf("server error: %v", err))}
 	} else if len(unreleasedIP) > 0 {
 		res = &ReleaseIPResp{Resp: httputil.NewResp(
-			http.StatusAccepted, fmt.Sprintf("Unreleased ips have been released or allocated to other pods, " + 
-			"or are not within valid range"))}
+			http.StatusAccepted, fmt.Sprintf("Unreleased ips have been released or allocated to other pods, "+
+				"or are not within valid range"))}
 	} else {
 		res = &ReleaseIPResp{Resp: httputil.NewResp(http.StatusOK, "")}
 	}
@@ -360,8 +360,8 @@ func transform(fips []database.FloatingIP) []FloatingIP {
 	return res
 }
 
-func batchReleaseIPs(ipToKey map[string]string, ipam, secondIpam floatingip.IPAM)
-	(map[string]string, map[string]string, error) {
+func batchReleaseIPs(ipToKey map[string]string,
+	ipam, secondIpam floatingip.IPAM) (map[string]string, map[string]string, error) {
 	released, unreleased, err := ipam.ReleaseIPs(ipToKey)
 	if len(released) > 0 {
 		glog.Infof("releaseIPs %v", released)

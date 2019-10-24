@@ -83,7 +83,8 @@ func New(client kubernetes.Interface, quitChan <-chan struct{}) *PolicyManager {
 }
 
 func (p *PolicyManager) initInformers() {
-	//podInformerFactory := informers.NewFilteredSharedInformerFactory(g.client, time.Minute, v1.NamespaceAll, func(listOptions *v1.ListOptions) {
+	//podInformerFactory := informers.NewFilteredSharedInformerFactory(g.client, time.Minute, v1.NamespaceAll,
+	//func(listOptions *v1.ListOptions) {
 	//	listOptions.FieldSelector = fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname("")).String()
 	//})
 	p.podInformerFactory = informers.NewSharedInformerFactory(p.client, 0)
@@ -157,7 +158,8 @@ func (p *PolicyManager) syncPods() {
 			go syncPodChains(pods[i])
 		}
 	} else {
-		// PodInformerFactory not started meaning there isn't any network policy right now, ensure pods' chains are deleted
+		// PodInformerFactory not started meaning there isn't any network policy right now, ensure pods' chains
+		// are deleted
 		list, err := p.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
 		if err != nil {
 			glog.Warningf("failed to list pods: %v", err)
@@ -371,13 +373,15 @@ func ipBlockToTable(cidr string, except []string) (*ipsetTable, error) {
 	if err != nil {
 		return nil, err
 	}
-	tbl := &ipsetTable{IPSet: ipset.IPSet{SetType: ipset.HashNet}, entries: []ipset.Entry{{Net: formatedCidr, SetType: ipset.HashNet}}}
+	tbl := &ipsetTable{IPSet: ipset.IPSet{SetType: ipset.HashNet}, entries: []ipset.Entry{{Net: formatedCidr,
+		SetType: ipset.HashNet}}}
 	for i := range except {
 		formatedExcept, err := formatCidr(except[i])
 		if err != nil {
 			return nil, err
 		}
-		tbl.entries = append(tbl.entries, ipset.Entry{Net: formatedExcept, SetType: ipset.HashNet, Options: []string{"nomatch"}})
+		tbl.entries = append(tbl.entries, ipset.Entry{Net: formatedExcept, SetType: ipset.HashNet,
+			Options: []string{"nomatch"}})
 	}
 	return tbl, nil
 }
@@ -442,8 +446,8 @@ func rulePorts(npp []networkv1.NetworkPolicyPort) ([]string, []string) {
 	return tcpPorts, udpPorts
 }
 
-// syncRules ensures GLX-sip-xxxx/GLX-snet-xxxx/GLX-dip-xxxx/GLX-dnet-xxxx/GLX-ip-xxxx ipsets including their entries are expected,
-// and GLX-PLCY-XXXX iptables chain are expected.
+// syncRules ensures GLX-sip-xxxx/GLX-snet-xxxx/GLX-dip-xxxx/GLX-dnet-xxxx/GLX-ip-xxxx ipsets including their
+// entries are expected, and GLX-PLCY-XXXX iptables chain are expected.
 func (p *PolicyManager) syncRules(polices []policy) error {
 	// sync ipsets
 	ipsets, err := p.ipsetHandle.ListSets()
@@ -503,7 +507,8 @@ func (p *PolicyManager) syncIptables(polices []policy) error {
 	return nil
 }
 
-func (p *PolicyManager) writeChains(existingChains map[utiliptables.Chain]string, activeChains map[utiliptables.Chain]bool, filterChains *bytes.Buffer, filterRules *bytes.Buffer) {
+func (p *PolicyManager) writeChains(existingChains map[utiliptables.Chain]string,
+	activeChains map[utiliptables.Chain]bool, filterChains *bytes.Buffer, filterRules *bytes.Buffer) {
 	// Delete chains no longer in use.
 	// TODO fix if any pod reference this policy chain
 	for chain := range existingChains {
@@ -523,7 +528,8 @@ func (p *PolicyManager) writeChains(existingChains map[utiliptables.Chain]string
 }
 
 // #lizard forgives
-func (p *PolicyManager) writeRules(polices []policy, existingChains map[utiliptables.Chain]string, filterChains *bytes.Buffer, activeChains map[utiliptables.Chain]bool, filterRules *bytes.Buffer) {
+func (p *PolicyManager) writeRules(polices []policy, existingChains map[utiliptables.Chain]string,
+	filterChains *bytes.Buffer, activeChains map[utiliptables.Chain]bool, filterRules *bytes.Buffer) {
 	for _, policy := range polices {
 		policyNameComment := fmt.Sprintf("%s_%s", policy.np.Name, policy.np.Namespace)
 		policyChain := utiliptables.Chain(policyChainName(policy.np))
@@ -543,7 +549,8 @@ func (p *PolicyManager) writeRules(polices []policy, existingChains map[utilipta
 				if rule.netTable != nil {
 					srcTableNames = append(srcTableNames, rule.netTable.Name)
 				}
-				writePolicyChainRules(filterRules, string(policyChain), policyNameComment, srcTableNames, []string{policy.ingressRule.dstIPTable.Name}, rule.tcpPorts, rule.udpPorts)
+				writePolicyChainRules(filterRules, string(policyChain), policyNameComment, srcTableNames,
+					[]string{policy.ingressRule.dstIPTable.Name}, rule.tcpPorts, rule.udpPorts)
 			}
 		}
 		if policy.egressRule != nil {
@@ -555,7 +562,8 @@ func (p *PolicyManager) writeRules(polices []policy, existingChains map[utilipta
 				if rule.netTable != nil {
 					dstTableNames = append(dstTableNames, rule.netTable.Name)
 				}
-				writePolicyChainRules(filterRules, string(policyChain), policyNameComment, []string{policy.egressRule.srcIPTable.Name}, dstTableNames, rule.tcpPorts, rule.udpPorts)
+				writePolicyChainRules(filterRules, string(policyChain), policyNameComment,
+					[]string{policy.egressRule.srcIPTable.Name}, dstTableNames, rule.tcpPorts, rule.udpPorts)
 			}
 		}
 	}
@@ -614,7 +622,8 @@ func (p *PolicyManager) createIPSet(newIPSetMap map[string]*ipsetTable) error {
 				glog.Warningf("failed to add entry %v: %v", entry, err)
 			}
 		}
-		glog.V(5).Infof("old entries %s, new entries %s", strings.Join(oldEntries, ","), strings.Join(newEntries.List(), ","))
+		glog.V(5).Infof("old entries %s, new entries %s", strings.Join(oldEntries, ","),
+			strings.Join(newEntries.List(), ","))
 		// clean up stale entries
 		for _, old := range oldEntries {
 			if !newEntries.Has(old) {
@@ -634,10 +643,13 @@ func (p *PolicyManager) createIPSet(newIPSetMap map[string]*ipsetTable) error {
 // -m set --match-set GLX-ip-xxxx dst \
 // -m multiport --dports 8080,8081 -j ACCEPT
 // If there are both tcp and udp ports, this adds a rule for each protocol
-func writePolicyChainRules(filterRules *bytes.Buffer, policyChainName, policyNameComment string, srcTableNames, dstTableNames, tcpPorts, udpPorts []string) {
+func writePolicyChainRules(filterRules *bytes.Buffer, policyChainName, policyNameComment string,
+	srcTableNames, dstTableNames, tcpPorts, udpPorts []string) {
 	for _, srcTableName := range srcTableNames {
 		for _, dstTableName := range dstTableNames {
-			setRules := []string{"-m", "set", "--match-set", srcTableName, "src", "-m", "set", "--match-set", dstTableName, "dst"}
+			setRules := []string{
+				"-m", "set", "--match-set", srcTableName, "src",
+				"-m", "set", "--match-set", dstTableName, "dst"}
 			if len(tcpPorts) > 0 {
 				args := []string{
 					"-A", policyChainName,
@@ -703,7 +715,8 @@ func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 	for _, policy := range polices {
 		podLabelSelector, err := v1.LabelSelectorAsSelector(&policy.np.Spec.PodSelector)
 		if err != nil {
-			glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+			glog.Warningf("failed to convert pod labelSelector %s to selector: %v",
+				policy.np.Spec.PodSelector.String(), err)
 			continue
 		}
 		if policy.np.Namespace == pod.Namespace && podLabelSelector.Matches(labels.Set(pod.Labels)) {
@@ -725,7 +738,8 @@ func (p *PolicyManager) syncIngressInIPSet(policy *policy, pod *corev1.Pod, add 
 			if peer.PodSelector != nil {
 				peerPodLabelSelector, err := v1.LabelSelectorAsSelector(peer.PodSelector)
 				if err != nil {
-					glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+					glog.Warningf("failed to convert pod labelSelector %s to selector: %v",
+						policy.np.Spec.PodSelector.String(), err)
 					continue
 				}
 				if peerPodLabelSelector.Matches(labels.Set(pod.Labels)) {
@@ -755,7 +769,8 @@ func (p *PolicyManager) syncEgressInIPSet(policy *policy, pod *corev1.Pod, add b
 			if peer.PodSelector != nil {
 				peerPodLabelSelector, err := v1.LabelSelectorAsSelector(peer.PodSelector)
 				if err != nil {
-					glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+					glog.Warningf("failed to convert pod labelSelector %s to selector: %v",
+						policy.np.Spec.PodSelector.String(), err)
 					continue
 				}
 				if peerPodLabelSelector.Matches(labels.Set(pod.Labels)) {
@@ -788,7 +803,8 @@ func (p *PolicyManager) SyncPodChains(pod *corev1.Pod) error {
 	p.Unlock()
 	filteredIngressPolicy, filteredEgressPolicy := filterMatchingPolicies(pod, policies)
 	if filteredIngressPolicy.Len() == 0 && filteredEgressPolicy.Len() == 0 {
-		glog.V(4).Infof("pod %s_%s isn't a target pod of any ingress or egress network policy, ensuring its rules cleaned up", pod.Name, pod.Namespace)
+		glog.V(4).Infof("pod %s_%s isn't a target pod of any ingress or egress network policy, "+
+			"ensuring its rules cleaned up", pod.Name, pod.Namespace)
 		// clean up old rules
 		return p.deletePodChains(pod)
 	}
@@ -805,12 +821,17 @@ func (p *PolicyManager) SyncPodChains(pod *corev1.Pod) error {
 	writeLine(filterChains, "*filter")
 	writeLine(filterChains, utiliptables.MakeChainLine(podChain))
 	// -A GLX-POD-XXXX -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-	writeLine(filterRules, "-A", string(podChain), "-m", "comment", "--comment", podNameComment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT")
+	writeLine(filterRules,
+		"-A", string(podChain),
+		"-m", "comment", "--comment", podNameComment,
+		"-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT")
 
 	for i := range policies {
 		if filteredIngressPolicy.Has(i) || filteredEgressPolicy.Has(i) {
 			// -A GLX-POD-XXXX -j GLX-PLCY-XXXX
-			writeLine(filterRules, "-A", string(podChain), "-m", "comment", "--comment", podNameComment, "-j", policyChainName(policies[i].np))
+			writeLine(filterRules,
+				"-A", string(podChain),
+				"-m", "comment", "--comment", podNameComment, "-j", policyChainName(policies[i].np))
 		}
 	}
 	// -A GLX-POD-XXXX -j DROP
@@ -826,14 +847,16 @@ func (p *PolicyManager) SyncPodChains(pod *corev1.Pod) error {
 	if filteredIngressPolicy.Len() > 0 {
 		// -A GLX-INGRESS -d x.x.x.x -j GLX-POD-XXXXX , this should be added after creating pod chain
 		args := []string{"-d", pod.Status.PodIP, "-m", "comment", "--comment", podNameComment, "-j", string(podChain)}
-		if _, err := p.iptableHandle.EnsureRule(utiliptables.Append, utiliptables.TableFilter, ingressChain, args...); err != nil {
+		if _, err := p.iptableHandle.EnsureRule(utiliptables.Append, utiliptables.TableFilter,
+			ingressChain, args...); err != nil {
 			return fmt.Errorf("failed to add pod policy rule %s: %v", strings.Join(args, " "), err)
 		}
 	}
 	if filteredEgressPolicy.Len() > 0 {
 		// -A GLX-EGRESS -s x.x.x.x -j GLX-POD-XXXXX , this should be added after creating pod chain
 		args := []string{"-s", pod.Status.PodIP, "-m", "comment", "--comment", podNameComment, "-j", string(podChain)}
-		if _, err := p.iptableHandle.EnsureRule(utiliptables.Append, utiliptables.TableFilter, egressChain, args...); err != nil {
+		if _, err := p.iptableHandle.EnsureRule(utiliptables.Append, utiliptables.TableFilter, egressChain,
+			args...); err != nil {
 			return fmt.Errorf("failed to add pod policy rule %s: %v", strings.Join(args, " "), err)
 		}
 	}
@@ -851,7 +874,8 @@ func filterMatchingPolicies(pod *corev1.Pod, policies []policy) (sets.Int, sets.
 		}
 		podLabelSelector, err := v1.LabelSelectorAsSelector(&policy.np.Spec.PodSelector)
 		if err != nil {
-			glog.Warningf("failed to convert pod labelSelector %s to selector: %v", policy.np.Spec.PodSelector.String(), err)
+			glog.Warningf("failed to convert pod labelSelector %s to selector: %v",
+				policy.np.Spec.PodSelector.String(), err)
 			continue
 		}
 		if policy.ingressRule != nil {
@@ -878,19 +902,23 @@ func (p *PolicyManager) ensureBasicChain() error {
 		return fmt.Errorf("failed to ensure policy chain %s: %v", string(egressChain), err)
 	}
 	// -I FORWARD -j GLX-INGRESS
-	if _, err := p.iptableHandle.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter, utiliptables.ChainForward, "-j", string(ingressChain)); err != nil {
+	if _, err := p.iptableHandle.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter,
+		utiliptables.ChainForward, "-j", string(ingressChain)); err != nil {
 		return fmt.Errorf("failed to add FORWARD jump policy chain rule: %v", err)
 	}
 	// -I FORWARD -j GLX-EGRESS
-	if _, err := p.iptableHandle.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter, utiliptables.ChainForward, "-j", string(egressChain)); err != nil {
+	if _, err := p.iptableHandle.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter,
+		utiliptables.ChainForward, "-j", string(egressChain)); err != nil {
 		return fmt.Errorf("failed to add FORWARD jump policy chain rule: %v", err)
 	}
 	// -I OUTPUT -j GLX-INGRESS
-	if _, err := p.iptableHandle.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter, utiliptables.ChainOutput, "-j", string(ingressChain)); err != nil {
+	if _, err := p.iptableHandle.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter,
+		utiliptables.ChainOutput, "-j", string(ingressChain)); err != nil {
 		return fmt.Errorf("failed to add OUTPUT jump policy chain rule: %v", err)
 	}
 	// -I INPUT -j GLX-EGRESS
-	if _, err := p.iptableHandle.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter, utiliptables.ChainInput, "-j", string(egressChain)); err != nil {
+	if _, err := p.iptableHandle.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter,
+		utiliptables.ChainInput, "-j", string(egressChain)); err != nil {
 		return fmt.Errorf("failed to add INPUT jump policy chain rule: %v", err)
 	}
 	return nil
@@ -940,13 +968,16 @@ func (p *PolicyManager) deletePodRuleByKeyword(pod *corev1.Pod, chain utiliptabl
 	if podLine == "" {
 		glog.V(5).Infof("find no pod %s_%s keyword %s rule line in %s", pod.Name, pod.Namespace, keyword, string(chain))
 	} else {
-		glog.V(5).Infof("find pod %s_%s keyword %s rule line in %s: %s", pod.Name, pod.Namespace, keyword, string(chain), podLine)
+		glog.V(5).Infof("find pod %s_%s keyword %s rule line in %s: %s", pod.Name, pod.Namespace, keyword,
+			string(chain), podLine)
 		parts := strings.Split(podLine, " ")
 		if len(parts) < 3 {
-			glog.Warningf("unexpected pod %s_%s keyword %s rule line in %s: %s", pod.Name, pod.Namespace, keyword, string(chain), podLine)
+			glog.Warningf("unexpected pod %s_%s keyword %s rule line in %s: %s", pod.Name, pod.Namespace, keyword,
+				string(chain), podLine)
 		} else {
 			if err := p.iptableHandle.DeleteRule(utiliptables.TableFilter, chain, parts[2:]...); err != nil {
-				glog.Warningf("failed to delete pod %s_%s keyword %s rule line in %s: %v", pod.Name, pod.Namespace, keyword, string(chain), err)
+				glog.Warningf("failed to delete pod %s_%s keyword %s rule line in %s: %v", pod.Name, pod.Namespace,
+					keyword, string(chain), err)
 			}
 		}
 	}
@@ -956,7 +987,8 @@ func (p *PolicyManager) deletePodRuleByKeyword(pod *corev1.Pod, chain utiliptabl
 func (p *PolicyManager) getNamespaces(namespaceSelector *v1.LabelSelector) ([]*corev1.Namespace, error) {
 	namespaceLabelSelector, err := v1.LabelSelectorAsSelector(namespaceSelector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert namespace labelSelector %s to selector: %v", namespaceLabelSelector.String(), err)
+		return nil, fmt.Errorf("failed to convert namespace labelSelector %s to selector: %v",
+			namespaceLabelSelector.String(), err)
 	}
 	namespaces, err := p.namespaceLister.List(namespaceLabelSelector)
 	if err != nil {
@@ -967,11 +999,13 @@ func (p *PolicyManager) getNamespaces(namespaceSelector *v1.LabelSelector) ([]*c
 
 func (p *PolicyManager) addOrDelIPSetEntry(add bool, set *ipset.IPSet, podIP string) {
 	if add {
-		if err := p.ipsetHandle.AddEntryWithOptions(&ipset.Entry{IP: podIP, SetType: set.SetType}, set, true); err != nil {
+		if err := p.ipsetHandle.AddEntryWithOptions(&ipset.Entry{IP: podIP, SetType: set.SetType},
+			set, true); err != nil {
 			glog.Warningf("failed to add entry %s to ipset %s: %v", podIP, set.Name, err)
 		}
 	} else {
-		if err := p.ipsetHandle.DelEntryWithOptions(set.Name, (&ipset.Entry{IP: podIP, SetType: set.SetType}).String()); err != nil {
+		if err := p.ipsetHandle.DelEntryWithOptions(set.Name,
+			(&ipset.Entry{IP: podIP, SetType: set.SetType}).String()); err != nil {
 			glog.Warningf("failed to del entry %s from ipset %s: %v", podIP, set.Name, err)
 		}
 	}

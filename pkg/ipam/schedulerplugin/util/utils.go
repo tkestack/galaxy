@@ -29,9 +29,11 @@ func resolveDeploymentName(pod *corev1.Pod) string {
 type KeyObj struct {
 	// stores the key format in database
 	// for deployment dp_namespace_deploymentName_podName,
-	// for pool pool__poolName_dp_namespace_deploymentName_podName, for statefulset sts_namespace_statefulsetName_podName
+	// for pool pool__poolName_dp_namespace_deploymentName_podName, for statefulset
+	// sts_namespace_statefulsetName_podName
 	// If deployment name is 63 bytes, e.g. dp1234567890dp1234567890dp1234567890dp1234567890dp1234567890dp1
-	// deployment pod name will be 63 bytes with modified suffix, e.g. dp1234567890dp1234567890dp1234567890dp1234567890dp1234567848p74
+	// deployment pod name will be 63 bytes with modified suffix, e.g.
+	// dp1234567890dp1234567890dp1234567890dp1234567890dp1234567848p74
 	// So we can't get deployment name from pod name and have to store deployment name with pod name
 	KeyInDB string
 	// Deprecated, please use Deployment() instead
@@ -45,7 +47,8 @@ type KeyObj struct {
 }
 
 func NewKeyObj(appTypePrefix string, namespace, appName, podName, poolName string) *KeyObj {
-	k := &KeyObj{AppTypePrefix: appTypePrefix, AppName: appName, PodName: podName, Namespace: namespace, PoolName: poolName}
+	k := &KeyObj{AppTypePrefix: appTypePrefix, AppName: appName, PodName: podName, Namespace: namespace,
+		PoolName: poolName}
 	if appTypePrefix == DeploymentPrefixKey {
 		k.IsDeployment = true
 	}
@@ -141,7 +144,8 @@ func ParseKey(key string) *KeyObj {
 	removedPoolKey := key
 	if strings.HasPrefix(key, poolPrefix) {
 		// pool__poolName_deployment_namespace_deploymentName_podName
-		parts := strings.SplitN(key[len(poolPrefix):], "_", 2) // poolName and deployment_namespace_deploymentName_podName
+		// poolName and deployment_namespace_deploymentName_podName
+		parts := strings.SplitN(key[len(poolPrefix):], "_", 2)
 		if len(parts) != 2 {
 			return keyObj
 		}

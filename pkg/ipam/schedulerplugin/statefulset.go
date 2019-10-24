@@ -12,7 +12,8 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
-func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
+func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyObj,
+	policy constant.ReleasePolicy) error {
 	key := keyObj.KeyInDB
 	if policy == constant.ReleasePolicyPodDelete {
 		return p.releaseIP(key, deletedAndIPMutablePod, pod)
@@ -36,7 +37,8 @@ func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyO
 	return nil
 }
 
-func (p *FloatingIPPlugin) checkAppAndReplicas(pod *corev1.Pod, keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
+func (p *FloatingIPPlugin) checkAppAndReplicas(pod *corev1.Pod,
+	keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
 	if keyObj.StatefulSet() {
 		return p.getStsReplicas(pod, keyObj)
 	} else if keyObj.TApp() {
@@ -48,7 +50,8 @@ func (p *FloatingIPPlugin) checkAppAndReplicas(pod *corev1.Pod, keyObj *util.Key
 	return
 }
 
-func (p *FloatingIPPlugin) getStsReplicas(pod *corev1.Pod, keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
+func (p *FloatingIPPlugin) getStsReplicas(pod *corev1.Pod,
+	keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
 	statefulSet, err := p.StatefulSetLister.GetPodStatefulSets(pod)
 	if err != nil {
 		if !metaErrs.IsNotFound(err) {
@@ -69,7 +72,8 @@ func (p *FloatingIPPlugin) getStsReplicas(pod *corev1.Pod, keyObj *util.KeyObj) 
 	return
 }
 
-func (p *FloatingIPPlugin) shouldReserve(pod *corev1.Pod, keyObj *util.KeyObj, appExist bool, replicas int32) (bool, string, error) {
+func (p *FloatingIPPlugin) shouldReserve(pod *corev1.Pod, keyObj *util.KeyObj,
+	appExist bool, replicas int32) (bool, string, error) {
 	if !appExist {
 		return false, deletedAndParentAppNotExistPod, nil
 	}

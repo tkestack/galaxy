@@ -250,7 +250,8 @@ func (i *dbIpam) Shutdown() {
 }
 
 // AllocateInSubnet allocate subnet of IPs.
-func (i *dbIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy constant.ReleasePolicy, attr string) (allocated net.IP, err error) {
+func (i *dbIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy constant.ReleasePolicy,
+	attr string) (allocated net.IP, err error) {
 	if routableSubnet == nil {
 		// this should never happen
 		return nil, fmt.Errorf("nil routableSubnet")
@@ -261,7 +262,8 @@ func (i *dbIpam) AllocateInSubnet(key string, routableSubnet *net.IPNet, policy 
 		for j := range i.FloatingIPs {
 			allRoutableSubnet = append(allRoutableSubnet, i.FloatingIPs[j].RoutableSubnet.String())
 		}
-		glog.V(3).Infof("can't find fit routableSubnet %s, all routableSubnets %v", routableSubnet.String(), allRoutableSubnet)
+		glog.V(3).Infof("can't find fit routableSubnet %s, all routableSubnets %v", routableSubnet.String(),
+			allRoutableSubnet)
 		err = ErrNoFIPForSubnet
 		return
 	}

@@ -32,7 +32,8 @@ func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) erro
 	return nil
 }
 
-func allocateInSubnet(ipam floatingip.IPAM, key string, subnet *net.IPNet, policy constant.ReleasePolicy, attr, when string) error {
+func allocateInSubnet(ipam floatingip.IPAM, key string, subnet *net.IPNet, policy constant.ReleasePolicy, attr,
+	when string) error {
 	ip, err := ipam.AllocateInSubnet(key, subnet, policy, attr)
 	if err != nil {
 		return err
@@ -41,7 +42,8 @@ func allocateInSubnet(ipam floatingip.IPAM, key string, subnet *net.IPNet, polic
 	return nil
 }
 
-func allocateInSubnetWithKey(ipam floatingip.IPAM, oldK, newK, subnet string, policy constant.ReleasePolicy, attr, when string) error {
+func allocateInSubnetWithKey(ipam floatingip.IPAM, oldK, newK, subnet string, policy constant.ReleasePolicy,
+	attr, when string) error {
 	if err := ipam.AllocateInSubnetWithKey(oldK, newK, subnet, policy, attr); err != nil {
 		return err
 	}
@@ -54,7 +56,8 @@ func allocateInSubnetWithKey(ipam floatingip.IPAM, oldK, newK, subnet string, po
 }
 
 // #lizard forgives
-func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy constant.ReleasePolicy, replicas int, isPoolSizeDefined bool) (subnets []string, reserve bool, err error) {
+func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy constant.ReleasePolicy, replicas int,
+	isPoolSizeDefined bool) (subnets []string, reserve bool, err error) {
 	if keyObj.Deployment() && policy != constant.ReleasePolicyPodDelete {
 		var ips []database.FloatingIP
 		poolPrefix := keyObj.PoolPrefix()
@@ -80,13 +83,15 @@ func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy consta
 				unusedSubnetSet.Insert(ip.Subnet)
 			}
 		}
-		glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d, isPoolSizeDefined %v", keyObj, unusedSubnetSet, usedCount, replicas, isPoolSizeDefined)
+		glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d, isPoolSizeDefined %v", keyObj,
+			unusedSubnetSet, usedCount, replicas, isPoolSizeDefined)
 		// check usedCount >= replicas to ensure upgrading a deployment won't change its ips
 		if usedCount >= replicas {
 			if isPoolSizeDefined {
 				return nil, false, fmt.Errorf("reached pool %s size limit of %d", keyObj.PoolName, replicas)
 			}
-			return nil, false, fmt.Errorf("deployment %s has allocated %d ips with replicas of %d, wait for releasing", keyObj.AppName, usedCount, replicas)
+			return nil, false, fmt.Errorf("deployment %s has allocated %d ips with replicas of %d, wait for releasing",
+				keyObj.AppName, usedCount, replicas)
 		}
 		if unusedSubnetSet.Len() > 0 {
 			return unusedSubnetSet.List(), true, nil
@@ -122,13 +127,15 @@ func releaseIP(ipam floatingip.IPAM, key string, reason string) error {
 		return fmt.Errorf("failed to query floating ip of %s: %v", key, err)
 	}
 	if ipInfo == nil {
-		glog.Infof("[%s] release floating ip from %s because of %s, but already been released", ipam.Name(), key, reason)
+		glog.Infof("[%s] release floating ip from %s because of %s, but already been released", ipam.Name(), key,
+			reason)
 		return nil
 	}
 	if err := ipam.Release(key, ipInfo.IPInfo.IP.IP); err != nil {
 		return fmt.Errorf("failed to release floating ip of %s because of %s: %v", key, reason, err)
 	}
-	glog.Infof("[%s] released floating ip %s from %s because of %s", ipam.Name(), ipInfo.IPInfo.IP.String(), key, reason)
+	glog.Infof("[%s] released floating ip %s from %s because of %s", ipam.Name(), ipInfo.IPInfo.IP.String(), key,
+		reason)
 	return nil
 }
 

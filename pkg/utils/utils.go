@@ -220,7 +220,8 @@ func CreateVeth(containerID string, mtu int, suffix string) (netlink.Link, netli
 		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0, MTU: mtu},
 		PeerName:  containerIfName}
 	if err := netlink.LinkAdd(veth); err != nil {
-		return nil, nil, fmt.Errorf("failed to add the host %q <=> sandbox %q pair interfaces: %v", hostIfName, containerIfName, err)
+		return nil, nil, fmt.Errorf("failed to add the host %q <=> sandbox %q pair interfaces: %v",
+			hostIfName, containerIfName, err)
 	}
 
 	// Get the host side pipe interface handler

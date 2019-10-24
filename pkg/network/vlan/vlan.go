@@ -138,7 +138,8 @@ func (d *VlanDriver) initVlanBridgeDevice(device netlink.Link, filteredAddr []ne
 	return nil
 }
 
-func (d *VlanDriver) moveAddrAndRoute(device netlink.Link, bri netlink.Link, filteredAddr []netlink.Addr, rs []netlink.Route) error {
+func (d *VlanDriver) moveAddrAndRoute(device netlink.Link, bri netlink.Link, filteredAddr []netlink.Addr,
+	rs []netlink.Route) error {
 	var err error
 	for i := range filteredAddr {
 		if err = netlink.AddrDel(device, &filteredAddr[i]); err != nil {
@@ -153,17 +154,20 @@ func (d *VlanDriver) moveAddrAndRoute(device netlink.Link, bri netlink.Link, fil
 		filteredAddr[i].Label = ""
 		if err = netlink.AddrAdd(bri, &filteredAddr[i]); err != nil {
 			if !strings.Contains(err.Error(), "file exists") {
-				return fmt.Errorf("failed to add v4address to bridge device %s: %v, address %v", d.DefaultBridgeName, err, filteredAddr[i])
+				return fmt.Errorf("failed to add v4address to bridge device %s: %v, address %v", d.DefaultBridgeName,
+					err, filteredAddr[i])
 			} else {
 				err = nil
 			}
 		}
 	}
-	if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: d.DefaultBridgeName}}); err != nil {
+	if err = netlink.LinkSetMaster(device, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{
+		Name: d.DefaultBridgeName}}); err != nil {
 		return fmt.Errorf("failed to add device %s to bridge device %s: %v", d.Device, d.DefaultBridgeName, err)
 	}
 	for i := range rs {
-		newRoute := netlink.Route{Gw: rs[i].Gw, LinkIndex: bri.Attrs().Index, Dst: rs[i].Dst, Src: rs[i].Src, Scope: rs[i].Scope}
+		newRoute := netlink.Route{Gw: rs[i].Gw, LinkIndex: bri.Attrs().Index, Dst: rs[i].Dst,
+			Src: rs[i].Src, Scope: rs[i].Scope}
 		if err = netlink.RouteAdd(&newRoute); err != nil {
 			if !strings.Contains(err.Error(), "file exists") {
 				return fmt.Errorf("failed to add route %s", newRoute.String())
@@ -232,8 +236,10 @@ func (d *VlanDriver) CreateBridgeAndVlanDevice(vlanId uint16) (string, error) {
 		return "", err
 	}
 	if vlan.Attrs().MasterIndex != bridge.Attrs().Index {
-		if err := netlink.LinkSetMaster(vlan, &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: bridgeIfName}}); err != nil {
-			return "", fmt.Errorf("Failed to add vlan device %s to bridge device %s: %v", vlan.Attrs().Name, bridgeIfName, err)
+		if err := netlink.LinkSetMaster(vlan, &netlink.Bridge{
+			LinkAttrs: netlink.LinkAttrs{Name: bridgeIfName}}); err != nil {
+			return "", fmt.Errorf("Failed to add vlan device %s to bridge device %s: %v",
+				vlan.Attrs().Name, bridgeIfName, err)
 		}
 	}
 	if err := netlink.LinkSetUp(bridge); err != nil {
@@ -280,7 +286,8 @@ func (d *VlanDriver) getOrCreateVlanDevice(vlanId uint16) (netlink.Link, error) 
 	vlanIfName := fmt.Sprintf("%s%d", d.VlanNamePrefix, vlanId)
 	// Get vlan device
 	vlan, err := getOrCreateDevice(vlanIfName, func(name string) error {
-		vlanIf := &netlink.Vlan{LinkAttrs: netlink.LinkAttrs{Name: vlanIfName, ParentIndex: d.vlanParentIndex}, VlanId: (int)(vlanId)}
+		vlanIf := &netlink.Vlan{LinkAttrs: netlink.LinkAttrs{Name: vlanIfName, ParentIndex: d.vlanParentIndex},
+			VlanId: (int)(vlanId)}
 		if err := netlink.LinkAdd(vlanIf); err != nil {
 			return fmt.Errorf("Failed to add vlan device %s: %v", vlanIfName, err)
 		}

@@ -22,13 +22,16 @@ func Ok(resp *restful.Response) {
 }
 
 func InternalError(resp *restful.Response, err error) {
-	resp.WriteHeaderAndEntity(http.StatusInternalServerError, NewResp(http.StatusInternalServerError, fmt.Sprintf("server error: %v", err))) // nolint: errcheck
+	resp.WriteHeaderAndEntity(http.StatusInternalServerError, NewResp(http.StatusInternalServerError,
+		fmt.Sprintf("server error: %v", err))) // nolint: errcheck
 }
 
 func BadRequest(resp *restful.Response, err error) {
-	resp.WriteHeaderAndEntity(http.StatusBadRequest, NewResp(http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))) // nolint: errcheck
+	resp.WriteHeaderAndEntity(http.StatusBadRequest, NewResp(http.StatusBadRequest,
+		fmt.Sprintf("bad request: %v", err))) // nolint: errcheck
 }
 
 func ItemNotFound(resp *restful.Response, err error) {
-	resp.WriteHeaderAndEntity(http.StatusNotFound, NewResp(http.StatusNotFound, fmt.Sprintf("not found: %v", err))) // nolint: errcheck
+	resp.WriteHeaderAndEntity(http.StatusNotFound, NewResp(http.StatusNotFound,
+		fmt.Sprintf("not found: %v", err))) // nolint: errcheck
 }

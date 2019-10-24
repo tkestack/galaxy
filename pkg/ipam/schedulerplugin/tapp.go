@@ -34,7 +34,8 @@ func (p *FloatingIPPlugin) getTAppMap() (map[string]*tappv1.TApp, error) {
 	return key2App, nil
 }
 
-func (p *FloatingIPPlugin) getTAppReplicas(pod *corev1.Pod, keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
+func (p *FloatingIPPlugin) getTAppReplicas(pod *corev1.Pod,
+	keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
 	tapp, err := p.TAppLister.TApps(pod.Namespace).Get(keyObj.AppName)
 	if err != nil {
 		if !metaErrs.IsNotFound(err) {

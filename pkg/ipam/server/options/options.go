@@ -23,7 +23,8 @@ var (
 )
 
 func init() {
-	flag.StringVar(&JsonConfigPath, "config", "/etc/galaxy/galaxy-ipam.json", "The json config file location of galaxy-ipam")
+	flag.StringVar(&JsonConfigPath, "config", "/etc/galaxy/galaxy-ipam.json", "The json config file location of"+
+		" galaxy-ipam")
 }
 
 func NewServerRunOptions() *ServerRunOptions {

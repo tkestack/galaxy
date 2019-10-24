@@ -81,7 +81,8 @@ func fipCheck(fip *FloatingIP) error {
 		}
 		if i != 0 {
 			if nets.IPToInt(fip.IPRanges[i].First) <= nets.IPToInt(fip.IPRanges[i-1].Last)+1 {
-				return fmt.Errorf("ip range %s and %s can be merge to one or has wrong order", fip.IPRanges[i-1].String(), fip.IPRanges[i].String())
+				return fmt.Errorf("ip range %s and %s can be merge to one or has wrong order",
+					fip.IPRanges[i-1].String(), fip.IPRanges[i].String())
 			}
 		}
 	}

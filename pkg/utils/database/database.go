@@ -61,7 +61,7 @@ func (db *DBRecorder) createDBIfNotExist() error {
 		return fmt.Errorf("Failed to open %s with driver %s, error(%v)", db.Addr, db.Driver, err)
 	}
 	defer conn.Close() // nolint: errcheck
-	if err := conn.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8 " + 
+	if err := conn.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8 "+
 		"DEFAULT COLLATE utf8_general_ci;", db.DBName)).Error; err != nil {
 		return fmt.Errorf("Failed to create database %s, error(%v)", db.DBName, err)
 	}

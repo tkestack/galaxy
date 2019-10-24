@@ -78,7 +78,8 @@ func GetPodFullName(podName, namespace string) string {
 	return podName + "_" + namespace
 }
 
-var flagHostnameOverride = flag.String("hostname-override", "", "kubelet hostname override, if set, galaxy use this as node name to get node from apiserver")
+var flagHostnameOverride = flag.String("hostname-override", "", "kubelet hostname override, if set, galaxy use this"+
+	" as node name to get node from apiserver")
 
 // copied from kubelet
 // GetHostname returns OS's hostname if 'hostnameOverride' is empty; otherwise, return 'hostnameOverride'.
@@ -100,7 +101,8 @@ type PortMapConf struct {
 	} `json:"runtimeConfig,omitempty"`
 }
 
-//such as struct NetworkSelectionElement, function ParsePodNetworkAnnotation &  parsePodNetworkObjectName all written in compatible with multus-cni
+//such as struct NetworkSelectionElement, function ParsePodNetworkAnnotation &  parsePodNetworkObjectName all written
+// in compatible with multus-cni
 //reference to https://github.com/intel/multus-cni/blob/master/k8sclient/k8sclient.go
 
 // NetworkSelectionElement represents one element of the JSON format
@@ -126,14 +128,16 @@ type NetworkSelectionElement struct {
 func ParsePodNetworkAnnotation(podNetworks string) ([]*NetworkSelectionElement, error) {
 	var networks []*NetworkSelectionElement
 	if podNetworks == "" {
-		return nil, fmt.Errorf("parsePodNetworkAnnotation: pod annotation should be written as <namespace>/<network name>@<ifname>")
+		return nil, fmt.Errorf("parsePodNetworkAnnotation: pod annotation should be written as " +
+			"<namespace>/<network name>@<ifname>")
 	}
 
 	//In multus-cni, network annotation written as <namespace>/<network name>@<ifname>
 	//Actually, namespace in annotation will be ignored in parsing
 	if strings.IndexAny(podNetworks, "[{\"") >= 0 {
 		if err := json.Unmarshal([]byte(podNetworks), &networks); err != nil {
-			return nil, fmt.Errorf("parsePodNetworkAnnotation: failed to parse pod Network Attachment Selection Annotation JSON format: %v", err)
+			return nil, fmt.Errorf("parsePodNetworkAnnotation: failed to parse pod Network Attachment Selection "+
+				"Annotation JSON format: %v", err)
 		}
 	} else {
 		// Comma-delimited list of network attachment object names
@@ -189,7 +193,9 @@ func parsePodNetworkObjectName(podNetwork string) (string, string, string, error
 	for i := range allItems {
 		matched, _ := regexp.MatchString("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", allItems[i])
 		if !matched && len([]rune(allItems[i])) > 0 {
-			return "", "", "", fmt.Errorf("Failed to parse: one or more items did not match comma-delimited format (must consist of lower case alphanumeric characters). Must start and end with an alphanumeric character), mismatch @ '%v' ", allItems[i])
+			return "", "", "", fmt.Errorf("Failed to parse: one or more items did not match comma-delimited format"+
+				" (must consist of lower case alphanumeric characters). Must start and end with an alphanumeric"+
+				" character), mismatch @ '%v' ", allItems[i])
 		}
 	}
 
