@@ -160,7 +160,8 @@ func (p *PolicyManager) syncPods() {
 	} else {
 		// PodInformerFactory not started meaning there isn't any network policy right now, ensure pods' chains
 		// are deleted
-		list, err := p.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
+		list, err := p.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{
+			FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
 		if err != nil {
 			glog.Warningf("failed to list pods: %v", err)
 			return

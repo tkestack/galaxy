@@ -210,7 +210,8 @@ func parseExtendedCNIArgs(pod *corev1.Pod) (map[string]map[string]json.RawMessag
 
 func (g *Galaxy) setupIPtables() error {
 	// filter all running pods on node
-	pods, err := g.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
+	pods, err := g.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
 	if err != nil {
 		return fmt.Errorf("failed to get pods on node: %v", err)
 	}

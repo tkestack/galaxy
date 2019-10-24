@@ -60,7 +60,8 @@ func (c *PoolController) Get(req *restful.Request, resp *restful.Response) {
 		httputil.InternalError(resp, err)
 		return
 	}
-	resp.WriteEntity(GetPoolResp{Resp: httputil.NewResp(http.StatusOK, ""), Pool: Pool{Name: pool.Name, Size: pool.Size, PreAllocateIP: pool.PreAllocateIP}})
+	resp.WriteEntity(GetPoolResp{Resp: httputil.NewResp(http.StatusOK, ""), Pool: Pool{
+		Name: pool.Name, Size: pool.Size, PreAllocateIP: pool.PreAllocateIP}})
 }
 
 type UpdatePoolResp struct {
@@ -154,7 +155,9 @@ func (c *PoolController) preAllocateIP(req *restful.Request, resp *restful.Respo
 		} else if err == floatingip.ErrNoEnoughIP {
 			j++
 			if j == len(subnets) {
-				resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: pool.Size - needAllocateIPs + i})
+				resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{
+					Resp:         httputil.NewResp(http.StatusAccepted, "No enough IPs"),
+					RealPoolSize: pool.Size - needAllocateIPs + i})
 				return
 			}
 			_, subnetIPNet, _ = net.ParseCIDR(subnets[j])
