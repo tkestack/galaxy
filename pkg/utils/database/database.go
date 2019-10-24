@@ -15,6 +15,7 @@ import (
 	glog "k8s.io/klog"
 )
 
+// DBConfig is the database config
 type DBConfig struct {
 	Protocol string `json:"protocol,omitempty"`
 	Addr     string `json:"addr,omitempty"`
@@ -29,6 +30,7 @@ var (
 	sqlRegexp = regexp.MustCompile(`(\$\d+)|\?`)
 )
 
+// DBRecorder keeps connection to database
 type DBRecorder struct {
 	*DBConfig
 	conn   *gorm.DB
@@ -36,6 +38,7 @@ type DBRecorder struct {
 	wg     sync.WaitGroup
 }
 
+// ActionFunc is a func which executes all the sql in a transaction
 type ActionFunc func(tx *gorm.DB) error
 
 func NewDBRecorder(config *DBConfig) *DBRecorder {
@@ -58,17 +61,20 @@ func (db *DBRecorder) createDBIfNotExist() error {
 		return fmt.Errorf("Failed to open %s with driver %s, error(%v)", db.Addr, db.Driver, err)
 	}
 	defer conn.Close() // nolint: errcheck
-	if err := conn.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci;", db.DBName)).Error; err != nil {
+	if err := conn.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8 " + 
+		"DEFAULT COLLATE utf8_general_ci;", db.DBName)).Error; err != nil {
 		return fmt.Errorf("Failed to create database %s, error(%v)", db.DBName, err)
 	}
 	return nil
 }
 
+// Run connects to database
 func (db *DBRecorder) Run() (err error) {
 	if err = db.createDBIfNotExist(); err != nil {
 		return
 	}
-	dialect := fmt.Sprintf("%s:%s@%s(%s)/%s?parseTime=true&loc=Local", db.Username, db.Password, db.Protocol, db.Addr, db.DBName)
+	dialect := fmt.Sprintf("%s:%s@%s(%s)/%s?parseTime=true&loc=Local", db.Username, db.Password, db.Protocol,
+		db.Addr, db.DBName)
 
 	glog.Infof("Login database: %s", dialect)
 	db.conn, err = gorm.Open(db.Driver, dialect)
@@ -101,6 +107,7 @@ func (db *DBRecorder) Run() (err error) {
 	return
 }
 
+// CreateTableIfNotExist creates table if it is not exist
 func (db *DBRecorder) CreateTableIfNotExist(entity interface{}) error {
 	if !db.conn.HasTable(entity) {
 		if err := db.conn.CreateTable(entity).Error; err != nil {
@@ -116,6 +123,7 @@ func (db *DBRecorder) CreateTableIfNotExist(entity interface{}) error {
 	return nil
 }
 
+// Transaction executes ActionFuncs in a transaction
 func (db *DBRecorder) Transaction(ops ...ActionFunc) (err error) {
 	db.wg.Add(1)
 	defer db.wg.Done()
@@ -148,6 +156,7 @@ func (db *DBRecorder) Transaction(ops ...ActionFunc) (err error) {
 	return
 }
 
+// Shutdown shut down connection to database
 // nolint: errcheck
 func (db *DBRecorder) Shutdown() {
 	db.wg.Wait()
@@ -161,12 +170,15 @@ func (db *DBRecorder) Shutdown() {
 	}
 }
 
+// GetConn gets connection
 func (db *DBRecorder) GetConn() *gorm.DB {
 	return db.conn
 }
 
+// WrappedLogger defines the sql log format
 type WrappedLogger struct{}
 
+// Print prints sql log
 // #lizard forgives
 func (l *WrappedLogger) Print(values ...interface{}) {
 	if len(values) > 1 {
@@ -176,7 +188,8 @@ func (l *WrappedLogger) Print(values ...interface{}) {
 
 		if level == "sql" {
 			// duration
-			messages = append(messages, fmt.Sprintf(" \033[36;1m[%.2fms]\033[0m ", float64(values[2].(time.Duration).Nanoseconds()/1e4)/100.0))
+			messages = append(messages, fmt.Sprintf(" \033[36;1m[%.2fms]\033[0m ",
+				float64(values[2].(time.Duration).Nanoseconds()/1e4)/100.0))
 			// sql
 			var sql string
 			var formattedValues []string

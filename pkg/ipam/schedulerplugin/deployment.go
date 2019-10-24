@@ -14,6 +14,7 @@ import (
 	"tkestack.io/galaxy/pkg/utils/keylock"
 )
 
+// unbindDpPod unbind deployment pod
 func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
 	key, prefixKey := keyObj.KeyInDB, keyObj.PoolPrefix()
 	dp, err := p.DeploymentLister.Deployments(keyObj.Namespace).Get(keyObj.AppName)
@@ -34,6 +35,7 @@ func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, pol
 	return nil
 }
 
+// unbindDpPod unbind deployment pod
 func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keylock.Keylock, replicas int,
 	policy constant.ReleasePolicy, when string) error {
 	if policy == constant.ReleasePolicyPodDelete {
@@ -85,6 +87,7 @@ func (p *FloatingIPPlugin) getDpReplicas(keyObj *util.KeyObj) (int, bool, error)
 	return int(*deployment.Spec.Replicas), false, nil
 }
 
+// getDPMap gets deployments from apiserver
 func (p *FloatingIPPlugin) getDPMap() (map[string]*appv1.Deployment, error) {
 	dps, err := p.DeploymentLister.List(labels.Everything())
 	if err != nil {

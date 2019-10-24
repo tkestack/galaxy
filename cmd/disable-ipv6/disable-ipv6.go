@@ -9,15 +9,18 @@ import (
 	"github.com/vishvananda/netns"
 )
 
+// main is the main func of disable-ipv6
 func main() {
 	NSInvoke(func() {
-		if err := ioutil.WriteFile(fmt.Sprintf("/proc/sys/net/ipv6/conf/all/disable_ipv6"), []byte{'1', '\n'}, 0644); err != nil {
+		if err := ioutil.WriteFile(fmt.Sprintf("/proc/sys/net/ipv6/conf/all/disable_ipv6"),
+			[]byte{'1', '\n'}, 0644); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to disable IPv6 forwarding %v", err) // nolint: errcheck
 			os.Exit(4)
 		}
 	})
 }
 
+// NSInvoke invokes f inside container
 func NSInvoke(f func()) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()

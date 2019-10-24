@@ -10,6 +10,7 @@ import (
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
+// cloudProviderAssignIP send assign ip req to cloud provider
 func (p *FloatingIPPlugin) cloudProviderAssignIP(req *rpc.AssignIPRequest) error {
 	if p.cloudProvider == nil {
 		return nil
@@ -28,6 +29,7 @@ func (p *FloatingIPPlugin) cloudProviderAssignIP(req *rpc.AssignIPRequest) error
 	return nil
 }
 
+// cloudProviderUnAssignIP send unassign ip req to cloud provider
 func (p *FloatingIPPlugin) cloudProviderUnAssignIP(req *rpc.UnAssignIPRequest) error {
 	if p.cloudProvider == nil {
 		return nil
@@ -46,6 +48,7 @@ func (p *FloatingIPPlugin) cloudProviderUnAssignIP(req *rpc.UnAssignIPRequest) e
 	return nil
 }
 
+// resyncCloudProviderIPs resyncs assigned ips with cloud provider
 func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, meta *resyncMeta) {
 	for key, obj := range meta.assignedPods {
 		if _, ok := meta.existPods[key]; ok {
@@ -64,7 +67,8 @@ func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, meta *re
 			glog.Errorf("empty nodeName for %s in db", key)
 			continue
 		}
-		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName, nets.IntToIP(obj.fip.IP).String(), key)
+		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName, 
+			nets.IntToIP(obj.fip.IP).String(), key)
 		if err := p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
 			NodeName:  attr.NodeName,
 			IPAddress: nets.IntToIP(obj.fip.IP).String(),

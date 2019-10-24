@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/containernetworking/cni/pkg/invoke"
@@ -145,7 +144,8 @@ type NetworkInfo struct {
 }
 
 // NewNetworkInfo creates a NetworkInfo
-func NewNetworkInfo(networkType string, args map[string]string, conf map[string]interface{}, ifName string) *NetworkInfo {
+func NewNetworkInfo(networkType string, args map[string]string, conf map[string]interface{},
+		ifName string) *NetworkInfo {
 	return &NetworkInfo{NetworkType: networkType, Args: args, Conf: conf, IfName: ifName}
 }
 
