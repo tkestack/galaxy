@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	"github.com/jinzhu/gorm"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 // #lizard forgives

@@ -3,10 +3,10 @@ package testing
 import (
 	"strings"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 )
 
 // CreateStatefulSetPodWithLabels creates a statefulset pod with labels as `labels` for testing

@@ -3,7 +3,7 @@ package portmapping
 import (
 	"testing"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
+	"tkestack.io/galaxy/pkg/api/k8s"
 )
 
 func TestOpenRandomPort(t *testing.T) {

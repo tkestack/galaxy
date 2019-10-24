@@ -9,11 +9,11 @@ import (
 	"strings"
 	"sync"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
-	utiliptables "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables"
 	glog "k8s.io/klog"
 	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/utils/exec"
+	"tkestack.io/galaxy/pkg/api/k8s"
+	utiliptables "tkestack.io/galaxy/pkg/utils/iptables"
 )
 
 const (

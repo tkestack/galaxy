@@ -4,10 +4,10 @@ import (
 	"reflect"
 	"testing"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
-	. "git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/testing"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 )
 
 func TestResolvePodKey(t *testing.T) {

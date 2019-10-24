@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	"tkestack.io/galaxy/pkg/utils/database"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 var (

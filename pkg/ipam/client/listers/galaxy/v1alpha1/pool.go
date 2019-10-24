@@ -19,10 +19,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
+	v1alpha1 "tkestack.io/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 )
 
 // PoolLister helps list Pools.

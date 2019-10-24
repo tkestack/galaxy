@@ -10,11 +10,11 @@ import (
 	"os"
 	"strings"
 
-	galaxyapi "git.code.oa.com/tkestack/galaxy/pkg/api/galaxy"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/private"
 	"github.com/containernetworking/cni/pkg/skel"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/version"
+	galaxyapi "tkestack.io/galaxy/pkg/api/galaxy"
+	"tkestack.io/galaxy/pkg/api/galaxy/private"
 )
 
 type cniPlugin struct {

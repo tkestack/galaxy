@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/plugins/pkg/ipam"
+	"tkestack.io/galaxy/pkg/api/cniutil"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 )
 
 // Allocate tries to find IPInfo from args firstly

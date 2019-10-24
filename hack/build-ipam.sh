@@ -6,7 +6,7 @@ set -o pipefail
 flags=${debug:+"-v"}
 ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd -P)
 LOCAL_GOPATH="${ROOT}/go"
-PKG=git.code.oa.com/tkestack/galaxy
+PKG=tkestack.io/galaxy
 
 source ${ROOT}/hack/init.sh
 create_go_path_tree

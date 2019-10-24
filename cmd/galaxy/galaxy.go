@@ -4,8 +4,8 @@ import (
 	"math/rand"
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/galaxy"
-	"git.code.oa.com/tkestack/galaxy/pkg/signal"
+	"tkestack.io/galaxy/pkg/galaxy"
+	"tkestack.io/galaxy/pkg/signal"
 	glog "k8s.io/klog"
 	"github.com/spf13/pflag"
 	"k8s.io/component-base/cli/flag"

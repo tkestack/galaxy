@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"syscall"
 
-	glog "k8s.io/klog"
 	"github.com/vishvananda/netns"
+	glog "k8s.io/klog"
 )
 
 // nolint: errcheck

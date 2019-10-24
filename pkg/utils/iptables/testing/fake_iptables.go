@@ -23,8 +23,8 @@ import (
 	"sort"
 	"strings"
 
-	utiliptables "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables"
 	"k8s.io/apimachinery/pkg/util/sets"
+	utiliptables "tkestack.io/galaxy/pkg/utils/iptables"
 )
 
 type fakeChain struct {

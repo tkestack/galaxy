@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/cloudprovider/rpc"
-	glog "k8s.io/klog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
+	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
 )
 
 var kacp = keepalive.ClientParameters{

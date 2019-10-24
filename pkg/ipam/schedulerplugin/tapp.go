@@ -3,11 +3,11 @@ package schedulerplugin
 import (
 	"fmt"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 	tappv1 "tkestack.io/tapp-controller/pkg/apis/tappcontroller/v1"
 )
 

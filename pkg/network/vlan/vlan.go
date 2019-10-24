@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/network"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/vishvananda/netlink"
+	"tkestack.io/galaxy/pkg/network"
+	"tkestack.io/galaxy/pkg/utils"
 )
 
 const (

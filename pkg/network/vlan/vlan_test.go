@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/network/netns"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/ips"
 	"github.com/vishvananda/netlink"
+	"tkestack.io/galaxy/pkg/network/netns"
+	"tkestack.io/galaxy/pkg/utils/ips"
 )
 
 func TestUnmarshalVlanNetConf(t *testing.T) {

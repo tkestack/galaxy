@@ -22,8 +22,8 @@ import (
 	"sort"
 	"strings"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/ipset"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"tkestack.io/galaxy/pkg/utils/ipset"
 )
 
 // FakeIPSet is a no-op implementation of ipset Interface

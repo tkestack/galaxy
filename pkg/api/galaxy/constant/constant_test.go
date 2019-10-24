@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 func TestFormatParseIPInfo(t *testing.T) {

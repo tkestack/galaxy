@@ -3,9 +3,9 @@ package schedulerplugin
 import (
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
 	corev1 "k8s.io/api/core/v1"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
 type releaseEvent struct {

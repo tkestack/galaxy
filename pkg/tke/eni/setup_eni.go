@@ -7,11 +7,11 @@ import (
 
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/dbdd4us/qcloudapi-sdk-go/metadata"
-	log "k8s.io/klog"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/util/wait"
+	log "k8s.io/klog"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/ips"
+	"tkestack.io/galaxy/pkg/utils/ips"
 )
 
 const (

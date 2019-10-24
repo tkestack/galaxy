@@ -4,8 +4,8 @@ import (
 	"net"
 	"testing"
 
-	. "git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/testing"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
+	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
+	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
 func TestResyncAppNotExist(t *testing.T) {

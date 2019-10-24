@@ -22,7 +22,7 @@ import (
 	"os"
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/server"
+	"tkestack.io/galaxy/pkg/ipam/server"
 	"github.com/spf13/pflag"
 	"k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"

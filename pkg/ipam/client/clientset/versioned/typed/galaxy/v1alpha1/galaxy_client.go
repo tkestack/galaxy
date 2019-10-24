@@ -19,9 +19,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
+	v1alpha1 "tkestack.io/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
+	"tkestack.io/galaxy/pkg/ipam/client/clientset/versioned/scheme"
 )
 
 type GalaxyV1alpha1Interface interface {

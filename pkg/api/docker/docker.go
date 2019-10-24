@@ -6,8 +6,8 @@ import (
 
 	dockerapi "github.com/docker/engine-api/client"
 	dockertypes "github.com/docker/engine-api/types"
-	glog "k8s.io/klog"
 	"golang.org/x/net/context"
+	glog "k8s.io/klog"
 )
 
 var (

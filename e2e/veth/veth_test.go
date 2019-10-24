@@ -4,12 +4,12 @@ import (
 	"net"
 	"strings"
 
-	"git.code.oa.com/tkestack/galaxy/e2e/helper"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/invoke"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
+	"tkestack.io/galaxy/e2e/helper"
+	"tkestack.io/galaxy/pkg/utils"
 )
 
 var _ = Describe("galaxy-veth veth test", func() {

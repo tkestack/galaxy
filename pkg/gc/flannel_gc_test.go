@@ -5,9 +5,9 @@ import (
 
 	"strings"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/docker"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/vishvananda/netlink"
+	"tkestack.io/galaxy/pkg/api/docker"
+	"tkestack.io/galaxy/pkg/utils"
 )
 
 func TestCleanupVeth(t *testing.T) {

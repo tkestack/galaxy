@@ -19,8 +19,8 @@ limitations under the License.
 package galaxy
 
 import (
-	v1alpha1 "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/informers/externalversions/galaxy/v1alpha1"
-	internalinterfaces "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions/galaxy/v1alpha1"
+	internalinterfaces "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions/internalinterfaces"
 )
 
 // Interface provides access to each of this group's versions.

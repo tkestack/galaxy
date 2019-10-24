@@ -9,9 +9,9 @@ import (
 	"strings"
 	"syscall"
 
-	glog "k8s.io/klog"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
+	glog "k8s.io/klog"
 )
 
 var (

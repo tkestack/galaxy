@@ -11,21 +11,21 @@ import (
 	"os/exec"
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
-	galaxyapi "git.code.oa.com/tkestack/galaxy/pkg/api/galaxy"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/private"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
-	k8sutil "git.code.oa.com/tkestack/galaxy/pkg/api/k8s/utils"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/emicklei/go-restful"
-	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
+	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/cniutil"
+	galaxyapi "tkestack.io/galaxy/pkg/api/galaxy"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	"tkestack.io/galaxy/pkg/api/galaxy/private"
+	"tkestack.io/galaxy/pkg/api/k8s"
+	k8sutil "tkestack.io/galaxy/pkg/api/k8s/utils"
 )
 
 func (g *Galaxy) StartServer() error {

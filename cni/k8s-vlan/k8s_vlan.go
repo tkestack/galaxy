@@ -5,13 +5,13 @@ import (
 	"net"
 	"runtime"
 
-	"git.code.oa.com/tkestack/galaxy/cni/ipam"
-	"git.code.oa.com/tkestack/galaxy/pkg/network/vlan"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/version"
+	"tkestack.io/galaxy/cni/ipam"
+	"tkestack.io/galaxy/pkg/network/vlan"
+	"tkestack.io/galaxy/pkg/utils"
 )
 
 var (

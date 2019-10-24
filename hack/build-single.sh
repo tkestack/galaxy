@@ -6,7 +6,7 @@ set -e
 # we are in the project root dir
 cur_dir=`pwd`
 bin_prefix="galaxy"
-package=git.code.oa.com/tkestack/galaxy
+package=tkestack.io/galaxy
 
 mkdir -p go/src/`dirname $package`
 ln -sfn $cur_dir $cur_dir/go/src/$package

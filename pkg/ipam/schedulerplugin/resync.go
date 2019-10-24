@@ -6,16 +6,16 @@ import (
 	"strconv"
 	"strings"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/floatingip"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	"tkestack.io/galaxy/pkg/ipam/floatingip"
+	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
+	"tkestack.io/galaxy/pkg/utils/database"
 	tappv1 "tkestack.io/tapp-controller/pkg/apis/tappcontroller/v1"
 )
 

@@ -7,7 +7,6 @@ import (
 	"os"
 	"runtime"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
@@ -15,6 +14,7 @@ import (
 	"github.com/containernetworking/plugins/pkg/ipam"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
+	"tkestack.io/galaxy/pkg/utils"
 )
 
 func init() {

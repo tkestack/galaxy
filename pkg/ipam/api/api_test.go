@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"fmt"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/floatingip"
+	"tkestack.io/galaxy/pkg/ipam/floatingip"
 )
 
 type fakeIPAM struct {

@@ -3,12 +3,12 @@ package k8s_vlan
 import (
 	"net"
 
-	"git.code.oa.com/tkestack/galaxy/e2e/helper"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/ips"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
+	"tkestack.io/galaxy/e2e/helper"
+	"tkestack.io/galaxy/pkg/utils"
+	"tkestack.io/galaxy/pkg/utils/ips"
 )
 
 var _ = Describe("galaxy-k8s-vlan vlan test", func() {
@@ -16,7 +16,7 @@ var _ = Describe("galaxy-k8s-vlan vlan test", func() {
 	ifaceCidr := "192.168.0.66/26"
 	containerCidr := "192.168.0.68/26"
 	containerId := helper.NewContainerId()
-	cidrIPNet,_ := ips.ParseCIDR(ifaceCidr)
+	cidrIPNet, _ := ips.ParseCIDR(ifaceCidr)
 	hostVeth1 := helper.NewLinkDevice(nil, utils.HostVethName(containerId, ""), "veth").SetMaster(
 		helper.NewLinkDevice(nil, "br2", "bridge"),
 	)
@@ -46,7 +46,7 @@ var _ = Describe("galaxy-k8s-vlan vlan test", func() {
 
 		// check host iface topology, route, neigh, ip address is expected
 		err = (&helper.NetworkTopology{
-			LeaveDevices: []*helper.LinkDevice{hostVeth1,dummyVlan2},
+			LeaveDevices: []*helper.LinkDevice{hostVeth1, dummyVlan2},
 		}).Verify()
 		Expect(err).Should(BeNil(), "%v", err)
 

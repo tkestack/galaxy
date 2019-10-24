@@ -5,13 +5,13 @@ import (
 	"net"
 	"path"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/ips"
 	"github.com/containernetworking/cni/pkg/invoke"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/cniutil"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	"tkestack.io/galaxy/pkg/utils/ips"
 )
 
 // CmdAdd calls cni binary to do cmdAdd for container

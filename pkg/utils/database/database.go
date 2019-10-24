@@ -25,10 +25,10 @@ import (
 	"time"
 	"unicode"
 
-	glog "k8s.io/klog"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	"k8s.io/apimachinery/pkg/util/wait"
+	glog "k8s.io/klog"
 )
 
 type DBConfig struct {

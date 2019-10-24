@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
-	crd_clientset "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	crd_clientset "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned"
+	"tkestack.io/galaxy/pkg/utils/database"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 // Type is struct of IP type.

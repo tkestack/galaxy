@@ -5,8 +5,8 @@ import (
 	"syscall"
 	"time"
 
-	glog "k8s.io/klog"
 	"k8s.io/apimachinery/pkg/util/wait"
+	glog "k8s.io/klog"
 )
 
 var interval = 5 * time.Minute

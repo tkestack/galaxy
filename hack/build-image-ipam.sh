@@ -6,7 +6,7 @@ set -o pipefail
 ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd -P)
 
 function build_binary() {
-  package=git.code.oa.com/tkestack/galaxy
+  package=tkestack.io/galaxy
   docker run --rm -v `pwd`:/go/src/$package -w /go/src/$package golang:1.13 bash -c /go/src/$package/hack/build-ipam.sh
 }
 

@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"testing"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/ipset"
-	ipsetTest "git.code.oa.com/tkestack/galaxy/pkg/utils/ipset/testing"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/iptables"
-	iptablesTest "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables/testing"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"tkestack.io/galaxy/pkg/api/k8s"
+	"tkestack.io/galaxy/pkg/utils/ipset"
+	ipsetTest "tkestack.io/galaxy/pkg/utils/ipset/testing"
+	"tkestack.io/galaxy/pkg/utils/iptables"
+	iptablesTest "tkestack.io/galaxy/pkg/utils/iptables/testing"
 )
 
 func newTestPolicyManager() *PolicyManager {
@@ -63,7 +63,7 @@ func TestSyncRules(t *testing.T) {
 			ingressRule: &ingressRule{
 				srcRules: []rule{
 					{
-						ipTable: ipTable1,
+						ipTable:  ipTable1,
 						netTable: natTable1,
 						tcpPorts: []string{"53", "80"},
 						udpPorts: []string{"53", "80"},
@@ -194,7 +194,7 @@ func TestSyncPodChains(t *testing.T) {
 			ingressRule: &ingressRule{
 				srcRules: []rule{
 					{
-						ipTable: ipTable1,
+						ipTable:  ipTable1,
 						netTable: natTable1,
 						tcpPorts: []string{"80"},
 					},

@@ -24,9 +24,9 @@ import (
 	"sync"
 
 	godbus "github.com/godbus/dbus"
-	glog "k8s.io/klog"
 	"k8s.io/apimachinery/pkg/util/sets"
 	utilversion "k8s.io/apimachinery/pkg/util/version"
+	glog "k8s.io/klog"
 	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/utils/exec"
 )

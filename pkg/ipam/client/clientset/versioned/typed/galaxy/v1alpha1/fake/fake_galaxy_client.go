@@ -19,9 +19,9 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned/typed/galaxy/v1alpha1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
+	v1alpha1 "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned/typed/galaxy/v1alpha1"
 )
 
 type FakeGalaxyV1alpha1 struct {

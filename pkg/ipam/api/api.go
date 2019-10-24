@@ -9,15 +9,15 @@ import (
 	"strings"
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/floatingip"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/httputil"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
-	pageutil "git.code.oa.com/tkestack/galaxy/pkg/utils/page"
 	"github.com/emicklei/go-restful"
-	glog "k8s.io/klog"
 	"k8s.io/client-go/listers/core/v1"
+	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/ipam/floatingip"
+	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
+	"tkestack.io/galaxy/pkg/utils/database"
+	"tkestack.io/galaxy/pkg/utils/httputil"
+	"tkestack.io/galaxy/pkg/utils/nets"
+	pageutil "tkestack.io/galaxy/pkg/utils/page"
 )
 
 type Controller struct {

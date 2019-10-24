@@ -1,7 +1,7 @@
 ## Galaxy: Providing high-performance network and float IP for Kubernetes workloads
 [![Build Status](https://api.travis-ci.com/gaiastackorg/galaxy.svg?branch=master)](https://travis-ci.com/gaiastackorg/galaxy)
 [![Codecov branch](https://img.shields.io/codecov/c/github/gaiastackorg/galaxy/master.svg?style=for-the-badge)](https://codecov.io/gh/gaiastackorg/galaxy)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://git.code.oa.com/tkestack/galaxy/merge_requests)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://tkestack.io/galaxy/merge_requests)
 
 Galaxy is a Kubernetes network project designed for providing both common Overlay and high performance Underlay network for pods.
 And it also implements float IP(or elastic IP) support, i.e. Pod's IP won't change even if it float onto another node due to node crash, which benefits for running stateful set applications.

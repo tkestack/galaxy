@@ -6,18 +6,18 @@ import (
 	"io/ioutil"
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/docker"
-	"git.code.oa.com/tkestack/galaxy/pkg/galaxy/options"
-	"git.code.oa.com/tkestack/galaxy/pkg/gc"
-	"git.code.oa.com/tkestack/galaxy/pkg/network/kernel"
-	"git.code.oa.com/tkestack/galaxy/pkg/network/portmapping"
-	"git.code.oa.com/tkestack/galaxy/pkg/policy"
-	"git.code.oa.com/tkestack/galaxy/pkg/tke/eni"
-	glog "k8s.io/klog"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/docker"
+	"tkestack.io/galaxy/pkg/galaxy/options"
+	"tkestack.io/galaxy/pkg/gc"
+	"tkestack.io/galaxy/pkg/network/kernel"
+	"tkestack.io/galaxy/pkg/network/portmapping"
+	"tkestack.io/galaxy/pkg/policy"
+	"tkestack.io/galaxy/pkg/tke/eni"
 )
 
 type Galaxy struct {

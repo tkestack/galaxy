@@ -10,14 +10,14 @@ import (
 	"strconv"
 	"strings"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/plugins/pkg/ip"
-	glog "k8s.io/klog"
 	"github.com/vishvananda/netlink"
+	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 )
 
 const (

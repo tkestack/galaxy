@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"testing"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/ipset"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"tkestack.io/galaxy/pkg/utils/ipset"
 )
 
 const testVersion = "v6.19"

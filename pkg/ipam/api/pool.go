@@ -5,18 +5,18 @@ import (
 	"net"
 	"net/http"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/constant"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned"
-	list "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/floatingip"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/schedulerplugin/util"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/httputil"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/keylock"
 	"github.com/emicklei/go-restful"
-	glog "k8s.io/klog"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	"tkestack.io/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
+	"tkestack.io/galaxy/pkg/ipam/client/clientset/versioned"
+	list "tkestack.io/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
+	"tkestack.io/galaxy/pkg/ipam/floatingip"
+	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
+	"tkestack.io/galaxy/pkg/utils/httputil"
+	"tkestack.io/galaxy/pkg/utils/keylock"
 )
 
 type PoolController struct {

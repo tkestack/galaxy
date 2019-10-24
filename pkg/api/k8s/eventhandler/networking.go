@@ -1,9 +1,9 @@
 package eventhandler
 
 import (
-	glog "k8s.io/klog"
 	networkv1 "k8s.io/api/networking/v1"
 	"k8s.io/client-go/tools/cache"
+	glog "k8s.io/klog"
 )
 
 type NetworkPolicyWatcher interface {

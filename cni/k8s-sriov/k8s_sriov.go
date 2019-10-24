@@ -9,9 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	galaxyIpam "git.code.oa.com/tkestack/galaxy/cni/ipam"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
@@ -19,6 +16,9 @@ import (
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
 	glog "k8s.io/klog"
+	galaxyIpam "tkestack.io/galaxy/cni/ipam"
+	"tkestack.io/galaxy/pkg/api/cniutil"
+	"tkestack.io/galaxy/pkg/utils"
 )
 
 type NetConf struct {

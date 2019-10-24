@@ -6,7 +6,7 @@ import (
 	"net"
 	"sync"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 // FloatingIP is FloatingIP structure.

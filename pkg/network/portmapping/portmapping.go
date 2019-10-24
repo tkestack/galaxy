@@ -5,8 +5,8 @@ import (
 	"net"
 	"strings"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/k8s"
 )
 
 // #lizard forgives

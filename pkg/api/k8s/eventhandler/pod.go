@@ -1,9 +1,9 @@
 package eventhandler
 
 import (
-	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
+	glog "k8s.io/klog"
 )
 
 type PodWatcher interface {

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
 	"github.com/containernetworking/cni/pkg/skel"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/cniutil"
+	"tkestack.io/galaxy/pkg/api/k8s"
 )
 
 // Request sent to the Galaxy by the Galaxy SDN CNI plugin

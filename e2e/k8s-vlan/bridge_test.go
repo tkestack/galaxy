@@ -1,11 +1,11 @@
 package k8s_vlan
 
 import (
-	"git.code.oa.com/tkestack/galaxy/e2e/helper"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/ips"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"tkestack.io/galaxy/e2e/helper"
+	"tkestack.io/galaxy/pkg/utils"
+	"tkestack.io/galaxy/pkg/utils/ips"
 )
 
 var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {

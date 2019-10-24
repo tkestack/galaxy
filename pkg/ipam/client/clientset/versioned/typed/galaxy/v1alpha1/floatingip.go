@@ -21,12 +21,12 @@ package v1alpha1
 import (
 	"time"
 
-	v1alpha1 "git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
-	scheme "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	rest "k8s.io/client-go/rest"
+	v1alpha1 "tkestack.io/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
+	scheme "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned/scheme"
 )
 
 // FloatingIPsGetter has a method to return a FloatingIPInterface.

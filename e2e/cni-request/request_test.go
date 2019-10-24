@@ -10,11 +10,11 @@ import (
 	"path"
 	"strings"
 
-	"git.code.oa.com/tkestack/galaxy/e2e"
-	"git.code.oa.com/tkestack/galaxy/e2e/helper"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/galaxy/private"
-	"git.code.oa.com/tkestack/galaxy/pkg/galaxy"
+	"tkestack.io/galaxy/e2e"
+	"tkestack.io/galaxy/e2e/helper"
+	"tkestack.io/galaxy/pkg/api/cniutil"
+	"tkestack.io/galaxy/pkg/api/galaxy/private"
+	"tkestack.io/galaxy/pkg/galaxy"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

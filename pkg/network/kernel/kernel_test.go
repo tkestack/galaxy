@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/network/netns"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"tkestack.io/galaxy/pkg/network/netns"
 )
 
 func TestIPForward(t *testing.T) {

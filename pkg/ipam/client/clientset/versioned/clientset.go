@@ -19,10 +19,10 @@ limitations under the License.
 package versioned
 
 import (
-	galaxyv1alpha1 "git.code.oa.com/tkestack/galaxy/pkg/ipam/client/clientset/versioned/typed/galaxy/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
+	galaxyv1alpha1 "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned/typed/galaxy/v1alpha1"
 )
 
 type Interface interface {

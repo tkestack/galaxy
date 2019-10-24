@@ -1,4 +1,4 @@
-module git.code.oa.com/tkestack/galaxy
+module tkestack.io/galaxy
 
 go 1.13
 

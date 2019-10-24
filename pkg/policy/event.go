@@ -1,9 +1,9 @@
 package policy
 
 import (
-	glog "k8s.io/klog"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
+	glog "k8s.io/klog"
 )
 
 func (p *PolicyManager) AddPod(pod *corev1.Pod) error {

@@ -19,12 +19,12 @@ limitations under the License.
 package fake
 
 import (
-	galaxyv1alpha1 "git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	galaxyv1alpha1 "tkestack.io/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 )
 
 var scheme = runtime.NewScheme()

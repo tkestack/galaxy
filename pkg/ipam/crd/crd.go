@@ -1,12 +1,12 @@
 package crd
 
 import (
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/apis/galaxy"
-	glog "k8s.io/klog"
 	extensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/ipam/apis/galaxy"
 )
 
 var floatingipCrd = &extensionsv1.CustomResourceDefinition{

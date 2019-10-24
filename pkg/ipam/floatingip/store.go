@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/database"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	"github.com/jinzhu/gorm"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/utils/database"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 var (

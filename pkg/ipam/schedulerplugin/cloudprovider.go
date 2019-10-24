@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/cloudprovider/rpc"
-	"git.code.oa.com/tkestack/galaxy/pkg/ipam/floatingip"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/nets"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
+	"tkestack.io/galaxy/pkg/ipam/floatingip"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 func (p *FloatingIPPlugin) cloudProviderAssignIP(req *rpc.AssignIPRequest) error {

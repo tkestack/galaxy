@@ -11,12 +11,12 @@ import (
 	"os/exec"
 	"strings"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/cniutil"
 	"github.com/containernetworking/cni/pkg/skel"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
+	"tkestack.io/galaxy/pkg/api/cniutil"
 )
 
 var (

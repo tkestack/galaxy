@@ -10,10 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s"
-	"git.code.oa.com/tkestack/galaxy/pkg/api/k8s/eventhandler"
-	"git.code.oa.com/tkestack/galaxy/pkg/utils/ipset"
-	utiliptables "git.code.oa.com/tkestack/galaxy/pkg/utils/iptables"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +25,10 @@ import (
 	glog "k8s.io/klog"
 	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/utils/exec"
+	"tkestack.io/galaxy/pkg/api/k8s"
+	"tkestack.io/galaxy/pkg/api/k8s/eventhandler"
+	"tkestack.io/galaxy/pkg/utils/ipset"
+	utiliptables "tkestack.io/galaxy/pkg/utils/iptables"
 )
 
 var (
@@ -243,8 +243,8 @@ func (p *PolicyManager) policyResult(np *networkv1.NetworkPolicy) (*ingressRule,
 	// Ingress and egress pod selector share the same ipset table
 	tbl.Name = fmt.Sprintf("%s-ip-%s", NamePrefix, npNameHash)
 	var (
-		inRules         *ingressRule
-		eRules          *egressRule
+		inRules *ingressRule
+		eRules  *egressRule
 	)
 	ingress, egress := ingressOrEgress(np)
 	if ingress {
