@@ -38,17 +38,7 @@ const (
 	COMMAND_DEL = "DEL"
 )
 
-type Uint16 uint16
-
-func (n *Uint16) UnmarshalText(data []byte) error {
-	u, err := strconv.ParseUint(string(data), 10, 16)
-	if err != nil {
-		return fmt.Errorf("failed to parse uint16 %s", string(data))
-	}
-	*n = Uint16(uint16(u))
-	return nil
-}
-
+// BuildCNIArgs builds cni args as string such as key1=val1;key2=val2
 func BuildCNIArgs(args map[string]string) string {
 	var entries []string
 	for k, v := range args {
@@ -57,6 +47,7 @@ func BuildCNIArgs(args map[string]string) string {
 	return strings.Join(entries, ";")
 }
 
+// ParseCNIArgs parses `key1=val1;key2=val2` format cni args from string
 func ParseCNIArgs(args string) (map[string]string, error) {
 	kvMap := make(map[string]string)
 	kvs := strings.Split(args, ";")
@@ -73,6 +64,7 @@ func ParseCNIArgs(args string) (map[string]string, error) {
 	return kvMap, nil
 }
 
+// DelegateAdd calles delegate cni binary to execute cmdAdd
 func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs, ifName string) (types.Result, error) {
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
@@ -93,6 +85,7 @@ func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs, ifName stri
 	})
 }
 
+// DelegateDel calles delegate cni binary to execute cmdDEL
 func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs, ifName string) error {
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
@@ -113,6 +106,7 @@ func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs, ifName stri
 	})
 }
 
+// CmdAdd saves networkInfos to disk and executes each cni binary to setup network
 func CmdAdd(cmdArgs *skel.CmdArgs, networkInfos []*NetworkInfo) (types.Result, error) {
 	if len(networkInfos) == 0 {
 		return nil, fmt.Errorf("No network info returned")
@@ -142,6 +136,7 @@ func CmdAdd(cmdArgs *skel.CmdArgs, networkInfos []*NetworkInfo) (types.Result, e
 	return result, nil
 }
 
+// NetworkInfo wraps network infos which are needed for cni plugin to setup network
 type NetworkInfo struct {
 	NetworkType string
 	Args        map[string]string
@@ -149,6 +144,7 @@ type NetworkInfo struct {
 	IfName      string
 }
 
+// NewNetworkInfo creates a NetworkInfo
 func NewNetworkInfo(networkType string, args map[string]string, conf map[string]interface{}, ifName string) *NetworkInfo {
 	return &NetworkInfo{NetworkType: networkType, Args: args, Conf: conf, IfName: ifName}
 }
@@ -159,6 +155,7 @@ func reverse(infos []*NetworkInfo) {
 	}
 }
 
+// CmdDel restores networkInfos from disk and executes each cni binary to delete network
 func CmdDel(cmdArgs *skel.CmdArgs, lastIdx int) error {
 	networkInfos, err := consumeNetworkInfo(cmdArgs.ContainerID)
 	if err != nil {
@@ -194,6 +191,7 @@ func CmdDel(cmdArgs *skel.CmdArgs, lastIdx int) error {
 	return nil
 }
 
+// IPInfoToResult converts IPInfo to Result
 func IPInfoToResult(ipInfo *constant.IPInfo) *t020.Result {
 	return &t020.Result{
 		IP4: &t020.IPConfig{

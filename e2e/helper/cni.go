@@ -30,11 +30,13 @@ func CmdAdd(containerId, ifaceCidr, argsStr, cniName, expectResult string, netCo
 	if argsStr != "" {
 		invokeArgs.PluginArgsStr = cniutil.BuildCNIArgs(map[string]string{constant.IPInfosKey: argsStr})
 	}
+	// execute cmd add
 	result, err := ExecCNIWithResult(cniName, netConfStdin, invokeArgs)
 	Expect(err).NotTo(HaveOccurred())
 	data, err := json.Marshal(result)
 	Expect(err).NotTo(HaveOccurred())
 	glog.V(4).Infof("result: %s", string(data))
+	// check result is expected
 	Expect(string(data)).Should(Equal(expectResult), "result: %s", string(data))
 	return nsPath
 }

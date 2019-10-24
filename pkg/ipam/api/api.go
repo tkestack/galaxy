@@ -20,11 +20,13 @@ import (
 	pageutil "tkestack.io/galaxy/pkg/utils/page"
 )
 
+// Controller is the API controller
 type Controller struct {
 	ipam, secondIpam floatingip.IPAM
 	podLister        v1.PodLister
 }
 
+// NewController construct a controller object
 func NewController(ipam, secondIpam floatingip.IPAM, lister v1.PodLister) *Controller {
 	return &Controller{
 		ipam:       ipam,
@@ -33,6 +35,7 @@ func NewController(ipam, secondIpam floatingip.IPAM, lister v1.PodLister) *Contr
 	}
 }
 
+// FloatingIP is the floating ip info
 type FloatingIP struct {
 	IP        string `json:"ip"`
 	Namespace string `json:"namespace,omitempty"`
@@ -64,11 +67,13 @@ func (FloatingIP) SwaggerDoc() map[string]string {
 	}
 }
 
+// ListIPResp is the ListIPs response
 type ListIPResp struct {
 	pageutil.Page
 	Content []FloatingIP `json:"content,omitempty"`
 }
 
+// ListIPs lists floating ips
 func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 	keyword := req.QueryParameter("keyword")
 	key := keyword
@@ -246,6 +251,7 @@ func (ReleaseIPResp) SwaggerDoc() map[string]string {
 	}
 }
 
+// ReleaseIPs releases floating ips
 // #lizard forgives
 func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 	var releaseIPReq ReleaseIPReq

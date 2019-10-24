@@ -30,6 +30,7 @@ const (
 	IPInfosKey = "ipinfos"
 )
 
+// IPInfo is the container ip info
 type IPInfo struct {
 	IP             *nets.IPNet `json:"ip"`
 	Vlan           uint16      `json:"vlan"`
@@ -48,6 +49,7 @@ func FormatIPInfo(ipInfos []IPInfo) (string, error) {
 	return string(str), err
 }
 
+// ParseIPInfo pareses ipInfo from annotation
 func ParseIPInfo(str string) ([]IPInfo, error) {
 	m := map[string]map[string]*json.RawMessage{}
 	if err := json.Unmarshal([]byte(str), &m); err != nil {
@@ -68,10 +70,11 @@ func ParseIPInfo(str string) ([]IPInfo, error) {
 	return ipInfos, nil
 }
 
+// ReleasePolicy defines floatingip release policy
 type ReleasePolicy uint16
 
 const (
-	ReleasePolicyPodDelete ReleasePolicy = iota
+	ReleasePolicyPodDelete ReleasePolicy = iota // release ip as soon as possible
 	ReleasePolicyImmutable
 	ReleasePolicyNever
 )

@@ -9,6 +9,7 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/apis/galaxy"
 )
 
+// floatingipCrd is the crd format of floatingip
 var floatingipCrd = &extensionsv1.CustomResourceDefinition{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: "floatingips.galaxy.k8s.io",
@@ -29,6 +30,7 @@ var floatingipCrd = &extensionsv1.CustomResourceDefinition{
 	},
 }
 
+// poolCrd is the crd format of pool
 var poolCrd = &extensionsv1.CustomResourceDefinition{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: "pools.galaxy.k8s.io",
@@ -48,10 +50,12 @@ var poolCrd = &extensionsv1.CustomResourceDefinition{
 	},
 }
 
+// EnsureCRDCreated ensures floatingip and pool are created in apiserver
 func EnsureCRDCreated(client apiextensionsclient.Interface) error {
 	crdClient := client.ApiextensionsV1beta1().CustomResourceDefinitions()
 	crds := []*extensionsv1.CustomResourceDefinition{floatingipCrd, poolCrd}
 	for i := range crds {
+		// try to create each crd and ignores already exist error
 		if _, err := crdClient.Create(crds[i]); err != nil && !apierrors.IsAlreadyExists(err) {
 			glog.Errorf("Error creating CRD: %s", crds[i].Spec.Names.Kind)
 			return err

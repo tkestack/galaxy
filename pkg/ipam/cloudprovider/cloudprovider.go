@@ -19,26 +19,28 @@ var kacp = keepalive.ClientParameters{
 	PermitWithoutStream: true,            // send pings even without active streams
 }
 
+// CloudProvider is a floatingip vendor, such as public cloud eni provider
 type CloudProvider interface {
 	AssignIP(in *rpc.AssignIPRequest) (*rpc.AssignIPReply, error)
 	UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssignIPReply, error)
 }
 
-type GRPCCloudProvider struct {
+type grpcCloudProvider struct {
 	init              sync.Once
 	cloudProviderAddr string
 	client            rpc.IPProviderServiceClient
 	timeout           time.Duration
 }
 
+// NewGRPCCloudProvider creates a grpcCloudProvider
 func NewGRPCCloudProvider(cloudProviderAddr string) CloudProvider {
-	return &GRPCCloudProvider{
+	return &grpcCloudProvider{
 		timeout:           time.Second * 60,
 		cloudProviderAddr: cloudProviderAddr,
 	}
 }
 
-func (p *GRPCCloudProvider) connect() {
+func (p *grpcCloudProvider) connect() {
 	p.init.Do(func() {
 		glog.V(3).Infof("dial cloud provider with address %s", p.cloudProviderAddr)
 		conn, err := grpc.Dial(p.cloudProviderAddr, grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
@@ -51,7 +53,7 @@ func (p *GRPCCloudProvider) connect() {
 	})
 }
 
-func (p *GRPCCloudProvider) AssignIP(in *rpc.AssignIPRequest) (reply *rpc.AssignIPReply, err error) {
+func (p *grpcCloudProvider) AssignIP(in *rpc.AssignIPRequest) (reply *rpc.AssignIPReply, err error) {
 	p.connect()
 	glog.V(5).Infof("AssignIP %v", in)
 
@@ -66,7 +68,7 @@ func (p *GRPCCloudProvider) AssignIP(in *rpc.AssignIPRequest) (reply *rpc.Assign
 	return
 }
 
-func (p *GRPCCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (reply *rpc.UnAssignIPReply, err error) {
+func (p *grpcCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (reply *rpc.UnAssignIPReply, err error) {
 	p.connect()
 	glog.V(5).Infof("UnAssignIP %v", in)
 
