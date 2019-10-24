@@ -137,7 +137,8 @@ func (c *PoolController) preAllocateIP(req *restful.Request, resp *restful.Respo
 		return
 	}
 	if len(subnets) == 0 {
-		resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: len(fips)})
+		resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{
+			Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: len(fips)})
 		return
 	}
 	j := 0
