@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,25 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	glog "k8s.io/klog"
 )
-
-const (
-	deletedAndIPMutablePod         = "deletedAndIPMutablePod"
-	deletedAndParentAppNotExistPod = "deletedAndParentAppNotExistPod"
-	deletedAndScaledDownAppPod     = "deletedAndScaledDownAppPod"
-	deletedAndScaledDownDpPod      = "deletedAndScaledDownDpPod"
-)
-
-type Conf struct {
-	FloatingIPs           []*floatingip.FloatingIP `json:"floatingips,omitempty"`
-	DBConfig              *database.DBConfig       `json:"database"`
-	ResyncInterval        uint                     `json:"resyncInterval"`
-	ConfigMapName         string                   `json:"configMapName"`
-	ConfigMapNamespace    string                   `json:"configMapNamespace"`
-	FloatingIPKey         string                   `json:"floatingipKey"`       // configmap floatingip data key
-	SecondFloatingIPKey   string                   `json:"secondFloatingipKey"` // configmap second floatingip data key
-	CloudProviderGRPCAddr string                   `json:"cloudProviderGrpcAddr"`
-	StorageDriver         string                   `json:"storageDriver"`
-}
 
 // FloatingIPPlugin Allocates Floating IP for deployments
 type FloatingIPPlugin struct {
@@ -186,23 +166,6 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 	return true, nil
 }
 
-func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) error {
-	if newConf == *lastConf {
-		glog.V(4).Infof("[%s] floatingip configmap unchanged", ipam.Name())
-		return nil
-	}
-	var conf []*floatingip.FloatingIP
-	if err := json.Unmarshal([]byte(newConf), &conf); err != nil {
-		return fmt.Errorf("failed to unmarshal configmap val %s to floatingip config", newConf)
-	}
-	glog.Infof("[%s] updated floatingip conf from (%s) to (%s)", ipam.Name(), *lastConf, newConf)
-	*lastConf = newConf
-	if err := ipam.ConfigurePool(conf); err != nil {
-		return fmt.Errorf("failed to configure pool: %v", err)
-	}
-	return nil
-}
-
 // Filter marks nodes which have no available ips as FailedNodes
 // If the given pod doesn't want floating IP, none failedNodes returns
 func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev1.Node, schedulerapi.FailedNodesMap, error) {
@@ -254,7 +217,7 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 	var replicas int
 	var isPoolSizeDefined bool
 	if keyObj.Deployment() {
-		replicas, isPoolSizeDefined, err = p.getReplicas(keyObj)
+		replicas, isPoolSizeDefined, err = p.getDpReplicas(keyObj)
 		if err != nil {
 			return nil, err
 		}
@@ -318,93 +281,6 @@ func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, enabledSeco
 	return nil
 }
 
-func allocateInSubnet(ipam floatingip.IPAM, key string, subnet *net.IPNet, policy constant.ReleasePolicy, attr, when string) error {
-	ip, err := ipam.AllocateInSubnet(key, subnet, policy, attr)
-	if err != nil {
-		return err
-	}
-	glog.Infof("[%s] allocated ip %s to pod %s during %s", ipam.Name(), ip.String(), key, when)
-	return nil
-}
-
-func allocateInSubnetWithKey(ipam floatingip.IPAM, oldK, newK, subnet string, policy constant.ReleasePolicy, attr, when string) error {
-	if err := ipam.AllocateInSubnetWithKey(oldK, newK, subnet, policy, attr); err != nil {
-		return err
-	}
-	fip, err := ipam.First(newK)
-	if err != nil {
-		return err
-	}
-	glog.Infof("[%s] allocated ip %s to %s from %s during %s", ipam.Name(), fip.IPInfo.IP.String(), newK, oldK, when)
-	return nil
-}
-
-// getReplicas returns replicas, isPoolSizeDefined, error
-func (p *FloatingIPPlugin) getReplicas(keyObj *util.KeyObj) (int, bool, error) {
-	if keyObj.PoolName != "" {
-		pool, err := p.PoolLister.Pools("kube-system").Get(keyObj.PoolName)
-		if err == nil {
-			glog.V(4).Infof("pool %s size %d", pool.Name, pool.Size)
-			return pool.Size, true, nil
-		} else {
-			if !metaErrs.IsNotFound(err) {
-				return 0, false, err
-			}
-			// pool not found, get replicas from deployment
-		}
-	}
-	deployment, err := p.DeploymentLister.Deployments(keyObj.Namespace).Get(keyObj.AppName)
-	if err != nil {
-		return 0, false, err
-	}
-	return int(*deployment.Spec.Replicas), false, nil
-}
-
-func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy constant.ReleasePolicy, replicas int, isPoolSizeDefined bool) (subnets []string, reserve bool, err error) {
-	if keyObj.Deployment() && policy != constant.ReleasePolicyPodDelete {
-		var ips []database.FloatingIP
-		poolPrefix := keyObj.PoolPrefix()
-		poolAppPrefix := keyObj.PoolAppPrefix()
-		ips, err = ipam.ByPrefix(poolPrefix)
-		if err != nil {
-			err = fmt.Errorf("failed query prefix %s: %s", poolPrefix, err)
-			return
-		}
-		usedCount := 0
-		unusedSubnetSet := sets.NewString()
-		for _, ip := range ips {
-			if ip.Key != poolPrefix {
-				if isPoolSizeDefined || keyObj.PoolName == "" {
-					usedCount++
-				} else {
-					if strings.HasPrefix(ip.Key, poolAppPrefix) {
-						// Don't counting in other deployments' used ip if sharing pool
-						usedCount++
-					}
-				}
-			} else {
-				unusedSubnetSet.Insert(ip.Subnet)
-			}
-		}
-		glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d, isPoolSizeDefined %v", keyObj, unusedSubnetSet, usedCount, replicas, isPoolSizeDefined)
-		// check usedCount >= replicas to ensure upgrading a deployment won't change its ips
-		if usedCount >= replicas {
-			if isPoolSizeDefined {
-				return nil, false, fmt.Errorf("reached pool %s size limit of %d", keyObj.PoolName, replicas)
-			}
-			return nil, false, fmt.Errorf("deployment %s has allocated %d ips with replicas of %d, wait for releasing", keyObj.AppName, usedCount, replicas)
-		}
-		if unusedSubnetSet.Len() > 0 {
-			return unusedSubnetSet.List(), true, nil
-		}
-	}
-	if subnets, err = ipam.QueryRoutableSubnetByKey(""); err != nil {
-		err = fmt.Errorf("failed to query allocatable subnet: %v", err)
-		return
-	}
-	return
-}
-
 func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*schedulerapi.HostPriorityList, error) {
 	list := &schedulerapi.HostPriorityList{}
 	if !p.hasResourceName(&pod.Spec) {
@@ -460,79 +336,6 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 	return &ipInfo.IPInfo, nil
 }
 
-func (p *FloatingIPPlugin) cloudProviderAssignIP(req *rpc.AssignIPRequest) error {
-	if p.cloudProvider == nil {
-		return nil
-	}
-	reply, err := p.cloudProvider.AssignIP(req)
-	if err != nil {
-		return fmt.Errorf("cloud provider AssignIP reply err %v", err)
-	}
-	if reply == nil {
-		return fmt.Errorf("cloud provider AssignIP nil reply")
-	}
-	if !reply.Success {
-		return fmt.Errorf("cloud provider AssignIP reply failed, message %s", reply.Msg)
-	}
-	glog.Infof("AssignIP %v success", req)
-	return nil
-}
-
-func (p *FloatingIPPlugin) cloudProviderUnAssignIP(req *rpc.UnAssignIPRequest) error {
-	if p.cloudProvider == nil {
-		return nil
-	}
-	reply, err := p.cloudProvider.UnAssignIP(req)
-	if err != nil {
-		return fmt.Errorf("cloud provider UnAssignIP reply err %v", err)
-	}
-	if reply == nil {
-		return fmt.Errorf("cloud provider UnAssignIP nil reply")
-	}
-	if !reply.Success {
-		return fmt.Errorf("cloud provider UnAssignIP reply failed, message %s", reply.Msg)
-	}
-	glog.Infof("UnAssignIP %v success", req)
-	return nil
-}
-
-func (p *FloatingIPPlugin) releaseIP(key string, reason string, pod *corev1.Pod) error {
-	if err := releaseIP(p.ipam, key, reason); err != nil {
-		return fmt.Errorf("[%s] %v", p.ipam.Name(), err)
-	}
-	// skip release second ip if not enabled
-	if !(p.hasSecondIPConf.Load().(bool)) {
-		return nil
-	}
-	if pod != nil && !wantSecondIP(pod) {
-		return nil
-	}
-	if err := releaseIP(p.secondIPAM, key, reason); err != nil {
-		return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
-	}
-	return nil
-}
-
-func releaseIP(ipam floatingip.IPAM, key string, reason string) error {
-	ipInfo, err := ipam.First(key)
-	if err != nil {
-		return fmt.Errorf("failed to query floating ip of %s: %v", key, err)
-	}
-	if ipInfo == nil {
-		glog.Infof("[%s] release floating ip from %s because of %s, but already been released", ipam.Name(), key, reason)
-		return nil
-	}
-	if err := ipam.Release(key, ipInfo.IPInfo.IP.IP); err != nil {
-		return fmt.Errorf("failed to release floating ip of %s because of %s: %v", key, reason, err)
-	}
-	glog.Infof("[%s] released floating ip %s from %s because of %s", ipam.Name(), ipInfo.IPInfo.IP.String(), key, reason)
-	return nil
-}
-
-func (p *FloatingIPPlugin) AddPod(pod *corev1.Pod) error {
-	return nil
-}
-
 func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	pod, err := p.PluginFactoryArgs.PodLister.Pods(args.PodNamespace).Get(args.PodName)
 	if err != nil {
@@ -586,30 +389,6 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	return nil
 }
 
-func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
-	if !p.hasResourceName(&newPod.Spec) {
-		return nil
-	}
-	if !evicted(oldPod) && evicted(newPod) {
-		// Deployments will leave evicted pods
-		// If it's a evicted one, release its ip
-		p.unreleased <- &releaseEvent{pod: newPod}
-	}
-	if err := p.syncPodIP(newPod); err != nil {
-		glog.Warningf("failed to sync pod ip: %v", err)
-	}
-	return nil
-}
-
-func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
-	if !p.hasResourceName(&pod.Spec) {
-		return nil
-	}
-	glog.Infof("handle pod delete event: %s_%s", pod.Name, pod.Namespace)
-	p.unreleased <- &releaseEvent{pod: pod}
-	return nil
-}
-
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	glog.V(3).Infof("handle unbind pod %s", pod.Name)
 	keyObj := util.FormatKey(pod)
@@ -640,145 +419,6 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	return p.unbindStsOrTappPod(pod, keyObj, policy)
 }
 
-func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
-	key := keyObj.KeyInDB
-	if policy == constant.ReleasePolicyPodDelete {
-		return p.releaseIP(key, deletedAndIPMutablePod, pod)
-	} else if policy == constant.ReleasePolicyNever {
-		return p.reserveIP(key, key, "never policy", p.enabledSecondIP(pod))
-	} else if policy == constant.ReleasePolicyImmutable {
-		var appExist bool
-		var replicas int32
-		// In test, p.StatefulSetLister may be nil
-		if keyObj.StatefulSet() && p.StatefulSetLister != nil {
-			statefulSet, err := p.StatefulSetLister.GetPodStatefulSets(pod)
-			if err != nil {
-				if !metaErrs.IsNotFound(err) {
-					return err
-				}
-			} else {
-				appExist = true
-				if len(statefulSet) > 1 {
-					glog.Warningf("multiple ss found for pod %s", util.PodName(pod))
-				}
-				ss := statefulSet[0]
-				replicas = 1
-				if ss.Spec.Replicas != nil {
-					replicas = *ss.Spec.Replicas
-				}
-			}
-		} else if keyObj.TApp() && p.TAppLister != nil {
-			tapp, err := p.TAppLister.TApps(pod.Namespace).Get(keyObj.AppName)
-			if err != nil {
-				if !metaErrs.IsNotFound(err) {
-					return err
-				}
-			} else {
-				appExist = true
-				replicas = tapp.Spec.Replicas
-			}
-		} else {
-			return nil
-		}
-		shouldReserve, reason, err := p.shouldReserve(pod, keyObj, appExist, replicas)
-		if err != nil {
-			return err
-		}
-		if shouldReserve {
-			return p.reserveIP(key, key, "immutable policy", p.enabledSecondIP(pod))
-		} else {
-			return p.releaseIP(key, reason, pod)
-		}
-	}
-	return nil
-}
-
-func (p *FloatingIPPlugin) shouldReserve(pod *corev1.Pod, keyObj *util.KeyObj, appExist bool, replicas int32) (bool, string, error) {
-	if !appExist {
-		return false, deletedAndParentAppNotExistPod, nil
-	}
-	index, err := parsePodIndex(pod.Name)
-	if err != nil {
-		return false, "", fmt.Errorf("invalid pod name %s of key %s: %v", util.PodName(pod), keyObj.KeyInDB, err)
-	}
-	if replicas < int32(index)+1 {
-		return false, deletedAndScaledDownAppPod, nil
-	} else {
-		return true, "", nil
-	}
-	return false, deletedAndParentAppNotExistPod, nil
-}
-
-func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
-	key, prefixKey := keyObj.KeyInDB, keyObj.PoolPrefix()
-	dp, err := p.DeploymentLister.Deployments(keyObj.Namespace).Get(keyObj.AppName)
-	replicas := 0
-	if err != nil {
-		if !metaErrs.IsNotFound(err) {
-			return err
-		}
-	} else {
-		replicas = int(*dp.Spec.Replicas)
-	}
-	if err := unbindDpPod(key, prefixKey, p.ipam, p.dpLockPool, replicas, policy, "unbinding pod"); err != nil {
-		return err
-	}
-	if p.enabledSecondIP(pod) {
-		return unbindDpPod(key, prefixKey, p.secondIPAM, p.dpLockPool, replicas, policy, "unbinding pod")
-	}
-	return nil
-}
-
-func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keylock.Keylock, replicas int,
-	policy constant.ReleasePolicy, when string) error {
-	if policy == constant.ReleasePolicyPodDelete {
-		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
-	} else if policy == constant.ReleasePolicyNever {
-		if key != prefixKey {
-			return reserveIP(key, prefixKey, ipam, fmt.Sprintf("never release policy %s", when))
-		}
-		return nil
-	}
-	if replicas == 0 {
-		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
-	}
-	lockIndex := dpLockPool.GetLockIndex([]byte(prefixKey))
-	dpLockPool.RawLock(lockIndex)
-	defer dpLockPool.RawUnlock(lockIndex)
-	fips, err := ipam.ByPrefix(prefixKey)
-	if err != nil {
-		return err
-	}
-	if len(fips) > replicas {
-		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndScaledDownDpPod, when))
-	} else {
-		if key != prefixKey {
-			return reserveIP(key, prefixKey, ipam, fmt.Sprintf("allocated %d <= replicas %d %s", len(fips), replicas, when))
-		}
-	}
-	return nil
-}
-
-func (p *FloatingIPPlugin) reserveIP(old, new, reason string, enabledSecondIP bool) error {
-	if err := reserveIP(old, new, p.ipam, reason); err != nil {
-		return err
-	}
-	if enabledSecondIP {
-		if err := reserveIP(old, new, p.secondIPAM, reason); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func reserveIP(key, prefixKey string, ipam floatingip.IPAM, reason string) error {
-	if err := ipam.ReserveIP(key, prefixKey, getAttr("")); err != nil {
-		return fmt.Errorf("[%s] failed to reserve ip from pod %s to %s: %v", ipam.Name(), key, prefixKey, err)
-	}
-	glog.Infof("[%s] reserved ip from pod %s to %s, because %s", ipam.Name(), key, prefixKey, reason)
-	return nil
-}
-
 func (p *FloatingIPPlugin) hasResourceName(spec *corev1.PodSpec) bool {
 	for i := range spec.Containers {
 		reqResource := spec.Containers[i].Resources.Requests
@@ -798,35 +438,6 @@ func getNodeIP(node *corev1.Node) net.IP {
 		}
 	}
 	return nil
-}
-
-type releaseEvent struct {
-	pod        *corev1.Pod
-	retryTimes int
-}
-
-func (p *FloatingIPPlugin) loop(stop chan struct{}) {
-	for {
-		select {
-		case <-stop:
-			return
-		case event := <-p.unreleased:
-			if err := p.unbind(event.pod); err != nil {
-				event.retryTimes++
-				glog.Warningf("unbind pod %s failed for %d times: %v", util.PodName(event.pod), event.retryTimes, err)
-				if event.retryTimes > 3 {
-					// leave it to resync to protect chan from explosion
-					glog.Errorf("abort unbind for pod %s, retried %d times: %v", util.PodName(event.pod), event.retryTimes, err)
-				} else {
-					go func() {
-						// backoff time if required
-						time.Sleep(300 * time.Millisecond * time.Duration(event.retryTimes))
-						p.unreleased <- event
-					}()
-				}
-			}
-		}
-	}
 }
 
 func evicted(pod *corev1.Pod) bool {

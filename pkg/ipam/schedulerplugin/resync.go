@@ -147,41 +147,6 @@ func (p *FloatingIPPlugin) fetchAppAndPodMeta(meta *resyncMeta) error {
 	return nil
 }
 
-func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, meta *resyncMeta) {
-	for key, obj := range meta.assignedPods {
-		if _, ok := meta.existPods[key]; ok {
-			continue
-		}
-		// check with apiserver to confirm it really not exist
-		if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
-			continue
-		}
-		var attr Attr
-		if err := json.Unmarshal([]byte(obj.fip.Attr), &attr); err != nil {
-			glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.fip.Attr, key, err)
-			continue
-		}
-		if attr.NodeName == "" {
-			glog.Errorf("empty nodeName for %s in db", key)
-			continue
-		}
-		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName, nets.IntToIP(obj.fip.IP).String(), key)
-		if err := p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
-			NodeName:  attr.NodeName,
-			IPAddress: nets.IntToIP(obj.fip.IP).String(),
-		}); err != nil {
-			// delete this record from allocatedIPs map to have a retry
-			delete(meta.allocatedIPs, key)
-			glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.fip.IP).String(), key, err)
-			continue
-		}
-		// for tapp and sts pod, we need to clean its node attr
-		if err := ipam.ReserveIP(key, key, getAttr("")); err != nil {
-			glog.Errorf("failed to reserve %s ip: %v", key, err)
-		}
-	}
-}
-
 func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, meta *resyncMeta) {
 	for key, obj := range meta.allocatedIPs {
 		if _, ok := meta.existPods[key]; ok {
@@ -235,29 +200,6 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, meta *resync
 	}
 }
 
-func (p *FloatingIPPlugin) shouldReleaseDuringResync(keyObj *util.KeyObj, releasePolicy constant.ReleasePolicy,
-	parentAppExist bool, replicas int32) (bool, string) {
-	if !parentAppExist {
-		if releasePolicy != constant.ReleasePolicyNever {
-			return true, deletedAndParentAppNotExistPod
-		}
-		return false, ""
-	}
-	if releasePolicy != constant.ReleasePolicyImmutable {
-		// 2. deleted pods whose parent statefulset or tapp exist but is not ip immutable
-		return true, deletedAndIPMutablePod
-	}
-	index, err := parsePodIndex(keyObj.KeyInDB)
-	if err != nil {
-		glog.Errorf("invalid pod name of key %s: %v", keyObj.KeyInDB, err)
-		return false, ""
-	}
-	if replicas < int32(index)+1 {
-		return true, deletedAndScaledDownAppPod
-	}
-	return false, ""
-}
-
 func (p *FloatingIPPlugin) podExist(podName, namespace string) bool {
 	_, err := p.Client.CoreV1().Pods(namespace).Get(podName, v1.GetOptions{})
 	if err != nil {
@@ -267,61 +209,6 @@ func (p *FloatingIPPlugin) podExist(podName, namespace string) bool {
 		// we cannot figure out whether pod exist or not
 	}
 	return true
-}
-
-func tAppFullName(tapp *tappv1.TApp) string {
-	return fmt.Sprintf("%s_%s", tapp.Namespace, tapp.Name)
-}
-
-func (p *FloatingIPPlugin) getTAppMap() (map[string]*tappv1.TApp, error) {
-	if p.TAppLister == nil {
-		return map[string]*tappv1.TApp{}, nil
-	}
-	tApps, err := p.TAppLister.List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-	key2App := make(map[string]*tappv1.TApp)
-	for i := range tApps {
-		if !p.hasResourceName(&tApps[i].Spec.Template.Spec) {
-			continue
-		}
-		key2App[tAppFullName(tApps[i])] = tApps[i]
-	}
-	glog.V(5).Infof("%v", key2App)
-	return key2App, nil
-}
-
-func (p *FloatingIPPlugin) getSSMap() (map[string]*appv1.StatefulSet, error) {
-	sss, err := p.StatefulSetLister.List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-	key2App := make(map[string]*appv1.StatefulSet)
-	for i := range sss {
-		if !p.hasResourceName(&sss[i].Spec.Template.Spec) {
-			continue
-		}
-		key2App[util.StatefulsetName(sss[i])] = sss[i]
-	}
-	glog.V(5).Infof("%v", key2App)
-	return key2App, nil
-}
-
-func (p *FloatingIPPlugin) getDPMap() (map[string]*appv1.Deployment, error) {
-	dps, err := p.DeploymentLister.List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-	key2App := make(map[string]*appv1.Deployment)
-	for i := range dps {
-		if !p.hasResourceName(&dps[i].Spec.Template.Spec) {
-			continue
-		}
-		key2App[util.DeploymentName(dps[i])] = dps[i]
-	}
-	glog.V(5).Infof("%v", key2App)
-	return key2App, nil
 }
 
 func parsePodIndex(name string) (int, error) {
