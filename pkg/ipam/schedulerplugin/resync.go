@@ -260,6 +260,7 @@ func (p *FloatingIPPlugin) syncPodIPsIntoDB() {
 	}
 }
 
+// #lizard forgives
 // syncPodIP sync pod ip with db, if the pod has ipinfos annotation and the ip is unallocated in db, allocate the ip to the pod
 func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 	if pod.Status.Phase != corev1.PodRunning {

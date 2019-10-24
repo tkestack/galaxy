@@ -49,6 +49,7 @@ func TestMarshalFloatingIP(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 // TestUnmarshalFloatingIP test FloatingIP unmarshal function.
 func TestUnmarshalFloatingIP(t *testing.T) {
 	var (
@@ -91,6 +92,7 @@ func TestUnmarshalFloatingIP(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 // TestInsertRemoveIP test FloatingIP's InsertIP and RemoveIP functions.
 func TestInsertRemoveIP(t *testing.T) {
 	fip := &FloatingIP{

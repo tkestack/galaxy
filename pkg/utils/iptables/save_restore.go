@@ -26,6 +26,7 @@ func MakeChainLine(chain Chain) string {
 	return fmt.Sprintf(":%s - [0:0]", chain)
 }
 
+// #lizard forgives
 // GetChainLines parses a table's iptables-save data to find chains in the table.
 // It returns a map of iptables.Chain to string where the string is the chain line from the save (with counters etc).
 func GetChainLines(table Table, save []byte) map[Chain]string {
@@ -61,6 +62,7 @@ func GetChainLines(table Table, save []byte) map[Chain]string {
 	return chainsMap
 }
 
+// #lizard forgives
 func ReadLine(readIndex int, byteArray []byte) (string, int) {
 	currentReadIndex := readIndex
 

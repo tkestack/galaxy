@@ -522,6 +522,7 @@ func (p *PolicyManager) writeChains(existingChains map[utiliptables.Chain]string
 	}
 }
 
+// #lizard forgives
 func (p *PolicyManager) writeRules(polices []policy, existingChains map[utiliptables.Chain]string, filterChains *bytes.Buffer, activeChains map[utiliptables.Chain]bool, filterRules *bytes.Buffer) {
 	for _, policy := range polices {
 		policyNameComment := fmt.Sprintf("%s_%s", policy.np.Name, policy.np.Namespace)
@@ -717,6 +718,7 @@ func (p *PolicyManager) SyncPodIPInIPSet(pod *corev1.Pod, add bool) {
 	}
 }
 
+// #lizard forgives
 func (p *PolicyManager) syncIngressInIPSet(policy *policy, pod *corev1.Pod, add bool) {
 	for i, ingress := range policy.np.Spec.Ingress {
 		for _, peer := range ingress.From {
@@ -746,6 +748,7 @@ func (p *PolicyManager) syncIngressInIPSet(policy *policy, pod *corev1.Pod, add 
 	}
 }
 
+// #lizard forgives
 func (p *PolicyManager) syncEgressInIPSet(policy *policy, pod *corev1.Pod, add bool) {
 	for i, egress := range policy.np.Spec.Egress {
 		for _, peer := range egress.To {
@@ -775,6 +778,7 @@ func (p *PolicyManager) syncEgressInIPSet(policy *policy, pod *corev1.Pod, add b
 	}
 }
 
+// #lizard forgives
 // SyncPodChains ensures GLX-INGRESS/GLX-EGRESS/GLX-POD-XXXX iptable chains are expected
 func (p *PolicyManager) SyncPodChains(pod *corev1.Pod) error {
 	glog.V(4).Infof("sync pod chain for %s_%s", pod.Name, pod.Namespace)

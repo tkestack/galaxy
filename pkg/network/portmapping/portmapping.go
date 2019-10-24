@@ -9,6 +9,7 @@ import (
 	glog "k8s.io/klog"
 )
 
+// #lizard forgives
 //OpenHostports opens all hostport for pod. The opened hostports are assigned to k8sPorts
 func (h *PortMappingHandler) OpenHostports(podFullName string, randomPortMapping bool, k8sPorts []k8s.Port) error {
 	var retErr error

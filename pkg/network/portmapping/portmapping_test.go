@@ -31,6 +31,7 @@ func TestOpenRandomPort(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 func TestOpenHostports(t *testing.T) {
 	pm := &PortMappingHandler{
 		podPortMap: make(map[string]map[hostport]closeable),

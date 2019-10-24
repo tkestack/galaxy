@@ -80,6 +80,7 @@ func (t *NetworkTopology) verify() error {
 	return fmt.Errorf("errs %v", errs)
 }
 
+// #lizard forgives
 func verifyDevice(device *LinkDevice, link netlink.Link) error {
 	if device.Parent != nil {
 		parent, err := getLinkDevice(device.Parent)

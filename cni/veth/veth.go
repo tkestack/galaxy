@@ -69,6 +69,7 @@ func addHostRoute(containerIP *net.IPNet, vethHostName string, src string) error
 	return nil
 }
 
+// #lizard forgives
 func connectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, conf *VethConf) error {
 	mask32 := net.IPv4Mask(255, 255, 255, 255)
 	linkLocalAddress := net.IPv4(169, 254, 1, 1)

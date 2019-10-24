@@ -185,6 +185,7 @@ func (by bySortParam) Len() int {
 	return len(by.array)
 }
 
+// #lizard forgives
 func sortFunc(sort string) func(a, b int, array []FloatingIP) bool {
 	switch strings.ToLower(sort) {
 	case "namespace asc":
@@ -245,6 +246,7 @@ func (ReleaseIPResp) SwaggerDoc() map[string]string {
 	}
 }
 
+// #lizard forgives
 func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 	var releaseIPReq ReleaseIPReq
 	if err := req.ReadEntity(&releaseIPReq); err != nil {

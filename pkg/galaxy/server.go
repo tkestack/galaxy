@@ -89,6 +89,7 @@ func (g *Galaxy) cni(r *restful.Request, w *restful.Response) {
 	}
 }
 
+// #lizard forgives
 func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error) {
 	start := time.Now()
 	glog.Infof("%v, %s+", req, start.Format(time.StampMicro))
@@ -139,6 +140,7 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 	return
 }
 
+// #lizard forgives
 func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]*cniutil.NetworkInfo, error) {
 	var networkInfos []*cniutil.NetworkInfo
 	if pod.Annotations == nil || pod.Annotations[constant.MultusCNIAnnotation] == "" {

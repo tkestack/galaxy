@@ -21,6 +21,7 @@ func Start(t *testing.T) *dbIpam {
 	return CreateIPAMWithTableName(t, database.DefaultFloatingipTableName)
 }
 
+// #lizard forgives
 // CreateIPAMWithTableName can create fake dbIpam.
 func CreateIPAMWithTableName(t *testing.T, tableName string) *dbIpam {
 	var err error
@@ -161,6 +162,7 @@ func TestEmptyFloatingIPConf(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 // TestAllocateIPInSubnet test AllocateInSubnet function.
 func TestAllocateIPInSubnet(t *testing.T) {
 	ipam := Start(t)
@@ -183,6 +185,7 @@ func TestAllocateIPInSubnet(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 // TestRoutableSubnet test RoutableSubnet function.
 func TestRoutableSubnet(t *testing.T) {
 	ipam := Start(t)
@@ -383,6 +386,7 @@ func TestGetRoutableSubnet(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 // TestAllocateInSubnet test AllocateInSubnet function.
 func TestAllocateInSubnet(t *testing.T) {
 	ipam := Start(t)
@@ -420,6 +424,7 @@ func TestAllocateInSubnet(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 // TestUpdateKeyUpdatePolicy test UpdatePolicy function.
 func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	ipam := Start(t)

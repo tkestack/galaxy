@@ -112,6 +112,7 @@ func (fip *FloatingIP) Contains(ip net.IP) bool {
 	return false
 }
 
+// #lizard forgives
 // InsertIP can insert a given ip to FloatingIP struct.
 func (fip *FloatingIP) InsertIP(ip net.IP) bool {
 	if !fip.SparseSubnet.IPNet().Contains(ip) {
@@ -120,22 +121,6 @@ func (fip *FloatingIP) InsertIP(ip net.IP) bool {
 	if len(fip.IPRanges) == 0 {
 		fip.IPRanges = append(fip.IPRanges, nets.IPtoIPRange(ip))
 		return true
-	}
-	tryMerge := func(i int) {
-		if i < 0 {
-			return
-		}
-		if i+1 == len(fip.IPRanges) {
-			return
-		}
-		if Minus(fip.IPRanges[i+1].First, fip.IPRanges[i].Last) == 1 {
-			fip.IPRanges[i].Last = fip.IPRanges[i+1].Last
-			if i+2 < len(fip.IPRanges) {
-				fip.IPRanges = append(fip.IPRanges[0:i+1], fip.IPRanges[i+2:]...)
-			} else {
-				fip.IPRanges = fip.IPRanges[0 : i+1]
-			}
-		}
 	}
 	for i := range fip.IPRanges {
 		if fip.IPRanges[i].Contains(ip) {
@@ -153,19 +138,33 @@ func (fip *FloatingIP) InsertIP(ip net.IP) bool {
 		} else if ret == 1 {
 			// ip-last
 			fip.IPRanges[i].First = ip
-			tryMerge(i - 1)
+			fip.tryMerge(i - 1)
 			return true
 		}
 		if Minus(fip.IPRanges[i].Last, ip) == -1 {
 			// first-ip
 			fip.IPRanges[i].Last = ip
-			tryMerge(i)
+			fip.tryMerge(i)
 			return true
 		}
 	}
 	//first-last first-last ... ip
 	fip.IPRanges = append(fip.IPRanges, nets.IPtoIPRange(ip))
 	return true
+}
+
+func (fip *FloatingIP) tryMerge(i int) {
+	if i < 0 || i+1 == len(fip.IPRanges) {
+		return
+	}
+	if Minus(fip.IPRanges[i+1].First, fip.IPRanges[i].Last) == 1 {
+		fip.IPRanges[i].Last = fip.IPRanges[i+1].Last
+		if i+2 < len(fip.IPRanges) {
+			fip.IPRanges = append(fip.IPRanges[0:i+1], fip.IPRanges[i+2:]...)
+		} else {
+			fip.IPRanges = fip.IPRanges[0 : i+1]
+		}
+	}
 }
 
 // RemoveIP can remove a given ip from FloatingIP struct.

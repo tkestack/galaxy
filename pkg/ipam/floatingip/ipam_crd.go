@@ -382,6 +382,7 @@ func (ci *crdIpam) Name() string {
 	return name
 }
 
+// #lizard forgives
 func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
 	glog.V(3).Infof("begin to fresh cache")
 	ips, err := ci.listFloatingIPs()

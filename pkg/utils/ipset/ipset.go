@@ -96,6 +96,7 @@ type IPSet struct {
 	// TODO: add comment message for ipset
 }
 
+// #lizard forgives
 // Validate checks if a given ipset is valid or not.
 func (set *IPSet) Validate() bool {
 	// Check if protocol is valid for `HashIPPort`, `HashIPPortIP` and `HashIPPortNet` type set.

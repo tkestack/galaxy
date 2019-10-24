@@ -28,6 +28,7 @@ func TestUnmarshalVlanNetConf(t *testing.T) {
 	}
 }
 
+// #lizard forgives
 func TestInit(t *testing.T) {
 	vlanDriver := &VlanDriver{
 		NetConf: &NetConf{

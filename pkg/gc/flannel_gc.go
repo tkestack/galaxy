@@ -95,20 +95,9 @@ func (gc *flannelGC) cleanupIP() error {
 		if err != nil || len(containerIdData) == 0 {
 			continue
 		}
-
 		containerId := string(containerIdData)
-		if c, err := gc.dockerCli.InspectContainer(containerId); err != nil {
-			if _, ok := err.(docker.ContainerNotFoundError); ok {
-				glog.Infof("container %s not found", containerId)
-				removeLeakyIPFile(ipFile, containerId)
-			} else {
-				glog.Warningf("Error inspect container %s: %v", containerId, err)
-			}
-		} else {
-			if c.State != nil && (c.State.Status == ContainerExited || c.State.Status == ContainerDead) {
-				glog.Infof("container %s(%s) exited %s", c.ID, c.Name, c.State.Status)
-				removeLeakyIPFile(ipFile, containerId)
-			}
+		if gc.shouldCleanup(containerId) {
+			removeLeakyIPFile(ipFile, containerId)
 		}
 	}
 	return nil

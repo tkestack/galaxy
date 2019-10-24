@@ -4,6 +4,7 @@ import (
 	"testing"
 )
 
+// #lizard forgives
 func TestParsePodNetworkAnnotation(t *testing.T) {
 	case1 := "test-ns/galaxy-flannel@eth0, test-ns/galaxy-k8s-vlan@eth1"
 	res1, err := ParsePodNetworkAnnotation(case1)

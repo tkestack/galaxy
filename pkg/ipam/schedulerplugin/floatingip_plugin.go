@@ -45,24 +45,7 @@ type FloatingIPPlugin struct {
 }
 
 func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin, error) {
-	if conf.ResyncInterval < 1 {
-		conf.ResyncInterval = 1
-	}
-	if conf.ConfigMapName == "" {
-		conf.ConfigMapName = "floatingip-config"
-	}
-	if conf.ConfigMapNamespace == "" {
-		conf.ConfigMapNamespace = "kube-system"
-	}
-	if conf.FloatingIPKey == "" {
-		conf.FloatingIPKey = "floatingips"
-	}
-	if conf.SecondFloatingIPKey == "" {
-		conf.SecondFloatingIPKey = "second_floatingips"
-	}
-	if conf.StorageDriver == "" {
-		conf.StorageDriver = "mysql"
-	}
+	conf.validate()
 	glog.Infof("floating ip config: %v", conf)
 	plugin := &FloatingIPPlugin{
 		nodeSubnet:        make(map[string]*net.IPNet),
@@ -201,6 +184,7 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 	return filteredNodes, failedNodesMap, nil
 }
 
+// #lizard forgives
 func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 	keyObj := util.FormatKey(pod)
 	// first check if exists an already allocated ip for this pod

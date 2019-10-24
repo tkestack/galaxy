@@ -10,6 +10,7 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
+// #lizard forgives
 func TestDB(t *testing.T) {
 	db := dbInit(t)
 	if db == nil {

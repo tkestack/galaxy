@@ -48,3 +48,24 @@ type Conf struct {
 	CloudProviderGRPCAddr string                   `json:"cloudProviderGrpcAddr"`
 	StorageDriver         string                   `json:"storageDriver"`
 }
+
+func (conf *Conf) validate() {
+	if conf.ResyncInterval < 1 {
+		conf.ResyncInterval = 1
+	}
+	if conf.ConfigMapName == "" {
+		conf.ConfigMapName = "floatingip-config"
+	}
+	if conf.ConfigMapNamespace == "" {
+		conf.ConfigMapNamespace = "kube-system"
+	}
+	if conf.FloatingIPKey == "" {
+		conf.FloatingIPKey = "floatingips"
+	}
+	if conf.SecondFloatingIPKey == "" {
+		conf.SecondFloatingIPKey = "second_floatingips"
+	}
+	if conf.StorageDriver == "" {
+		conf.StorageDriver = "mysql"
+	}
+}

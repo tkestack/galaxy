@@ -183,6 +183,7 @@ func (db *DBRecorder) GetConn() *gorm.DB {
 
 type WrappedLogger struct{}
 
+// #lizard forgives
 func (l *WrappedLogger) Print(values ...interface{}) {
 	if len(values) > 1 {
 		level := values[0]

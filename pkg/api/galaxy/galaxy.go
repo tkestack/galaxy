@@ -45,6 +45,7 @@ type PodResult struct {
 	Err error
 }
 
+// #lizard forgives
 func CniRequestToPodRequest(data []byte) (*PodRequest, error) {
 	var cr CNIRequest
 	if err := json.Unmarshal(data, &cr); err != nil {

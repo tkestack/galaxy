@@ -103,7 +103,7 @@ func main() {
 }
 
 // code from https://raw.githubusercontent.com/Intel-Corp/sriov-cni/master/sriov/sriov.go
-
+// #lizard forgives
 func setupVF(conf *NetConf, result *t020.Result, podifName string, vlan int, netns ns.NetNS) error {
 	cpus := runtime.NumCPU()
 	ifName := conf.Device
@@ -156,6 +156,7 @@ func setupVF(conf *NetConf, result *t020.Result, podifName string, vlan int, net
 	return nil
 }
 
+// #lizard forgives
 func findAvailableVf(minVfNum int, conf *NetConf) ([]os.FileInfo, int, netlink.Link, string, error) {
 	ifName := conf.Device
 	var infos []os.FileInfo

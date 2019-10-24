@@ -274,6 +274,7 @@ type filterCase struct {
 	postHook                      func() error
 }
 
+// #lizard forgives
 func checkFilterCase(fipPlugin *FloatingIPPlugin, testCase filterCase, nodes []corev1.Node) error {
 	if testCase.preHook != nil {
 		if err := testCase.preHook(); err != nil {

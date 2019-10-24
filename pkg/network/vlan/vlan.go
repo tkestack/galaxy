@@ -65,6 +65,7 @@ func (d *VlanDriver) LoadConf(bytes []byte) (*NetConf, error) {
 	return conf, nil
 }
 
+// #lizard forgives
 func (d *VlanDriver) Init() error {
 	device, err := netlink.LinkByName(d.Device)
 	if err != nil {
@@ -207,6 +208,7 @@ func getOrCreateDevice(name string, createDevice func(name string) error) (netli
 	return device, nil
 }
 
+// #lizard forgives
 func (d *VlanDriver) CreateBridgeAndVlanDevice(vlanId uint16) (string, error) {
 	if vlanId == 0 {
 		return d.BridgeNameForVlan(vlanId), nil

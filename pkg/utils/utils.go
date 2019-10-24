@@ -238,6 +238,7 @@ func CreateVeth(containerID string, mtu int, suffix string) (netlink.Link, netli
 	return host, sbox, nil
 }
 
+// #lizard forgives
 // VethConnectsHostWithContainer creates veth device pairs and connects container with host
 // If bridgeName specified, it attaches host side veth device to the bridge
 func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, bridgeName string, suffix string) error {

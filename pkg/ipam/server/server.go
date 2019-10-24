@@ -139,6 +139,7 @@ func (s *Server) Run() error {
 	return nil
 }
 
+// #lizard forgives
 func (s *Server) initk8sClient() {
 	cfg, err := clientcmd.BuildConfigFromFlags(s.Master, s.KubeConf)
 	if err != nil {

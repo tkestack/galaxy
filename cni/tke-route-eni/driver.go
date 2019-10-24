@@ -35,6 +35,7 @@ func NewDriver() NetworkAPIs {
 	return &linuxNetwork{}
 }
 
+// #lizard forgives
 func (network *linuxNetwork) SetupNS(
 	hostVethName string, podVethName string, netns string,
 	addr *net.IPNet, routeTable int) ([]*current.Interface, error) {
@@ -190,6 +191,7 @@ func newVethPairCreateContext(hostVethName, podVethName string, addr *net.IPNet)
 	}
 }
 
+// #lizard forgives
 func (ctx *vethPairCreateContext) setupContainerNetwork(hostNs ns.NetNS) (netlink.Link, error) {
 	veth := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
