@@ -105,46 +105,6 @@ func TestApplyFloatingIPs(t *testing.T) {
 	}
 }
 
-// #lizard forgives
-// TestRaceCondition test floatingIP allocation race.
-func TestRaceCondition(t *testing.T) {
-	var ipams []*dbIpam
-	for i := 0; i < 7; i++ {
-		ipam := Start(t)
-		defer ipam.Shutdown()
-		ipams = append(ipams, ipam)
-	}
-	lock := sync.Mutex{}
-	wg := sync.WaitGroup{}
-	var ips []net.IP
-	for i, m := range ipams {
-		wg.Add(1)
-		j := i
-		go func(m *dbIpam) {
-			defer wg.Done()
-			keys := []string{fmt.Sprintf("pod%d", j*2), fmt.Sprintf("pod%d", j*2+1)}
-			allocated, err := m.allocate(keys)
-			if err != nil {
-				t.Error(err)
-			}
-			lock.Lock()
-			defer lock.Unlock()
-			ips = append(ips, allocated...)
-		}(m)
-	}
-	wg.Wait()
-	if len(ips) != 14 {
-		t.Fatal()
-	}
-	m := make(map[string]interface{})
-	for _, ip := range ips {
-		if _, ok := m[ip.String()]; ok {
-			t.Fatal("allocated the same ip")
-		}
-		m[ip.String()] = ip
-	}
-}
-
 // TestEmptyFloatingIPConf test ConfigurePool function.
 func TestEmptyFloatingIPConf(t *testing.T) {
 	var err error
@@ -210,8 +170,8 @@ func TestRoutableSubnet(t *testing.T) {
 }
 
 // #lizard forgives
-// TestAllocateInSubnetAndQueryRoutableSubnetByKey test QueryRoutableSubnetByKey and AllocateInSubnet functions.
-func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
+// TestQueryRoutableSubnetByKey test QueryRoutableSubnetByKey functions.
+func TestQueryRoutableSubnetByKey(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
 
@@ -224,8 +184,12 @@ func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
 		t.Fatal(subnets)
 	}
 	// drain ips of 10.49.27.0/24
-	if ips, err := ipam.allocate([]string{"p1", "p2", "p3", "p4"}); err != nil || len(ips) != 4 {
-		t.Fatalf("ips %v err %v", ips, err)
+	ipnet1 := &net.IPNet{IP: net.ParseIP("10.49.27.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
+	for _, key := range []string{"p1", "p2", "p3", "p4"} {
+		if ip, err := ipam.AllocateInSubnet(key, ipnet1,
+			constant.ReleasePolicyPodDelete, ""); err != nil || ip == nil {
+			t.Fatalf("ip %v err %v", ip, err)
+		}
 	}
 	subnets, err = ipam.QueryRoutableSubnetByKey("p1")
 	if err != nil {
@@ -243,10 +207,12 @@ func TestAllocateInSubnetAndQueryRoutableSubnetByKey(t *testing.T) {
 	}
 	// drain ips of 10.180.1.3/32
 	ipnet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
-	if ip, err := ipam.AllocateInSubnet("p5", ipnet, constant.ReleasePolicyPodDelete, ""); err != nil || ip == nil {
+	if ip, err := ipam.AllocateInSubnet("p5", ipnet,
+		constant.ReleasePolicyPodDelete, ""); err != nil || ip == nil {
 		t.Fatalf("ip %v err %v", ip, err)
 	}
-	if ip, err := ipam.AllocateInSubnet("p6", ipnet, constant.ReleasePolicyPodDelete, ""); err != nil || ip == nil {
+	if ip, err := ipam.AllocateInSubnet("p6", ipnet,
+		constant.ReleasePolicyPodDelete, ""); err != nil || ip == nil {
 		t.Fatalf("ip %v err %v", ip, err)
 	}
 	subnets, err = ipam.QueryRoutableSubnetByKey("")

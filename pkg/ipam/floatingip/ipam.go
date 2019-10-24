@@ -161,40 +161,6 @@ func (i *dbIpam) ConfigurePool(floatingIPs []*FloatingIP) error {
 	return nil
 }
 
-// allocate allocate len(keys) ips, it guarantees to allocate everything
-// or nothing.
-func (i *dbIpam) allocate(keys []string) (allocated []net.IP, err error) {
-	var fips []database.FloatingIP
-	for {
-		if err = i.findAvailable(len(keys), &fips); err != nil {
-			return
-		}
-		if len(fips) != len(keys) {
-			err = ErrNoEnoughIP
-			return
-		}
-		var updateOps []database.ActionFunc
-		for j := 0; j < len(keys); j++ {
-			fips[j].Key = keys[j]
-			updateOps = append(updateOps, allocateOp(&fips[j], i.TableName))
-		}
-		if err = i.store.Transaction(updateOps...); err != nil {
-			if err == ErrNotUpdated {
-				// Loop if a floating ip has been allocated by the others
-				err = nil
-			} else {
-				return
-			}
-		} else {
-			break
-		}
-	}
-	for _, fip := range fips {
-		allocated = append(allocated, nets.IntToIP(fip.IP))
-	}
-	return
-}
-
 // Release release a given IP.
 func (i *dbIpam) Release(key string, ip net.IP) error {
 	return i.releaseIP(key, nets.IPToInt(ip))
