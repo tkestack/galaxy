@@ -24,8 +24,8 @@ const (
 )
 
 type NetworkAPIs interface {
-	SetupNS(hostVethName string, podVethName string, netns string, addr *net.IPNet, routeTable int)
-		([]*current.Interface, error)
+	SetupNS(hostVethName string, podVethName string, netns string, addr *net.IPNet,
+		routeTable int) ([]*current.Interface, error)
 	TeardownNS(podVethName string, netns string, routeTable int) error
 }
 

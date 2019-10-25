@@ -8,15 +8,18 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
+// releaseEvent keeps track of retried times of unbinding pod
 type releaseEvent struct {
 	pod        *corev1.Pod
 	retryTimes int
 }
 
+// AddPod does nothing
 func (p *FloatingIPPlugin) AddPod(pod *corev1.Pod) error {
 	return nil
 }
 
+// UpdatePod syncs pod ip with ipam
 func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
 	if !p.hasResourceName(&newPod.Spec) {
 		return nil
@@ -32,6 +35,7 @@ func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
 	return nil
 }
 
+// DeletePod unbinds pod from ipam
 func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
 	if !p.hasResourceName(&pod.Spec) {
 		return nil
@@ -41,6 +45,7 @@ func (p *FloatingIPPlugin) DeletePod(pod *corev1.Pod) error {
 	return nil
 }
 
+// loop pulls release event from chan and calls unbind to unbind pod
 func (p *FloatingIPPlugin) loop(stop chan struct{}) {
 	for {
 		select {

@@ -13,6 +13,7 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 	"tkestack.io/galaxy/pkg/utils/database"
+	"errors"
 )
 
 func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) error {
@@ -157,4 +158,19 @@ func reserveIP(key, prefixKey string, ipam floatingip.IPAM, reason string) error
 	}
 	glog.Infof("[%s] reserved ip from pod %s to %s, because %s", ipam.Name(), key, prefixKey, reason)
 	return nil
+}
+
+// getNodeSubnetfromIPAM gets node subnet from ipam
+func (p *FloatingIPPlugin) getNodeSubnetfromIPAM(node *corev1.Node) (*net.IPNet, error) {
+	nodeIP := getNodeIP(node)
+	if nodeIP == nil {
+		return nil, errors.New("FloatingIPPlugin:UnknowNode")
+	}
+	if ipNet := p.ipam.RoutableSubnet(nodeIP); ipNet != nil {
+		glog.V(4).Infof("node %s %s %s", node.Name, nodeIP.String(), ipNet.String())
+		p.nodeSubnet[node.Name] = ipNet
+		return ipNet, nil
+	} else {
+		return nil, errors.New("FloatingIPPlugin:NoFIPConfigNode")
+	}
 }

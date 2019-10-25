@@ -41,6 +41,7 @@ type DBRecorder struct {
 // ActionFunc is a func which executes all the sql in a transaction
 type ActionFunc func(tx *gorm.DB) error
 
+// NewDBRecorder creates a `DBRecorder` pointer
 func NewDBRecorder(config *DBConfig) *DBRecorder {
 	glog.V(4).Infof("db config: %v", config)
 	if config.Protocol == "" {
@@ -52,6 +53,7 @@ func NewDBRecorder(config *DBConfig) *DBRecorder {
 	}
 }
 
+// createDBIfNotExist creates database if it is not exist
 func (db *DBRecorder) createDBIfNotExist() error {
 	dialect := fmt.Sprintf("%s:%s@%s(%s)/mysql?parseTime=true", db.Username, db.Password, db.Protocol, db.Addr)
 

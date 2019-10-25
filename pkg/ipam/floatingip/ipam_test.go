@@ -6,7 +6,6 @@ import (
 	"net"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 

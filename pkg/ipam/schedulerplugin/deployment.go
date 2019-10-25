@@ -26,6 +26,7 @@ func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, pol
 	} else {
 		replicas = int(*dp.Spec.Replicas)
 	}
+	// if ipam or secondIPAM failed, we can depend on resync to release ip
 	if err := unbindDpPod(key, prefixKey, p.ipam, p.dpLockPool, replicas, policy, "unbinding pod"); err != nil {
 		return err
 	}
@@ -49,6 +50,8 @@ func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keyloc
 	if replicas == 0 {
 		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
 	}
+	// locks the pool name if it is a pool
+	// locks the deployment app name if it isn't a pool
 	lockIndex := dpLockPool.GetLockIndex([]byte(prefixKey))
 	dpLockPool.RawLock(lockIndex)
 	defer dpLockPool.RawUnlock(lockIndex)
@@ -56,6 +59,7 @@ func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keyloc
 	if err != nil {
 		return err
 	}
+	// if num of fips is large than replicas, release exceeded part
 	if len(fips) > replicas {
 		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndScaledDownDpPod, when))
 	} else {
@@ -95,6 +99,7 @@ func (p *FloatingIPPlugin) getDPMap() (map[string]*appv1.Deployment, error) {
 	}
 	key2App := make(map[string]*appv1.Deployment)
 	for i := range dps {
+		// ignore those don't have floating ip resource
 		if !p.hasResourceName(&dps[i].Spec.Template.Spec) {
 			continue
 		}

@@ -2,7 +2,6 @@ package schedulerplugin
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -44,6 +43,7 @@ type FloatingIPPlugin struct {
 	dpLockPool *keylock.Keylock
 }
 
+// NewFloatingIPPlugin creates FloatingIPPlugin
 func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin, error) {
 	conf.validate()
 	glog.Infof("floating ip config: %v", conf)
@@ -75,6 +75,7 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 	return plugin, nil
 }
 
+// Init retrieves floatingips from json config or config map and calls ipam to update
 func (p *FloatingIPPlugin) Init() error {
 	if len(p.conf.FloatingIPs) > 0 {
 		if err := p.ipam.ConfigurePool(p.conf.FloatingIPs); err != nil {
@@ -100,6 +101,7 @@ func (p *FloatingIPPlugin) Init() error {
 	return nil
 }
 
+// Run starts resyncing pod routine
 func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 	if len(p.conf.FloatingIPs) == 0 {
 		go wait.Until(func() {
@@ -270,6 +272,7 @@ func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, enabledSeco
 	return nil
 }
 
+// Prioritize can score each node, currently it does nothing
 func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*schedulerapi.HostPriorityList, error) {
 	list := &schedulerapi.HostPriorityList{}
 	if !p.hasResourceName(&pod.Spec) {
@@ -327,6 +330,7 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 	return &ipInfo.IPInfo, nil
 }
 
+// Bind binds a new floatingip or reuse an old one to pod
 func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	pod, err := p.PluginFactoryArgs.PodLister.Pods(args.PodNamespace).Get(args.PodName)
 	if err != nil {
@@ -382,6 +386,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	return nil
 }
 
+// unbind release ip from pod
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	glog.V(3).Infof("handle unbind pod %s", pod.Name)
 	keyObj := util.FormatKey(pod)
@@ -413,6 +418,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	return p.unbindStsOrTappPod(pod, keyObj, policy)
 }
 
+// hasResourceName checks if the podspec has floatingip resource name
 func (p *FloatingIPPlugin) hasResourceName(spec *corev1.PodSpec) bool {
 	for i := range spec.Containers {
 		reqResource := spec.Containers[i].Resources.Requests
@@ -438,26 +444,18 @@ func evicted(pod *corev1.Pod) bool {
 	return pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted"
 }
 
+// getNodeSubnet gets node subnet from ipam
 func (p *FloatingIPPlugin) getNodeSubnet(node *corev1.Node) (*net.IPNet, error) {
 	p.nodeSubnetLock.Lock()
 	defer p.nodeSubnetLock.Unlock()
 	if subnet, ok := p.nodeSubnet[node.Name]; !ok {
-		nodeIP := getNodeIP(node)
-		if nodeIP == nil {
-			return nil, errors.New("FloatingIPPlugin:UnknowNode")
-		}
-		if ipNet := p.ipam.RoutableSubnet(nodeIP); ipNet != nil {
-			glog.V(4).Infof("node %s %s %s", node.Name, nodeIP.String(), ipNet.String())
-			p.nodeSubnet[node.Name] = ipNet
-			return ipNet, nil
-		} else {
-			return nil, errors.New("FloatingIPPlugin:NoFIPConfigNode")
-		}
+		return p.getNodeSubnetfromIPAM(node)
 	} else {
 		return subnet, nil
 	}
 }
 
+// queryNodeSubnet gets node subnet from ipam
 func (p *FloatingIPPlugin) queryNodeSubnet(nodeName string) (*net.IPNet, error) {
 	var (
 		node *corev1.Node
@@ -474,17 +472,7 @@ func (p *FloatingIPPlugin) queryNodeSubnet(nodeName string) (*net.IPNet, error) 
 		}); err != nil {
 			return nil, err
 		}
-		nodeIP := getNodeIP(node)
-		if nodeIP == nil {
-			return nil, errors.New("FloatingIPPlugin:UnknowNode")
-		}
-		if ipNet := p.ipam.RoutableSubnet(nodeIP); ipNet != nil {
-			glog.V(4).Infof("node %s %s %s", nodeName, nodeIP.String(), ipNet.String())
-			p.nodeSubnet[nodeName] = ipNet
-			return ipNet, nil
-		} else {
-			return nil, errors.New("FloatingIPPlugin:NoFIPConfigNode")
-		}
+		return p.getNodeSubnetfromIPAM(node)
 	} else {
 		return subnet, nil
 	}
@@ -514,6 +502,7 @@ func parseReleasePolicy(meta *v1.ObjectMeta) constant.ReleasePolicy {
 	return constant.ConvertReleasePolicy(meta.Annotations[constant.ReleasePolicyAnnotation])
 }
 
+// Attr stores attrs about this pod
 type Attr struct {
 	NodeName string // need this attr to send unassign request to cloud provider on resync
 }

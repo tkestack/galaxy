@@ -52,6 +52,7 @@ type FloatingIP struct {
 	attr         string    `json:"-"`
 }
 
+// SwaggerDoc is to generate Swagger docs
 func (FloatingIP) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"ip":           "ip",
@@ -87,6 +88,7 @@ func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 		appType := req.QueryParameter("appType")
 		var appTypePrefix string
 		if appType == "" {
+			// compatible change with past api
 			isDepStr := req.QueryParameter("isDeployment")
 			if isDepStr != "" {
 				isDep, err := strconv.ParseBool(isDepStr)
@@ -128,6 +130,7 @@ func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 	resp.WriteEntity(ListIPResp{Page: *pagin, Content: pagedFips}) // nolint: errcheck
 }
 
+// toAppTypePrefix converts app name to app key prefix
 func toAppTypePrefix(appType string) string {
 	switch appType {
 	case "deployment":
@@ -141,6 +144,7 @@ func toAppTypePrefix(appType string) string {
 	}
 }
 
+// toAppType converts app key prefix to app name
 func toAppType(appTypePrefix string) string {
 	switch appTypePrefix {
 	case util.DeploymentPrefixKey:
@@ -154,6 +158,7 @@ func toAppType(appTypePrefix string) string {
 	}
 }
 
+// fillReleasableAndStatus fills status and releasable field
 func fillReleasableAndStatus(lister v1.PodLister, ips []FloatingIP) error {
 	for i := range ips {
 		ips[i].Releasable = true
@@ -173,6 +178,7 @@ func fillReleasableAndStatus(lister v1.PodLister, ips []FloatingIP) error {
 	return nil
 }
 
+// bySortParam defines sort funcs for FloatingIP array
 type bySortParam struct {
 	lessFunc func(a, b int, array []FloatingIP) bool
 	array    []FloatingIP
@@ -190,6 +196,7 @@ func (by bySortParam) Len() int {
 	return len(by.array)
 }
 
+// sortFunc defines the sort algorithm
 // #lizard forgives
 func sortFunc(sort string) func(a, b int, array []FloatingIP) bool {
 	switch strings.ToLower(sort) {
@@ -236,15 +243,18 @@ func sortFunc(sort string) func(a, b int, array []FloatingIP) bool {
 	}
 }
 
+// ReleaseIPReq is the request to release ips
 type ReleaseIPReq struct {
 	IPs []FloatingIP `json:"ips"`
 }
 
+// ReleaseIPResp is the response of release ip
 type ReleaseIPResp struct {
 	httputil.Resp
 	Unreleased []string `json:"unreleased,omitempty"`
 }
 
+// SwaggerDoc generates swagger doc for release ip response
 func (ReleaseIPResp) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"unreleased": "unreleased ips, have been released or allocated to other pods, or are not within valid range",
@@ -314,7 +324,8 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 	resp.WriteHeaderAndEntity(res.Code, res)
 }
 
-func listIPs(keyword string, ipam floatingip.IPAM, secondIpam floatingip.IPAM, fuzzyQuery bool) ([]FloatingIP, error) {
+// listIPs lists ips from ipams
+func listIPs(keyword string, ipam, secondIpam floatingip.IPAM, fuzzyQuery bool) ([]FloatingIP, error) {
 	var fips []database.FloatingIP
 	var err error
 	if fuzzyQuery {
@@ -342,6 +353,7 @@ func listIPs(keyword string, ipam floatingip.IPAM, secondIpam floatingip.IPAM, f
 	return resp, nil
 }
 
+// transform converts `database.FloatingIP` slice to `FloatingIP` slice
 func transform(fips []database.FloatingIP) []FloatingIP {
 	var res []FloatingIP
 	for i := range fips {
@@ -360,6 +372,7 @@ func transform(fips []database.FloatingIP) []FloatingIP {
 	return res
 }
 
+// batchReleaseIPs release ips from ipams
 func batchReleaseIPs(ipToKey map[string]string,
 	ipam, secondIpam floatingip.IPAM) (map[string]string, map[string]string, error) {
 	released, unreleased, err := ipam.ReleaseIPs(ipToKey)
