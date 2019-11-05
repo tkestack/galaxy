@@ -1,7 +1,6 @@
-## galaxy: Providing high-performance network and float IP for Kubernetes workloads
+## galaxy: providing high-performance network and float IP for Kubernetes workloads
 
-[![Build Status](https://api.travis-ci.com/gaiastackorg/galaxy.svg?branch=master)](https://travis-ci.com/gaiastackorg/galaxy)
-[![Codecov branch](https://img.shields.io/codecov/c/github/gaiastackorg/galaxy/master.svg?style=for-the-badge)](https://codecov.io/gh/gaiastackorg/galaxy)
+[![Build Status](https://api.travis-ci.com/tkestack/galaxy.svg?branch=master)](https://travis-ci.com/tkestack/galaxy)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://tkestack.io/galaxy/merge_requests)
 
 Galaxy is a Kubernetes network project designed for providing both common Overlay and high performance Underlay network for pods.
@@ -30,4 +29,4 @@ For more information about contributing issues or pull requests, see our [Contri
 
 ## License
 
-Galaxy is under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+Galaxy is under the Apache License 2.0. See the [License](License) file for details.
