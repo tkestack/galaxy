@@ -1,4 +1,5 @@
-## Galaxy: Providing high-performance network and float IP for Kubernetes workloads
+## galaxy: Providing high-performance network and float IP for Kubernetes workloads
+
 [![Build Status](https://api.travis-ci.com/gaiastackorg/galaxy.svg?branch=master)](https://travis-ci.com/gaiastackorg/galaxy)
 [![Codecov branch](https://img.shields.io/codecov/c/github/gaiastackorg/galaxy/master.svg?style=for-the-badge)](https://codecov.io/gh/gaiastackorg/galaxy)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://tkestack.io/galaxy/merge_requests)
