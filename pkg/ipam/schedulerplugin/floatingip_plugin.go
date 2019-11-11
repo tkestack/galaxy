@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -382,17 +383,29 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 			},
 		}); err != nil {
 			err1 = err
+			if isPodNotFoundError(err) {
+				// break retry if pod no longer exists
+				return false, err
+			}
 			return false, nil
 		}
 		glog.Infof("bind pod %s to %s with ip %v", keyObj.KeyInDB, args.Node,
 			bindAnnotation[constant.ExtendedCNIArgsAnnotation])
 		return true, nil
 	}); err != nil {
+		if isPodNotFoundError(err1) {
+			glog.Infof("binding returns not found for pod %s, putting it into unreleased chan, metaErrs.IsNotFound(err1)=%v", keyObj.KeyInDB, metaErrs.IsNotFound(err1))
+			// attach ip annotation
+			p.unreleased <- &releaseEvent{pod: pod}
+		}
 		// If fails to update, depending on resync to update
-		return fmt.Errorf("failed to update pod %s: %v", keyObj.KeyInDB, err1)
-		//TODO release ip
+		return fmt.Errorf("update pod %s: %w", keyObj.KeyInDB, err1)
 	}
 	return nil
+}
+
+func isPodNotFoundError(err error) bool {
+	return metaErrs.IsNotFound(err) || strings.Contains(err.Error(), "not found")
 }
 
 // unbind release ip from pod
@@ -401,23 +414,21 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	keyObj := util.FormatKey(pod)
 	key := keyObj.KeyInDB
 	if p.cloudProvider != nil {
-		if pod.Annotations == nil || pod.Annotations[constant.ExtendedCNIArgsAnnotation] == "" {
-			// If a pod has not been allocated an ip, e.g. ip pool is drained, do nothing
-			// If the annotation is deleted manually, we count on resync to release ips
+		ipInfo, err := p.ipam.First(key)
+		if err != nil {
+			return fmt.Errorf("failed to query floating ip of %s: %v", key, err)
+		}
+		if ipInfo == nil {
+			glog.Infof("pod %s hasn't an allocated ip", key)
 			return nil
 		}
-		ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
-		if err != nil || len(ipInfos) == 0 || ipInfos[0].IP == nil {
-			return fmt.Errorf("bad format of %s: %s, err %v", key,
-				pod.Annotations[constant.ExtendedCNIArgsAnnotation], err)
-		} else {
-			glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", pod.Spec.NodeName, ipInfos[0].IP.IP.String(), key)
-			if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
-				NodeName:  pod.Spec.NodeName,
-				IPAddress: ipInfos[0].IP.IP.String(),
-			}); err != nil {
-				return fmt.Errorf("failed to unassign ip %s from %s: %v", ipInfos[0].IP.IP.String(), key, err)
-			}
+		ipStr := ipInfo.IPInfo.IP.IP.String()
+		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", pod.Spec.NodeName, ipStr, key)
+		if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
+			NodeName:  pod.Spec.NodeName,
+			IPAddress: ipStr,
+		}); err != nil {
+			return fmt.Errorf("failed to unassign ip %s from %s: %v", ipStr, key, err)
 		}
 	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)

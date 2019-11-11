@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/informers"
+	coreInformer "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes/fake"
 	fakeV1 "k8s.io/client-go/kubernetes/typed/core/v1/fake"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
@@ -47,6 +48,7 @@ import (
 	//fakeTAppCli "tkestack.io/tapp/pkg/client/clientset/versioned/fake"
 	//tappInformer "tkestack.io/tapp/pkg/client/informers/externalversions"
 	//"tkestack.io/tapp/pkg/tapp"
+	"tkestack.io/galaxy/pkg/api/k8s/eventhandler"
 )
 
 const (
@@ -64,10 +66,6 @@ var (
 )
 
 func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}, []corev1.Node) {
-	var conf Conf
-	if err := json.Unmarshal([]byte(utils.TestConfig), &conf); err != nil {
-		t.Fatal(err)
-	}
 	nodes := []corev1.Node{
 		createNode(drainedNode, nil, "10.180.1.3"), // no floating ip left on this node
 		createNode(nodeHasNoIP, nil, "10.49.28.2"), // no floating ip configured for this node
@@ -75,13 +73,22 @@ func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlu
 		createNode(node4, nil, "10.173.13.4"),      // good node
 	}
 	allObjs := append([]runtime.Object{&nodes[0], &nodes[1], &nodes[2], &nodes[3]}, objs...)
-	fipPlugin, stopChan := newPlugin(t, conf, allObjs...)
+	fipPlugin, stopChan := createPlugin(t, allObjs...)
 	// drain drainedNode 10.180.1.3/32
 	subnet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.CIDRMask(32, 32)}
 	if err := drainNode(fipPlugin, subnet, nil); err != nil {
 		t.Fatal(err)
 	}
 	return fipPlugin, stopChan, nodes
+}
+
+func createPlugin(t *testing.T, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}) {
+	var conf Conf
+	if err := json.Unmarshal([]byte(utils.TestConfig), &conf); err != nil {
+		t.Fatal(err)
+	}
+	fipPlugin, stopChan := newPlugin(t, conf, objs...)
+	return fipPlugin, stopChan
 }
 
 // #lizard forgives
@@ -454,7 +461,7 @@ func createNode(name string, labels map[string]string, address string) corev1.No
 	}
 }
 
-func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFactoryArgs, chan struct{}) {
+func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFactoryArgs, coreInformer.PodInformer, chan struct{}) {
 	galaxyCli := fakeGalaxyCli.NewSimpleClientset()
 	crdInformerFactory := crdInformer.NewSharedInformerFactory(galaxyCli, 0)
 	poolInformer := crdInformerFactory.Galaxy().V1alpha1().Pools()
@@ -487,15 +494,16 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 	go informerFactory.Start(stopChan)
 	go crdInformerFactory.Start(stopChan)
 	//go tappInformerFactory.Start(stopChan)
-	return pluginArgs, stopChan
+	return pluginArgs, podInformer, stopChan
 }
 
 func newPlugin(t *testing.T, conf Conf, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}) {
-	pluginArgs, stopChan := createPluginFactoryArgs(t, objs...)
+	pluginArgs, podInformer, stopChan := createPluginFactoryArgs(t, objs...)
 	fipPlugin, err := NewFloatingIPPlugin(conf, pluginArgs)
 	if err != nil {
 		t.Fatal(err)
 	}
+	podInformer.Informer().AddEventHandler(eventhandler.NewPodEventHandler(fipPlugin))
 	if err = fipPlugin.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -658,9 +666,10 @@ func TestUnBind(t *testing.T) {
 	if err := fipPlugin.unbind(pod1); err != nil {
 		t.Fatal(err)
 	}
-	// if a pod has got bad cni args annotation, unbind should return error
+	// if a pod has got bad cni args annotation,
+	// unbind should return nil because we got binded ip from store instead of annotation
 	pod1.Annotations[constant.ExtendedCNIArgsAnnotation] = "fff"
-	if err := fipPlugin.unbind(pod1); err == nil {
+	if err := fipPlugin.unbind(pod1); err != nil {
 		t.Fatal(err)
 	}
 	// bind before testing normal unbind
