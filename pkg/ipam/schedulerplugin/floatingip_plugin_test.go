@@ -45,8 +45,8 @@ import (
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 	"tkestack.io/galaxy/pkg/utils/database"
-	fakeTAppCli "tkestack.io/tapp-controller/pkg/client/clientset/versioned/fake"
-	tappInformer "tkestack.io/tapp-controller/pkg/client/informers/externalversions"
+	fakeTAppCli "tkestack.io/tapp/pkg/client/clientset/versioned/fake"
+	tappInformer "tkestack.io/tapp/pkg/client/informers/externalversions"
 )
 
 const (

@@ -51,8 +51,8 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/server/options"
 	"tkestack.io/galaxy/pkg/utils/httputil"
 	pageutil "tkestack.io/galaxy/pkg/utils/page"
-	tappVersioned "tkestack.io/tapp-controller/pkg/client/clientset/versioned"
-	tappInformers "tkestack.io/tapp-controller/pkg/client/informers/externalversions"
+	tappVersioned "tkestack.io/tapp/pkg/client/clientset/versioned"
+	tappInformers "tkestack.io/tapp/pkg/client/informers/externalversions"
 )
 
 type JsonConf struct {

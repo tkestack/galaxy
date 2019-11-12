@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
-	tappv1 "tkestack.io/tapp-controller/pkg/apis/tappcontroller/v1"
+	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
 )
 
 func tAppFullName(tapp *tappv1.TApp) string {

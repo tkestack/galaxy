@@ -32,3 +32,21 @@ hack/build-rpm.sh
 ```
 BINARY=cmd/galaxy hack/build-single.sh
 ```
+
+# FAQ
+Q: Cannot fetch some modules like 'modernc.org/golex', 'modernc.org/xc', etc?
+A: The `build.sh` script will call `go mod` command to download these modules from gitlab.com,
+   but there are some compatibility problem for `go mod` when resolving gitlab.com addresses, 
+   To fix it, add belowing configuration to `~/.gitconfig` :
+```
+[url "https://gitlab.com/cznic/mathutil.git"]
+        insteadOf = https://gitlab.com/cznic/mathutil
+[url "https://gitlab.com/cznic/xc.git"]
+        insteadOf = https://gitlab.com/cznic/xc
+[url "https://gitlab.com/cznic/strutil.git"]
+        insteadOf = https://gitlab.com/cznic/strutil
+[url "https://gitlab.com/cznic/golex.git"]
+        insteadOf = https://gitlab.com/cznic/golex
+[url "https://gitlab.com/cznic/cc.git"]
+        insteadOf = https://gitlab.com/cznic/cc
+```
