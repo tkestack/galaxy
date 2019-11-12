@@ -25,8 +25,8 @@ import (
 	list "tkestack.io/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/utils/database"
-	"tkestack.io/tapp-controller/pkg/client/clientset/versioned"
-	"tkestack.io/tapp-controller/pkg/client/listers/tappcontroller/v1"
+	"tkestack.io/tapp/pkg/client/clientset/versioned"
+	"tkestack.io/tapp/pkg/client/listers/tappcontroller/v1"
 )
 
 type PluginFactoryArgs struct {

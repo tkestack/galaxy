@@ -3,7 +3,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-go env -w GONOSUMDB=git.tencent.com/tke/tapp-controller
+go env -w GONOSUMDB=tkestack.io/tapp
 go mod tidy
 
 #replace (

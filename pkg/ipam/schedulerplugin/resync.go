@@ -32,7 +32,7 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 	"tkestack.io/galaxy/pkg/utils/database"
-	tappv1 "tkestack.io/tapp-controller/pkg/apis/tappcontroller/v1"
+	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
 )
 
 func (p *FloatingIPPlugin) storeReady() bool {
