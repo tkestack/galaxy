@@ -393,14 +393,8 @@ func TestAllocateInSubnet(t *testing.T) {
 func TestUpdateKeyUpdatePolicy(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
-
-	ipnet := &net.IPNet{IP: net.ParseIP("10.173.13.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
-	allocatedIP, err := ipam.AllocateInSubnet("pod2", ipnet, constant.ReleasePolicyPodDelete, "")
-	if err != nil {
+	if err := ipam.AllocateSpecificIP("pod2", net.ParseIP("10.173.13.2"), constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
-	}
-	if allocatedIP.String() != "10.173.13.2" {
-		t.Error(allocatedIP.String())
 	}
 	if err := ipam.ReserveIP("pod2", "pod3", ""); err != nil {
 		t.Fatal(err)

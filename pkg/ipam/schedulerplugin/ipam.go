@@ -18,6 +18,7 @@ package schedulerplugin
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -29,7 +30,6 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 	"tkestack.io/galaxy/pkg/utils/database"
-	"errors"
 )
 
 func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) error {

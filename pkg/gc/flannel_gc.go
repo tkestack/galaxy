@@ -171,7 +171,7 @@ func (gc *flannelGC) cleanupVeth() error {
 			if err = netlink.LinkDel(link); err != nil {
 				glog.Warningf("failed remove link %s: %v; try next time", link.Attrs().Name, err)
 			}
-			glog.Infof("removed link %s for container %s", cid, link.Attrs().Name, cid)
+			glog.Infof("removed link %s for container %s", link.Attrs().Name, cid)
 		}
 	}
 	return nil

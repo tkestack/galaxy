@@ -76,7 +76,7 @@ func addHostRoute(containerIP *net.IPNet, vethHostName string, src string) error
 				Gw:        nil,
 			}); err1 != nil {
 				return fmt.Errorf("failed to add route '%v dev %v for old linux kernel': %v. With src option err: %v",
-				containerIP, vethHostName, err1, err)
+					containerIP, vethHostName, err1, err)
 			} else {
 				return nil
 			}
@@ -156,7 +156,7 @@ func connectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, conf *Ve
 			State:        netlink.NUD_PERMANENT,
 		}); err != nil {
 			return fmt.Errorf("failed to add neigh entry ip %s, link index %d, mac %s: %v", linkLocalAddress.String(),
-			sbox.Attrs().Index, host.Attrs().HardwareAddr.String(), err)
+				sbox.Attrs().Index, host.Attrs().HardwareAddr.String(), err)
 		}
 		return nil
 	})
@@ -183,7 +183,7 @@ func configureIface(ifName string, ip *net.IPNet, routes []netlink.Route) error 
 			// we skip over duplicate routes as we assume the first one wins
 			if !os.IsExist(err) {
 				return fmt.Errorf("failed to add route '%v via %v dev %v scope %v': %v", r.Dst, r.Gw, ifName,
-				r.Scope, err)
+					r.Scope, err)
 			}
 		}
 	}

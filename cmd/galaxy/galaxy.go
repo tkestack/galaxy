@@ -20,13 +20,13 @@ import (
 	"math/rand"
 	"time"
 
-	"tkestack.io/galaxy/pkg/galaxy"
-	"tkestack.io/galaxy/pkg/signal"
-	glog "k8s.io/klog"
 	"github.com/spf13/pflag"
 	"k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
+	glog "k8s.io/klog"
 	"k8s.io/kubernetes/pkg/version/verflag"
+	"tkestack.io/galaxy/pkg/galaxy"
+	"tkestack.io/galaxy/pkg/signal"
 )
 
 func main() {
