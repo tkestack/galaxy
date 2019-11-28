@@ -328,7 +328,11 @@ func (p *PolicyManager) peerRule(ports []networkv1.NetworkPolicyPort, peers []ne
 				rule.ipTable.entries = append(rule.ipTable.entries, tbl.entries...)
 			}
 		} else if tbl.SetType == ipset.HashNet {
-			rule.netTable = tbl
+			if rule.netTable == nil {
+				rule.netTable = tbl
+			} else {
+				rule.netTable.entries = append(rule.netTable.entries, tbl.entries...)
+			}
 		}
 	}
 	return &rule
