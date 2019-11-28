@@ -62,6 +62,7 @@ func (p *PolicyManager) AddPolicy(policy *networkv1.NetworkPolicy) error {
 func (p *PolicyManager) UpdatePolicy(oldPolicy, newPolicy *networkv1.NetworkPolicy) error {
 	p.syncNetworkPolices()
 	p.syncNetworkPolicyRules()
+	p.syncPods()
 	return nil
 }
 
