@@ -343,3 +343,37 @@ Members:
 		t.Errorf("expect %d %s, real %d %s", len(expectIPSets), expectIPSets, len(string(data)), string(data))
 	}
 }
+
+func TestPeerRule(t *testing.T) {
+	pm := newTestPolicyManager()
+	port80 := intstr.FromInt(80)
+	port8080 := intstr.FromInt(8080)
+	udpProtocol := corev1.Protocol("UDP")
+	to := []networkv1.NetworkPolicyPeer{
+		{IPBlock: &networkv1.IPBlock{CIDR: "3.1.0.0/24", Except: []string{"3.1.0.2/32"}}},
+		{IPBlock: &networkv1.IPBlock{CIDR: "3.2.0.0/24"}},
+	}
+	ports := []networkv1.NetworkPolicyPort{{Port: &port8080, Protocol: &udpProtocol}, {Port: &port80}}
+	rule := pm.peerRule(ports, to)
+	if rule.netTable == nil {
+		t.Fatal()
+	}
+	if len(rule.netTable.entries) != 3 {
+		t.Fatal(rule.netTable.entries)
+	}
+	if rule.netTable.entries[0].Net != "3.1.0.0/24" {
+		t.Fatal(rule.netTable.entries)
+	}
+	if rule.netTable.entries[1].Net != "3.1.0.2" || len(rule.netTable.entries[1].Options) == 0 || rule.netTable.entries[1].Options[0] != "nomatch" {
+		t.Fatal(rule.netTable.entries)
+	}
+	if rule.netTable.entries[2].Net != "3.2.0.0/24" {
+		t.Fatal(rule.netTable.entries)
+	}
+	if len(rule.tcpPorts) != 1 {
+		t.Fatal(rule.tcpPorts)
+	}
+	if len(rule.udpPorts) != 1 {
+		t.Fatal(rule.udpPorts)
+	}
+}
