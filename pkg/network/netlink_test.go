@@ -22,7 +22,14 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-func TestIsNeighResolving(t *testing.T) {
-	t.Log(IsNeighResolving(32))
-	t.Log(32 & (netlink.NUD_INCOMPLETE | netlink.NUD_STALE | netlink.NUD_DELAY | netlink.NUD_PROBE))
+func TestFilterLoopbackAddr(t *testing.T) {
+	addrs := FilterLoopbackAddr([]netlink.Addr{
+		{IPNet: &net.IPNet{IP: net.ParseIP("10.0.0.1"), Mask: net.CIDRMask(24, 32)}},
+		{IPNet: &net.IPNet{IP: net.ParseIP("127.0.0.1"), Mask: net.CIDRMask(24, 32)}}})
+	if len(addrs) != 1 {
+		t.Fatal()
+	}
+	if addrs[0].IPNet.String() != "10.0.0.1/24" {
+		t.Fatal()
+	}
 }

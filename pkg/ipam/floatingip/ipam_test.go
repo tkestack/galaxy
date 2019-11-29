@@ -293,8 +293,8 @@ func TestMultipleIPAM(t *testing.T) {
 
 // #lizard forgives
 func checkMultipleIPAM(t *testing.T, ipam, secondIPAM *dbIpam, ip net.IP, expectKey string) {
-	t.Logf("testing expectKey %s, ip %s", expectKey, ip.String())
-	t.Logf("secondIPAM...")
+	// t.Logf("testing expectKey %s, ip %s", expectKey, ip.String())
+	// t.Logf("secondIPAM...")
 	// check secondIPAM query result is not empty
 	secondFip, err := secondIPAM.ByIP(ip)
 	if err != nil || secondFip.Key != expectKey {
@@ -312,7 +312,7 @@ func checkMultipleIPAM(t *testing.T, ipam, secondIPAM *dbIpam, ip net.IP, expect
 		t.Fatalf("%v err %v", subnets, err)
 	}
 	// check ipam query result is empty
-	t.Logf("ipam...")
+	// t.Logf("ipam...")
 	secondFip, err = ipam.ByIP(ip)
 	if err != nil || secondFip.Key != "" {
 		t.Fatalf("key %s, err %v", secondFip.Key, err)
