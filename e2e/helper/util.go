@@ -82,15 +82,7 @@ func ProjectDir() string {
 	if err != nil {
 		panic(err)
 	}
-	root := filepath.Dir(ex)
-	if strings.HasSuffix(root, packageName) {
-		return root
-	}
-	index := strings.LastIndex(root, packageName)
-	if index == -1 {
-		panic(fmt.Sprintf("current dir %s doesn't under GOPATH", root))
-	}
-	return root[:(index + len(packageName))]
+	return filepath.Dir(ex)
 }
 
 func NewNetNS(containerId string) (string, error) {
