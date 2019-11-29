@@ -1,5 +1,5 @@
 name: Go
-on: [push]
+on: [push, pull_request]
 jobs:
 
   build:
@@ -26,8 +26,13 @@ jobs:
 
     - name: Build
       run: |
-        go get -u github.com/onsi/ginkgo/ginkgo
         hack/verify.sh
         hack/build.sh
         hack/build-ipam.sh
+
+    - name: Test
+      run: |
+        go get -u github.com/onsi/ginkgo/ginkgo
+        export PATH=$PATH:$(go env GOPATH)/bin
+        hack/verify.sh
         sudo -E env "PATH=$PATH" hack/test.sh

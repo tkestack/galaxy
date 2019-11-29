@@ -31,6 +31,13 @@ import (
 	"tkestack.io/galaxy/pkg/utils/database"
 )
 
+var (
+	node2IPNet     = &net.IPNet{IP: net.ParseIP("10.173.13.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
+	node2FIPSubnet = node2IPNet
+	node4IPNet     = &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
+	node4FIPSubnet = &net.IPNet{IP: net.ParseIP("10.180.154.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
+)
+
 // Start will create dbIpam.
 func Start(t *testing.T) *dbIpam {
 	return CreateIPAMWithTableName(t, database.DefaultFloatingipTableName)
@@ -134,29 +141,6 @@ func TestEmptyFloatingIPConf(t *testing.T) {
 	defer i.Shutdown()
 	if err := i.ConfigurePool(nil); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// #lizard forgives
-// TestAllocateIPInSubnet test AllocateInSubnet function.
-func TestAllocateIPInSubnet(t *testing.T) {
-	ipam := Start(t)
-	defer ipam.Shutdown()
-	_, routableSubnet, _ := net.ParseCIDR("10.173.13.0/24")
-	if _, err := ipam.AllocateInSubnet("pod1-1", routableSubnet, constant.ReleasePolicyPodDelete, ""); err != nil {
-		t.Fatal(err)
-	}
-	ipInfo, err := ipam.first("pod1-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ipInfo.IP.String() != "10.173.13.2/24" {
-		t.Fatal(ipInfo.IP.String())
-	}
-	//test can't find available ip
-	_, routableSubnet, _ = net.ParseCIDR("10.173.14.0/24")
-	if _, err := ipam.AllocateInSubnet("pod1-1", routableSubnet, constant.ReleasePolicyPodDelete, ""); err == nil || err != ErrNoFIPForSubnet {
-		t.Fatalf("should fail because of ErrNoFIPForSubnet: %v", err)
 	}
 }
 
@@ -270,8 +254,7 @@ func TestMultipleIPAM(t *testing.T) {
 	}
 	checkMultipleIPAM(t, ipam, secondIPAM, ip, "pod1")
 
-	_, routableSubnet, _ := net.ParseCIDR("10.173.13.0/24")
-	ip2, err := secondIPAM.AllocateInSubnet("pod2", routableSubnet, constant.ReleasePolicyPodDelete, "")
+	ip2, err := secondIPAM.AllocateInSubnet("pod2", node2IPNet, constant.ReleasePolicyPodDelete, "")
 	if err != nil || ip2 == nil {
 		t.Fatalf("ip %v, err %v", ip2, err)
 	}
@@ -355,26 +338,29 @@ func checkByPrefix(ipam IPAM, prefix string, expectKeys ...string) error {
 func TestAllocateInSubnet(t *testing.T) {
 	ipam := Start(t)
 	defer ipam.Shutdown()
-	ipnet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
-	allocatedIP, err := ipam.AllocateInSubnet("pod1", ipnet, constant.ReleasePolicyPodDelete, "")
+	allocatedIP, err := ipam.AllocateInSubnet("pod1", node4IPNet, constant.ReleasePolicyPodDelete, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if allocatedIP.String() != "10.180.154.7" {
-		t.Fatal(allocatedIP.String())
+	if !node4FIPSubnet.Contains(allocatedIP) {
+		t.Fatal()
+	}
+	allocatedIP, err = ipam.AllocateInSubnet("pod2", node2IPNet, constant.ReleasePolicyPodDelete, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !node2FIPSubnet.Contains(allocatedIP) {
+		t.Fatal()
 	}
 
-	ipnet = &net.IPNet{IP: net.ParseIP("10.173.13.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
-	allocatedIP, err = ipam.AllocateInSubnet("pod2", ipnet, constant.ReleasePolicyPodDelete, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if allocatedIP.String() != "10.173.13.2" {
-		t.Fatal(allocatedIP.String())
+	//test can't find available ip
+	_, noConfigNode, _ := net.ParseCIDR("10.173.14.0/24")
+	if _, err := ipam.AllocateInSubnet("pod1-1", noConfigNode, constant.ReleasePolicyPodDelete, ""); err == nil || err != ErrNoFIPForSubnet {
+		t.Fatalf("should fail because of ErrNoFIPForSubnet: %v", err)
 	}
 
 	// test AllocateInSubnetWithKey
-	if err = ipam.AllocateInSubnetWithKey("pod2", "pod3", ipnet.String(), constant.ReleasePolicyPodDelete, ""); err != nil {
+	if err = ipam.AllocateInSubnetWithKey("pod2", "pod3", node2IPNet.String(), constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
 	ipInfo, err := ipam.First("pod2")
@@ -383,7 +369,7 @@ func TestAllocateInSubnet(t *testing.T) {
 	}
 
 	ipInfo, err = ipam.First("pod3")
-	if err != nil || ipInfo.IPInfo.IP == nil || ipInfo.IPInfo.IP.String() != "10.173.13.2/24" {
+	if err != nil || ipInfo.IPInfo.IP == nil || ipInfo.IPInfo.IP.IP.String() != allocatedIP.String() {
 		t.Errorf("err %v ipInfo %v", err, ipInfo)
 	}
 }
