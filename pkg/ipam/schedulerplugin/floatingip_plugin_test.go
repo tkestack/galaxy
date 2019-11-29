@@ -76,11 +76,14 @@ func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlu
 	allObjs := append([]runtime.Object{&nodes[0], &nodes[1], &nodes[2], &nodes[3]}, objs...)
 	fipPlugin, stopChan := newPlugin(t, conf, allObjs...)
 	// drain drainedNode 10.180.1.3/32
-	if err := fipPlugin.ipam.AllocateSpecificIP("ns_notexistpod", net.ParseIP("10.180.154.7"), constant.ReleasePolicyPodDelete, ""); err != nil {
-		t.Fatal(err)
-	}
-	if err := fipPlugin.ipam.AllocateSpecificIP("ns_notexistpod", net.ParseIP("10.180.154.8"), constant.ReleasePolicyPodDelete, ""); err != nil {
-		t.Fatal(err)
+	drainedNodeIPNet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
+	for {
+		if _, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", drainedNodeIPNet, constant.ReleasePolicyPodDelete, ""); err != nil {
+			if err == floatingip.ErrNoEnoughIP {
+				break
+			}
+			t.Fatal(err)
+		}
 	}
 	return fipPlugin, stopChan, nodes
 }
@@ -335,10 +338,7 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 			// test bind gets the right key, i.e. dp_ns1_dp_dp-xxx-yyy, and filter gets reserved node
 			testPod: pod, expectFiltererd: []string{node4}, expectFailed: []string{drainedNode, nodeHasNoIP, node3},
 			preHook: func() error {
-				if _, err := checkBind(fipPlugin, pod, node4, podKey.KeyInDB, "10.173.13.2"); err != nil {
-					t.Fatal(err)
-				}
-				return nil
+				return fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyNever, "")
 			},
 		},
 		{
@@ -365,12 +365,6 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 			// test filter again on the same pool but different deployment pod and bind gets the right key, i.e. dp_ns1_dp_dp-xxx-yyy
 			// two pool deployment, deployment 1 gets enough ips, grow the pool size for deployment 2
 			testPod: pod, expectFiltererd: []string{node3, node4}, expectFailed: []string{drainedNode, nodeHasNoIP},
-			postHook: func() error {
-				if _, err := checkBind(fipPlugin, pod, node3, podKey.KeyInDB, "10.49.27.205"); err != nil {
-					t.Fatal(err)
-				}
-				return nil
-			},
 		},
 	}
 	for i := range testCases {
@@ -672,7 +666,7 @@ func (f *fakeCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssign
 func TestUnBind(t *testing.T) {
 	pod1 := CreateStatefulSetPod("pod1-1", "demo", map[string]string{})
 	keyObj := util.FormatKey(pod1)
-	node := createNode("TestUnBindNode", nil, "10.173.13.4")
+	node := createNode("TestUnBindNode", nil, "10.180.1.2")
 	var conf Conf
 	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
 		t.Fatal(err)
@@ -689,11 +683,16 @@ func TestUnBind(t *testing.T) {
 	if err := fipPlugin.unbind(pod1); err == nil {
 		t.Fatal(err)
 	}
-
+	// drain ips other than expectIP of this subnet
+	for _, ipStr := range []string{"10.180.154.3"} {
+		if err := fipPlugin.ipam.AllocateSpecificIP("not_existpod", net.ParseIP(ipStr), constant.ReleasePolicyPodDelete, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// bind before testing normal unbind
-	fakeCP := &fakeCloudProvider{expectIP: "10.173.13.2", expectNode: node.Name}
+	fakeCP := &fakeCloudProvider{expectIP: "10.180.154.2", expectNode: node.Name}
 	fipPlugin.cloudProvider = fakeCP
-	fipInfo, err := checkBind(fipPlugin, pod1, node.Name, keyObj.KeyInDB, "10.173.13.2")
+	fipInfo, err := checkBind(fipPlugin, pod1, node.Name, keyObj.KeyInDB, "10.180.154.2")
 	if err != nil {
 		t.Fatal(err)
 	}
