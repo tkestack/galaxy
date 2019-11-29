@@ -86,10 +86,15 @@ func (dev *device) processNeighMsg(msg syscall.NetlinkMessage) {
 		return
 	}
 
-	if !network.IsNeighResolving(neigh.State) {
+	if !isNeighResolving(neigh.State) {
 		log.Infof("ignore neigh msg from kernel %#v: invalid state %d", neigh, neigh.State)
 		return
 	}
 
 	log.Infof("receive good neigh msg from kernel %#v", neigh)
+}
+
+
+func isNeighResolving(state int) bool {
+	return (state & (netlink.NUD_INCOMPLETE | netlink.NUD_STALE | netlink.NUD_DELAY | netlink.NUD_PROBE)) != 0
 }

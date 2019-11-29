@@ -26,7 +26,7 @@ import (
 func TestBridgeOps(t *testing.T) {
 	env := os.Getenv("TEST_ENV")
 	if env != "linux_root" {
-		t.Skip("skip test")
+		t.Skip()
 	}
 	mac := GenerateRandomMAC()
 	briName, _ := GenerateIfaceName("bri", 5)

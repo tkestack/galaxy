@@ -41,7 +41,6 @@ func TestFormatParseIPInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(str)
 	parsed, err := ParseIPInfo(str)
 	if err != nil {
 		t.Fatal(err)

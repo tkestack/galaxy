@@ -22,18 +22,10 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
-	"tkestack.io/galaxy/pkg/network/netns"
 )
 
 func TestIPForward(t *testing.T) {
-	t.Skip("need to upgrade to go 1.10+")
-	teardown := netns.NewContainerForTest()
-	defer teardown()
-	// remount sysfs in the new netns
-	if err := remountSysfs(); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1\n"), 0644); err != nil {
+	if err := ioutil.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("0\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	quit := make(chan struct{})
