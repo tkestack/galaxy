@@ -24,7 +24,6 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 	log "k8s.io/klog"
-	"tkestack.io/galaxy/pkg/network"
 )
 
 var flagDevice = flag.String("device", "", "device name to listen")

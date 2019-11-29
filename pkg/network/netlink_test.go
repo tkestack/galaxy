@@ -17,6 +17,7 @@
 package network
 
 import (
+	"net"
 	"testing"
 
 	"github.com/vishvananda/netlink"
