@@ -26,14 +26,13 @@ jobs:
 
     - name: Build
       run: |
-        # hack/verify.sh
+        hack/verify.sh
         hack/build.sh
-        # hack/build-ipam.sh
+        hack/build-ipam.sh
 
     - name: Test
       run: |
-        # go get -u github.com/onsi/ginkgo/ginkgo
-        # export PATH=$PATH:$(go env GOPATH)/bin
+        go get -u github.com/onsi/ginkgo/ginkgo
+        export PATH=$PATH:$(go env GOPATH)/bin
         echo $GITHUB_WORKSPACE
-        # hack/verify.sh
         sudo -E env "PATH=$PATH" hack/test.sh

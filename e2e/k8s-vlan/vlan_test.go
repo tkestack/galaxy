@@ -39,11 +39,8 @@ var _ = Describe("galaxy-k8s-vlan vlan test", func() {
 	dummyVlan2 := helper.NewDummyVlan(cidrIPNet, 2)
 	AfterEach(func() {
 		helper.CleanupNetNS()
+		helper.CleanupIFace("br2", "br3", "dummy0.2", "dummy0.3")
 		helper.CleanupDummy()
-		helper.CleanupIFace("br2")
-		helper.CleanupIFace("br3")
-		helper.CleanupIFace("dummy0.2")
-		helper.CleanupIFace("dummy0.3")
 	})
 	It("vlan", func() {
 		netConf := []byte(`{

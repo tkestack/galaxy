@@ -40,7 +40,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d // indirect
 	k8s.io/kubernetes v1.16.0-alpha.0
 	k8s.io/utils v0.0.0-20191010214722-8d271d903fe4
-	tkestack.io/tapp master
+	tkestack.io/tapp v0.0.0-20191112021625-dbdaf5a5314c
 )
 
 replace (
