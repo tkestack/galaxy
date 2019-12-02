@@ -74,6 +74,9 @@ func NewContainerId() string {
 }
 
 func ProjectDir() string {
+	if dir := os.Getenv("GITHUB_WORKSPACE"); dir != "" {
+		return dir
+	}
 	gopath := os.Getenv("GOPATH")
 	if gopath != "" {
 		return path.Join(gopath, "src", packageName)
