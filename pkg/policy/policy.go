@@ -865,20 +865,30 @@ func (p *PolicyManager) SyncPodChains(pod *corev1.Pod) error {
 		return fmt.Errorf("failed to execute iptables-restore for ruls %s: %v", string(lines), err)
 	}
 
+	args := []string{"-d", pod.Status.PodIP, "-m", "comment", "--comment", podNameComment, "-j", string(podChain)}
 	if filteredIngressPolicy.Len() > 0 {
 		// -A GLX-INGRESS -d x.x.x.x -j GLX-POD-XXXXX , this should be added after creating pod chain
-		args := []string{"-d", pod.Status.PodIP, "-m", "comment", "--comment", podNameComment, "-j", string(podChain)}
 		if _, err := p.iptableHandle.EnsureRule(utiliptables.Append, utiliptables.TableFilter,
 			ingressChain, args...); err != nil {
 			return fmt.Errorf("failed to add pod policy rule %s: %v", strings.Join(args, " "), err)
 		}
+	} else {
+		// -D GLX-INGRESS -d x.x.x.x -j GLX-POD-XXXXX
+		if err := p.iptableHandle.DeleteRule(utiliptables.TableFilter, ingressChain, args...); err != nil {
+			return fmt.Errorf("failed to delete pod policy rule %s: %v", strings.Join(args, " "), err)
+		}
 	}
+	args = []string{"-s", pod.Status.PodIP, "-m", "comment", "--comment", podNameComment, "-j", string(podChain)}
 	if filteredEgressPolicy.Len() > 0 {
 		// -A GLX-EGRESS -s x.x.x.x -j GLX-POD-XXXXX , this should be added after creating pod chain
-		args := []string{"-s", pod.Status.PodIP, "-m", "comment", "--comment", podNameComment, "-j", string(podChain)}
 		if _, err := p.iptableHandle.EnsureRule(utiliptables.Append, utiliptables.TableFilter, egressChain,
 			args...); err != nil {
 			return fmt.Errorf("failed to add pod policy rule %s: %v", strings.Join(args, " "), err)
+		}
+	} else {
+		// -D GLX-EGRESS -s x.x.x.x -j GLX-POD-XXXXX
+		if err := p.iptableHandle.DeleteRule(utiliptables.TableFilter, egressChain, args...); err != nil {
+			return fmt.Errorf("failed to delete pod policy rule %s: %v", strings.Join(args, " "), err)
 		}
 	}
 	return nil
