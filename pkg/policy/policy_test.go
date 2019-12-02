@@ -342,6 +342,49 @@ Members:
 	if string(data) != expectIPSets {
 		t.Errorf("expect %d %s, real %d %s", len(expectIPSets), expectIPSets, len(string(data)), string(data))
 	}
+
+	// test if deleted egress rule, egress iptables should be cleaned up
+	for i := range policies {
+		policies[i].egressRule = nil
+		policies[i].np.Spec.Egress = nil
+	}
+	pm.policies = policies
+	if err := pm.syncRules(policies); err != nil {
+		t.Fatal(err)
+	}
+	if err := pm.SyncPodChains(&corev1.Pod{
+		ObjectMeta: v1.ObjectMeta{Name: "hello", Namespace: "ns2", Labels: selectorMap},
+		Status:     corev1.PodStatus{PodIP: "192.168.0.1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	buf = bytes.NewBuffer(nil)
+	if err := pm.iptableHandle.SaveInto(iptables.TableFilter, buf); err != nil {
+		t.Fatal(err)
+	}
+	expectIPtables = `*filter
+:FORWARD - [0:0]
+:GLX-EGRESS - [0:0]
+:GLX-INGRESS - [0:0]
+:GLX-PLCY-352SVDAM4WOU2SIO - [0:0]
+:GLX-POD-BLFOGEWPTSIKACFR - [0:0]
+:INPUT - [0:0]
+:OUTPUT - [0:0]
+-A FORWARD -j GLX-EGRESS
+-A FORWARD -j GLX-INGRESS
+-A GLX-INGRESS -d 192.168.0.1/32 -m comment --comment hello_ns2 -j GLX-POD-BLFOGEWPTSIKACFR
+-A GLX-PLCY-352SVDAM4WOU2SIO -m comment --comment test2_ns2 -p tcp -m set --match-set GLX-sip-0-XX2 src -m set --match-set GLX-ip-XX4 dst -m multiport --dports 80 -j ACCEPT
+-A GLX-PLCY-352SVDAM4WOU2SIO -m comment --comment test2_ns2 -p tcp -m set --match-set GLX-snet-1-XX3 src -m set --match-set GLX-ip-XX4 dst -m multiport --dports 80 -j ACCEPT
+-A GLX-POD-BLFOGEWPTSIKACFR -m comment --comment hello_ns2 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A GLX-POD-BLFOGEWPTSIKACFR -m comment --comment hello_ns2 -j GLX-PLCY-352SVDAM4WOU2SIO
+-A GLX-POD-BLFOGEWPTSIKACFR -m comment --comment hello_ns2 -j DROP
+-A INPUT -j GLX-EGRESS
+-A OUTPUT -j GLX-INGRESS
+COMMIT
+`
+	if buf.String() != expectIPtables {
+		t.Errorf("expect %s, real %s", expectIPtables, buf.String())
+	}
 }
 
 func TestPeerRule(t *testing.T) {

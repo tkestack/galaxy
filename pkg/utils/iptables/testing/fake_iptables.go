@@ -240,6 +240,10 @@ func (f *fakeIPTables) DeleteRule(tableName utiliptables.Table, chainName utilip
 	_, chain, err := f.getChain(tableName, chainName)
 	if err == nil {
 		rule := strings.Join(args, " ")
+		rule, err = normalizeRule(rule)
+		if err != nil {
+			return err
+		}
 		ruleIdx := findRule(chain, rule)
 		if ruleIdx < 0 {
 			return nil
