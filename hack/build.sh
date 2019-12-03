@@ -2,62 +2,140 @@
 
 set -e
 
-flags=${debug:+"-v"}
+GOBUILD_FLAGS=${debug:+"-v"}
 ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd -P)
-PKG=tkestack.io/galaxy
-BIN_PREFIX="galaxy"
-CNI_PKG=github.com/containernetworking/plugins
+source ${ROOT}/hack/init.sh
+BINDIR=bin
+CNI_BIN=https://github.com/containernetworking/plugins/releases/download/v0.6.0/cni-plugins-amd64-v0.6.0.tgz
 
-mkdir -p go/src/`dirname ${PKG}`
-mkdir -p go/src/`dirname ${CNI_PKG}`
-ln -sfn ${ROOT} ${ROOT}/go/src/${PKG}
-export GOPATH=${ROOT}/go
-export GOOS=linux
-if [ ! -d ${ROOT}/go/src/${CNI_PKG} ]; then
-	tar zxf ${ROOT}/hack/plugins-0.6.0.tar.gz -C ${ROOT}/go/src/github.com/containernetworking/
-	mv ${ROOT}/go/src/github.com/containernetworking/plugins-0.6.0 ${ROOT}/go/src/github.com/containernetworking/plugins
-fi
-function cleanup() {
-	rm ${ROOT}/go/src/${PKG}
+function build::get_basic_cni() {
+  local BIN_PREFIX="galaxy"
+
+  CNI_TGZ=hack/cni.tgz
+  if [ ! -f $CNI_TGZ ]; then
+    echo "Downloading $CNI_BIN"
+    curl -L $CNI_BIN -o $CNI_TGZ
+  fi
+  mkdir -p $BINDIR
+  tar zxf $CNI_TGZ -C $BINDIR
+  # TODO remove these renames
+  mv $BINDIR/bridge $BINDIR/$BIN_PREFIX-bridge
+  mv $BINDIR/flannel $BINDIR/$BIN_PREFIX-flannel
 }
-trap cleanup EXIT
-echo "Building tools"
-echo "   disable-ipv6"
-go build -o bin/disable-ipv6 $flags ${PKG}/cmd/disable-ipv6
-echo "Building ipam plugins"
-echo "   host-local"
-# build host-local ipam plugin
-go build -o bin/host-local $flags ${CNI_PKG}/plugins/ipam/host-local
-echo "Building plugins"
-echo "   loopback"
-# we can't add prefix to loopback binary cause k8s hard code the type name of lo plugin
-go build -o bin/loopback $flags ${CNI_PKG}/plugins/main/loopback
-echo "   bridge"
-go build -o bin/${BIN_PREFIX}-bridge $flags ${CNI_PKG}/plugins/main/bridge
-echo "   flannel"
-go build -o bin/${BIN_PREFIX}-flannel $flags ${CNI_PKG}/plugins/meta/flannel
 
-# build galaxy cni plugins
-PLUGINS="$GOPATH/src/${PKG}/cni/k8s-vlan $GOPATH/src/${PKG}/cni/sdn $GOPATH/src/${PKG}/cni/veth $GOPATH/src/${PKG}/cni/k8s-sriov"
-for d in $PLUGINS; do
-	if [ -d $d ]; then
-		plugin=$(basename $d)
-		echo "  " $plugin
-		go build -o bin/${BIN_PREFIX}-$plugin $flags ${PKG}/cni/$plugin
-	fi
-done
+function build::galaxy() {
+  local BIN_PREFIX="galaxy"
 
-# build cni plugins (no galaxy prefix)
-CNI_PLUGINS="$GOPATH/src/${PKG}/cni/tke-route-eni"
-for d in $CNI_PLUGINS; do
-	if [ -d $d ]; then
-		plugin=$(basename $d)
-		echo "  " $plugin
-		go build -o bin/$plugin $flags ${PKG}/cni/$plugin
-	fi
-done
+  echo "Building tools"
+  echo "   disable-ipv6"
+  go build -o $BINDIR/disable-ipv6 $GOBUILD_FLAGS ${PKG}/cmd/disable-ipv6
+  echo "Building plugins"
 
-# build galaxy
-echo "Building galaxy"
-echo go build -o bin/galaxy $flags $PKG/cmd/galaxy
-go build -o bin/galaxy $flags $PKG/cmd/galaxy
+  # build galaxy cni plugins
+  PLUGINS="${PKG}/cni/k8s-vlan ${PKG}/cni/sdn ${PKG}/cni/veth ${PKG}/cni/k8s-sriov"
+  for d in $PLUGINS; do
+    plugin=$(basename $d)
+    echo "  " $plugin
+    go build -o $BINDIR/${BIN_PREFIX}-$plugin $GOBUILD_FLAGS ${PKG}/cni/$plugin
+  done
+
+  # build cni plugins (no galaxy prefix)
+  CNI_PLUGINS="${PKG}/cni/tke-route-eni"
+  for d in $CNI_PLUGINS; do
+    plugin=$(basename $d)
+    echo "  " $plugin
+    go build -o $BINDIR/$plugin $GOBUILD_FLAGS ${PKG}/cni/$plugin
+  done
+
+  # build galaxy
+  echo "Building galaxy"
+  echo go build -o $BINDIR/galaxy $GOBUILD_FLAGS $PKG/cmd/galaxy
+  go build -o $BINDIR/galaxy $GOBUILD_FLAGS $PKG/cmd/galaxy
+}
+
+function build::ipam() {
+  echo "Building galaxy-ipam"
+  echo "   galaxy-ipam"
+  echo go build -o $BINDIR/galaxy-ipam $GOBUILD_FLAGS -ldflags "$(init::print_ldflags)" ${PKG}/cmd/galaxy-ipam
+  go build -o $BINDIR/galaxy-ipam $GOBUILD_FLAGS -ldflags "$(init::print_ldflags)" ${PKG}/cmd/galaxy-ipam
+}
+
+function build::galaxy_image() {
+  echo "Building galaxy image..."
+  mkdir -p ${ROOT}/bin/images
+  local temp_dockerfile=$ROOT/bin/galaxy.dockerfile
+  cat > $temp_dockerfile << EOF
+FROM centos:latest
+MAINTAINER louis <louisssgong@tencent.com>
+LABEL version="${VERSION}"
+LABEL description="This Dockerfile is written for galaxy"
+WORKDIR /root/
+RUN yum install -y iproute iptables
+COPY bin/galaxy /usr/bin/
+COPY bin/disable-ipv6 bin/galaxy-k8s-sriov bin/galaxy-k8s-vlan bin/galaxy-veth bin/galaxy-bridge bin/galaxy-flannel bin/host-local bin/loopback bin/tke-route-eni bin/galaxy-sdn /opt/cni/bin/
+COPY hack/start.sh /root/
+CMD ["/root/start.sh"]
+EOF
+  local image=$REGISTRY/galaxy:${VERSION}
+  echo docker build -f $temp_dockerfile -t $image .
+  docker build -f $temp_dockerfile -t $image .
+  docker push $image
+}
+
+function build::ipam_image() {
+  echo "Building galaxy-ipam image..."
+  mkdir -p ${ROOT}/bin/images
+  local temp_dockerfile=$ROOT/bin/galaxy_ipam.dockerfile
+  cat > $temp_dockerfile << EOF
+FROM centos:latest
+MAINTAINER louis <louisssgong@tencent.com>
+LABEL version="${VERSION}"
+LABEL description="This Dockerfile is written for galaxy"
+WORKDIR /root/
+COPY bin/galaxy-ipam /usr/bin/
+COPY hack/start-ipam.sh /root/
+CMD ["/root/start-ipam.sh"]
+EOF
+  local image=$REGISTRY/galaxy_ipam:${VERSION}
+  echo docker build -f $temp_dockerfile -t $image .
+  docker build -f $temp_dockerfile -t $image .
+  docker push $image
+}
+
+function build::verify() {
+  bad_files=$(gofmt -s -l cni/ pkg/ cmd/ tools/)
+  if [[ -n "${bad_files}" ]]; then
+    echo "gofmt -s -w' needs to be run on the following files: "
+    echo "${bad_files}"
+    exit 1
+  fi
+}
+
+(
+  for arg; do
+    case $arg in
+    binary_galaxy)
+      build::get_basic_cni
+      if ! init::docker_builded "$arg"; then
+        build::galaxy
+      fi
+      ;;
+    binary_ipam)
+      if ! init::docker_builded "$arg"; then
+        build::ipam
+      fi
+      ;;
+    build_image_galaxy)
+      build::galaxy_image
+      ;;
+    build_image_ipam)
+      build::ipam_image
+      ;;
+    verify)
+      build::verify
+      ;;
+    *)
+      echo unknown arg $arg
+    esac
+  done
+)
