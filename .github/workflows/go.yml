@@ -19,20 +19,11 @@ jobs:
     - name: Get dependencies
       run: |
         go get -v -t -d ./...
-        if [ -f Gopkg.toml ]; then
-            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-            dep ensure
-        fi
 
     - name: Build
       run: |
-        hack/verify.sh
-        hack/build.sh
-        hack/build-ipam.sh
+        make all
 
     - name: Test
       run: |
-        go get -u github.com/onsi/ginkgo/ginkgo
-        export PATH=$PATH:$(go env GOPATH)/bin
-        echo $GITHUB_WORKSPACE
-        sudo -E env "PATH=$PATH" hack/test.sh
+        make test
