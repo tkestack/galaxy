@@ -111,7 +111,7 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       containers:
-      - image: galaxy_ipam:1.0.0-alpha
+      - image: tkestack/galaxy-ipam:v1.0.0
         args:
           - --logtostderr=true
           - --profiling
