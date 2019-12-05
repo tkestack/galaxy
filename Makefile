@@ -8,7 +8,7 @@ test:
 
 .PHONY: image
 image: all
-	hack/build.sh build_image_galaxy build_image_ipam
+	hack/build.sh image_galaxy image_ipam
 
 .PHONY: codegen
 codegen:

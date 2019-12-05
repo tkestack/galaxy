@@ -96,7 +96,7 @@ COPY bin/galaxy-ipam /usr/bin/
 COPY hack/start-ipam.sh /root/
 CMD ["/root/start-ipam.sh"]
 EOF
-  local image=$REGISTRY/galaxy_ipam:${VERSION}
+  local image=$REGISTRY/galaxy-ipam:${VERSION}
   echo docker build -f $temp_dockerfile -t $image .
   docker build -f $temp_dockerfile -t $image .
   docker push $image
@@ -125,10 +125,10 @@ function build::verify() {
         build::ipam
       fi
       ;;
-    build_image_galaxy)
+    image_galaxy)
       build::galaxy_image
       ;;
-    build_image_ipam)
+    image_ipam)
       build::ipam_image
       ;;
     verify)
