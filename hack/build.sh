@@ -65,7 +65,7 @@ function build::galaxy_image() {
   mkdir -p ${ROOT}/bin/images
   local temp_dockerfile=$ROOT/bin/galaxy.dockerfile
   cat > $temp_dockerfile << EOF
-FROM centos:latest
+FROM centos:7
 MAINTAINER louis <louisssgong@tencent.com>
 LABEL version="${VERSION}"
 LABEL description="This Dockerfile is written for galaxy"
@@ -87,7 +87,7 @@ function build::ipam_image() {
   mkdir -p ${ROOT}/bin/images
   local temp_dockerfile=$ROOT/bin/galaxy_ipam.dockerfile
   cat > $temp_dockerfile << EOF
-FROM centos:latest
+FROM centos:7
 MAINTAINER louis <louisssgong@tencent.com>
 LABEL version="${VERSION}"
 LABEL description="This Dockerfile is written for galaxy"
