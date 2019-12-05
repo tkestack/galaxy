@@ -106,6 +106,7 @@ func TestSetupAndCleanPortMapping(t *testing.T) {
 :KUBE-HOSTPORTS - [0:0]
 :KUBE-HP-5MLSI4DJJZLGHUZA - [0:0]
 :KUBE-HP-BF3WJKNWB2BP2PEW - [0:0]
+:KUBE-MARK-MASQ - [0:0]
 :OUTPUT - [0:0]
 :POSTROUTING - [0:0]
 :PREROUTING - [0:0]
@@ -115,6 +116,7 @@ func TestSetupAndCleanPortMapping(t *testing.T) {
 -A KUBE-HP-5MLSI4DJJZLGHUZA -m comment --comment "pod-2 hostport 9090" -m udp -p udp -j DNAT --to-destination 192.168.0.2:9090
 -A KUBE-HP-BF3WJKNWB2BP2PEW -m comment --comment "testrdma-2 hostport 57119" -s 192.168.0.1/32 -j KUBE-MARK-MASQ
 -A KUBE-HP-BF3WJKNWB2BP2PEW -m comment --comment "testrdma-2 hostport 57119" -m tcp -p tcp -j DNAT --to-destination 192.168.0.1:30008
+-A KUBE-MARK-MASQ -j MARK --set-xmark 0x4000/0x4000
 COMMIT
 `
 	if buf.String() != expectTxt {
@@ -130,12 +132,14 @@ COMMIT
 :INPUT - [0:0]
 :KUBE-HOSTPORTS - [0:0]
 :KUBE-HP-5MLSI4DJJZLGHUZA - [0:0]
+:KUBE-MARK-MASQ - [0:0]
 :OUTPUT - [0:0]
 :POSTROUTING - [0:0]
 :PREROUTING - [0:0]
 -A KUBE-HOSTPORTS -m comment --comment "pod-2 hostport 9090" -m udp -p udp --dport 9090 -j KUBE-HP-5MLSI4DJJZLGHUZA
 -A KUBE-HP-5MLSI4DJJZLGHUZA -m comment --comment "pod-2 hostport 9090" -s 192.168.0.2/32 -j KUBE-MARK-MASQ
 -A KUBE-HP-5MLSI4DJJZLGHUZA -m comment --comment "pod-2 hostport 9090" -m udp -p udp -j DNAT --to-destination 192.168.0.2:9090
+-A KUBE-MARK-MASQ -j MARK --set-xmark 0x4000/0x4000
 COMMIT
 `
 	if buf.String() != expectTxt {
@@ -162,12 +166,14 @@ func TestSetupPortMappingForAllPods(t *testing.T) {
 :INPUT - [0:0]
 :KUBE-HOSTPORTS - [0:0]
 :KUBE-HP-HSO4NMZ7BUPOGJTD - [0:0]
+:KUBE-MARK-MASQ - [0:0]
 :OUTPUT - [0:0]
 :POSTROUTING - [0:0]
 :PREROUTING - [0:0]
 -A KUBE-HOSTPORTS -m comment --comment "deletedpod-1 hostport 80" -m tcp -p tcp --dport 80 -j KUBE-HP-HSO4NMZ7BUPOGJTD
 -A KUBE-HP-HSO4NMZ7BUPOGJTD -m comment --comment "deletedpod-1 hostport 80" -s 192.168.0.3/32 -j KUBE-MARK-MASQ
 -A KUBE-HP-HSO4NMZ7BUPOGJTD -m comment --comment "deletedpod-1 hostport 80" -m tcp -p tcp -j DNAT --to-destination 192.168.0.3:80
+-A KUBE-MARK-MASQ -j MARK --set-xmark 0x4000/0x4000
 COMMIT
 `
 	if buf.String() != expectTxt {
@@ -187,6 +193,7 @@ COMMIT
 :KUBE-HOSTPORTS - [0:0]
 :KUBE-HP-5MLSI4DJJZLGHUZA - [0:0]
 :KUBE-HP-BF3WJKNWB2BP2PEW - [0:0]
+:KUBE-MARK-MASQ - [0:0]
 :OUTPUT - [0:0]
 :POSTROUTING - [0:0]
 :PREROUTING - [0:0]
@@ -196,6 +203,7 @@ COMMIT
 -A KUBE-HP-5MLSI4DJJZLGHUZA -m comment --comment "pod-2 hostport 9090" -m udp -p udp -j DNAT --to-destination 192.168.0.2:9090
 -A KUBE-HP-BF3WJKNWB2BP2PEW -m comment --comment "testrdma-2 hostport 57119" -s 192.168.0.1/32 -j KUBE-MARK-MASQ
 -A KUBE-HP-BF3WJKNWB2BP2PEW -m comment --comment "testrdma-2 hostport 57119" -m tcp -p tcp -j DNAT --to-destination 192.168.0.1:30008
+-A KUBE-MARK-MASQ -j MARK --set-xmark 0x4000/0x4000
 -A OUTPUT -m comment --comment "kube hostport portals" -m addrtype --dst-type LOCAL -j KUBE-HOSTPORTS
 -A POSTROUTING -m comment --comment "SNAT for localhost access to hostports" -o test0 -s 127.0.0.0/8 -j MASQUERADE
 -A PREROUTING -m comment --comment "kube hostport portals" -m addrtype --dst-type LOCAL -j KUBE-HOSTPORTS

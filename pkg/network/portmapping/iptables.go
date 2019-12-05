@@ -61,6 +61,7 @@ func (h *PortMappingHandler) SetupPortMapping(ports []k8s.Port) error {
 	natChains := bytes.NewBuffer(nil)
 	natRules := bytes.NewBuffer(nil)
 	writeLine(natChains, "*nat")
+	writeKubeMarkRule(natChains, natRules)
 
 	for _, containerPort := range ports {
 		protocol := strings.ToLower(containerPort.Protocol)
@@ -189,6 +190,7 @@ func (h *PortMappingHandler) SetupPortMappingForAllPods(ports []k8s.Port) error 
 	natChains := bytes.NewBuffer(nil)
 	natRules := bytes.NewBuffer(nil)
 	writeLine(natChains, "*nat")
+	writeKubeMarkRule(natChains, natRules)
 	// Make sure we keep stats for the top-level chains, if they existed
 	// (which most should have because we created them above).
 	if chain, ok := existingNATChains[kubeHostportsChain]; ok {
@@ -304,4 +306,9 @@ func (h *PortMappingHandler) EnsureBasicRule() error {
 		}
 	}
 	return nil
+}
+
+func writeKubeMarkRule(natChains, natRules *bytes.Buffer) {
+	writeLine(natChains, utiliptables.MakeChainLine(KubeMarkMasqChain))
+	writeLine(natRules, "-A", string(KubeMarkMasqChain), "-j", "MARK", "--set-xmark", "0x4000/0x4000")
 }
