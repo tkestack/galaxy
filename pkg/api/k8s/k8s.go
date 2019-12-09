@@ -44,7 +44,7 @@ const (
 	K8S_POD_INFRA_CONTAINER_ID = "K8S_POD_INFRA_CONTAINER_ID"
 
 	stateDir                   = "/var/lib/cni/galaxy/port"
-	PortMappingPortsAnnotation = "network.kubernetes.io/portmappingports"
+	PortMappingPortsAnnotation = "tkestack.io/portmapping"
 )
 
 type Port struct {

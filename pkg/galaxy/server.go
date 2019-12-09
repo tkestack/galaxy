@@ -44,6 +44,7 @@ import (
 	k8sutil "tkestack.io/galaxy/pkg/api/k8s/utils"
 )
 
+// StartServer will start galaxy server.
 func (g *Galaxy) StartServer() error {
 	if g.PProf {
 		go func() {
@@ -154,6 +155,26 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 		err = fmt.Errorf("unknown command %s", req.Command)
 	}
 	return
+}
+
+func parsePorts(pod *corev1.Pod, portMappingOn bool) []k8s.Port {
+	var ports []k8s.Port
+	for _, container := range pod.Spec.Containers {
+		for _, port := range container.Ports {
+			if (port.HostPort == 0 && portMappingOn) || port.HostPort > 0 {
+				tmp := k8s.Port{
+					HostPort:      port.HostPort,
+					ContainerPort: port.ContainerPort,
+					Protocol:      string(port.Protocol),
+					PodName:       pod.Name,
+					HostIP:        pod.Status.HostIP,
+					PodIP:         pod.Status.PodIP,
+				}
+				ports = append(ports, tmp)
+			}
+		}
+	}
+	return ports
 }
 
 // #lizard forgives
@@ -270,6 +291,8 @@ func (g *Galaxy) setupIPtables() error {
 
 func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string, result *t020.Result,
 	pod *corev1.Pod) error {
+	_, portMappingOn := pod.Annotations[k8s.PortMappingPortsAnnotation]
+	req.Ports = parsePorts(pod, portMappingOn)
 	if len(req.Ports) == 0 {
 		return nil
 	}
@@ -277,7 +300,7 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 		req.Ports[i].PodIP = result.IP4.IP.IP.To4().String()
 		req.Ports[i].PodName = req.PodName
 	}
-	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), true,
+	if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(req.PodName, req.PodNamespace), portMappingOn,
 		req.Ports); err != nil {
 		return err
 	}
@@ -291,9 +314,11 @@ func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string,
 	if err := g.pmhandler.SetupPortMapping(req.Ports); err != nil {
 		return fmt.Errorf("failed to setup port mapping %v: %v", req.Ports, err)
 	}
-	if err := g.updatePortMappingAnnotation(req, data); err != nil {
-		return fmt.Errorf("failed to update pod %s annotation: %v", k8s.GetPodFullName(req.PodName,
-			req.PodNamespace), err)
+	if portMappingOn {
+		if err := g.updatePortMappingAnnotation(req, data); err != nil {
+			return fmt.Errorf("failed to update pod %s annotation: %v", k8s.GetPodFullName(req.PodName,
+				req.PodNamespace), err)
+		}
 	}
 	return nil
 }
