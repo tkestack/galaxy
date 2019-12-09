@@ -5,10 +5,8 @@ go 1.13
 require (
 	github.com/containernetworking/cni v0.6.0
 	github.com/containernetworking/plugins v0.6.0
-	github.com/coreos/go-iptables v0.4.3
-	github.com/coreos/go-systemd v0.0.0-20180511133405-39ca1b05acc7
-	github.com/d2g/dhcp4 v0.0.0-20170904100407-a1d1b6c41b1c
-	github.com/d2g/dhcp4client v1.0.0
+	github.com/coreos/go-iptables v0.4.3 // indirect
+	github.com/d2g/dhcp4client v1.0.0 // indirect
 	github.com/dbdd4us/qcloudapi-sdk-go v0.0.0-20190530123522-c8d9381de48c
 	github.com/docker/engine-api v0.4.0
 	github.com/docker/go-connections v0.4.0 // indirect
@@ -18,10 +16,10 @@ require (
 	github.com/golang/groupcache v0.0.0-20191002201903-404acd9df4cc // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/google/uuid v1.1.1
-	github.com/j-keck/arping v1.0.0
+	github.com/j-keck/arping v1.0.0 // indirect
 	github.com/jinzhu/gorm v1.9.11
 	github.com/kr/pretty v0.1.0 // indirect
-	github.com/mattn/go-shellwords v1.0.5
+	github.com/mattn/go-shellwords v1.0.5 // indirect
 	github.com/onsi/ginkgo v1.10.2
 	github.com/onsi/gomega v1.7.0
 	github.com/spf13/pflag v1.0.5

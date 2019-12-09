@@ -17,15 +17,12 @@
 package galaxy
 
 import (
-	"fmt"
 	"testing"
-
-	"tkestack.io/galaxy/pkg/api/k8s"
 )
 
 func TestCniRequestToPodRequest(t *testing.T) {
 	// config, err := json.Marshal(CNIRequest{Config: []byte("{\"capabilities\":{\"portMappings\":true},\"cniVersion\":\"\",\"name\":\"\",\"runtimeConfig\":{\"portMappings\":[{\"hostPort\":30001,\"containerPort\":80,\"protocol\":\"tcp\",\"hostIP\":\"\"}]}}")})
-	pr, err := CniRequestToPodRequest([]byte(`{
+	_, err := CniRequestToPodRequest([]byte(`{
     "env": {
         "CNI_COMMAND": "ADD",
         "CNI_CONTAINERID": "ctn1",
@@ -38,22 +35,5 @@ func TestCniRequestToPodRequest(t *testing.T) {
 }`))
 	if err != nil {
 		t.Error(err)
-	}
-	if len(pr.Ports) != 1 {
-		t.Fatal(pr.Ports)
-	}
-	if fmt.Sprintf("%+v", pr.Ports[0]) != "{HostPort:30001 ContainerPort:80 Protocol:tcp HostIP: PodName: PodIP:}" {
-		t.Fatalf("%+v", pr.Ports[0])
-	}
-}
-func TestCleanDuplicate(t *testing.T) {
-	ports := cleanDuplicate([]k8s.Port{
-		{ContainerPort: 80, Protocol: "tcp"},
-		{ContainerPort: 80, Protocol: "udp"},
-		{ContainerPort: 80, Protocol: "tcp"},
-		{ContainerPort: 81, Protocol: "tcp"},
-	})
-	if fmt.Sprintf("%+v", ports) != "[{HostPort:0 ContainerPort:80 Protocol:tcp HostIP: PodName: PodIP:} {HostPort:0 ContainerPort:80 Protocol:udp HostIP: PodName: PodIP:} {HostPort:0 ContainerPort:81 Protocol:tcp HostIP: PodName: PodIP:}]" {
-		t.Fatalf("%+v", ports)
 	}
 }

@@ -116,14 +116,6 @@ func CniRequestToPodRequest(data []byte) (*PodRequest, error) {
 	if !ok {
 		return nil, fmt.Errorf("missing %s", k8s.K8S_POD_NAME)
 	}
-
-	if len(cr.Config) > 0 {
-		var portMapConf k8s.PortMapConf
-		if err := json.Unmarshal(cr.Config, &portMapConf); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal netconf %s: %v", req.StdinData, err)
-		}
-		req.Ports = cleanDuplicate(portMapConf.RuntimeConfig.PortMaps)
-	}
 	glog.V(4).Infof("req.Args %s req.StdinData %s", req.Args, cr.Config)
 
 	return req, nil
@@ -132,19 +124,4 @@ func CniRequestToPodRequest(data []byte) (*PodRequest, error) {
 func (req *PodRequest) String() string {
 	return fmt.Sprintf("%s %s_%s, %s, %s, %v", req.Command, req.PodName, req.PodNamespace, req.ContainerID, req.Netns,
 		req.Ports)
-}
-
-func cleanDuplicate(ports []k8s.Port) []k8s.Port {
-	var ret []k8s.Port
-	protolContainerPortMap := map[string]map[int32]int32{} //protocol:containerport:containerport
-	for i := range ports {
-		if _, exist := protolContainerPortMap[ports[i].Protocol]; !exist {
-			protolContainerPortMap[ports[i].Protocol] = map[int32]int32{}
-		}
-		if _, exist := protolContainerPortMap[ports[i].Protocol][ports[i].ContainerPort]; !exist {
-			protolContainerPortMap[ports[i].Protocol][ports[i].ContainerPort] = ports[i].ContainerPort
-			ret = append(ret, ports[i])
-		}
-	}
-	return ret
 }
