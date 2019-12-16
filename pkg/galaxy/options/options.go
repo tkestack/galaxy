@@ -30,6 +30,10 @@ type ServerRunOptions struct {
 	JsonConfigPath       string
 	NetworkPolicy        bool
 	PProf                bool
+	// The same as [`confDir`](https://github.com/intel/multus-cni/blob/master/doc/configuration.md) in multus
+	// To support dynamic changing network config or node specific network config
+	NetworkConfDir string
+	CNIPaths       []string
 }
 
 func NewServerRunOptions() *ServerRunOptions {
@@ -39,6 +43,8 @@ func NewServerRunOptions() *ServerRunOptions {
 		RouteENI:             false,
 		JsonConfigPath:       "/etc/galaxy/galaxy.json",
 		NetworkPolicy:        false,
+		NetworkConfDir:       "/etc/cni/net.d/",
+		CNIPaths:             []string{"/opt/cni/galaxy/bin"},
 	}
 	return opt
 }
@@ -56,4 +62,7 @@ func (s *ServerRunOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.JsonConfigPath, "json-config-path", s.JsonConfigPath, "The json config file location of galaxy")
 	fs.BoolVar(&s.NetworkPolicy, "network-policy", s.NetworkPolicy, "Enable network policy function")
 	fs.BoolVar(&s.PProf, "pprof", s.PProf, "Enable pprof")
+	fs.StringVar(&s.NetworkConfDir, "network-conf-dir", s.NetworkConfDir,
+		"Directory to additional network configs apart from those in json config")
+	fs.StringSliceVar(&s.CNIPaths, "cni-paths", s.CNIPaths, "Additional cni paths apart from those received from kubelet")
 }

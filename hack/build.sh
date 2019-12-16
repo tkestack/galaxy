@@ -72,9 +72,7 @@ LABEL description="This Dockerfile is written for galaxy"
 WORKDIR /root/
 RUN yum install -y iproute iptables
 COPY bin/galaxy /usr/bin/
-COPY bin/disable-ipv6 bin/galaxy-k8s-sriov bin/galaxy-k8s-vlan bin/galaxy-veth bin/galaxy-bridge bin/galaxy-flannel bin/host-local bin/loopback bin/tke-route-eni bin/galaxy-sdn /opt/cni/bin/
-COPY hack/start.sh /root/
-CMD ["/root/start.sh"]
+COPY bin/disable-ipv6 bin/galaxy-k8s-sriov bin/galaxy-k8s-vlan bin/galaxy-veth bin/galaxy-bridge bin/galaxy-flannel bin/host-local bin/loopback bin/tke-route-eni bin/galaxy-sdn /opt/cni/galaxy/bin/
 EOF
   local image=$REGISTRY/galaxy:${VERSION}
   echo docker build -f $temp_dockerfile -t $image .
@@ -93,8 +91,6 @@ LABEL version="${VERSION}"
 LABEL description="This Dockerfile is written for galaxy"
 WORKDIR /root/
 COPY bin/galaxy-ipam /usr/bin/
-COPY hack/start-ipam.sh /root/
-CMD ["/root/start-ipam.sh"]
 EOF
   local image=$REGISTRY/galaxy-ipam:${VERSION}
   echo docker build -f $temp_dockerfile -t $image .

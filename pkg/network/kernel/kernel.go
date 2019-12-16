@@ -50,7 +50,7 @@ func DisableRPFilter(quit <-chan struct{}) {
 
 func setArg(expect string, file string, quit <-chan struct{}) {
 	go wait.Until(func() {
-		glog.Infof("starting to ensure kernel args %s", file)
+		glog.V(4).Infof("starting to ensure kernel args %s", file)
 		data, err := ioutil.ReadFile(file)
 		if err != nil {
 			glog.Warningf("Error open %s: %v", file, err)

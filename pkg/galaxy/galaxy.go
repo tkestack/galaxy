@@ -86,26 +86,33 @@ func (g *Galaxy) Init() error {
 }
 
 func (g *Galaxy) checkNetworkConf() error {
-	if len(g.NetworkConf) == 0 {
-		return fmt.Errorf("empty network config")
-	}
-	if len(g.DefaultNetworks) == 0 {
-		return fmt.Errorf("empty default networks")
-	}
 	for i := range g.NetworkConf {
 		netConf := g.NetworkConf[i]
-		if val, ok := netConf["type"]; !ok {
+		// check if type is set and valid first
+		typeVal, ok := netConf["type"]
+		if !ok {
 			return fmt.Errorf("bad network config %v, type is missing", netConf)
-		} else if netType, ok := val.(string); !ok {
+		}
+		netType, ok := typeVal.(string)
+		if !ok {
 			return fmt.Errorf("bad network config %v, type is not string", netConf)
+		}
+		var key string
+		// using name as key
+		if val, ok := netConf["name"]; ok {
+			if name, ok := val.(string); !ok {
+				return fmt.Errorf("bad network config %v, name is not string", netConf)
+			} else {
+				key = name
+			}
 		} else {
-			g.netConf[netType] = g.NetworkConf[i]
+			// name empty, assume type name is network name
+			key = netType
 		}
-	}
-	for _, netType := range g.DefaultNetworks {
-		if _, ok := g.netConf[netType]; !ok {
-			return fmt.Errorf("network configuration is empty for default network %s", netType)
+		if _, ok := g.netConf[key]; ok {
+			return fmt.Errorf("multiple network configuration with name %s", key)
 		}
+		g.netConf[key] = g.NetworkConf[i]
 	}
 	return nil
 }
