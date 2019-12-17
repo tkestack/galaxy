@@ -14,23 +14,11 @@
  * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations under the License.
  */
-package database
 
-import (
-	"encoding/json"
-)
+package utils
 
 const (
 	TestConfig = `{
-	"database": {
-		"protocol": "tcp",
-		"addr": "127.0.0.1:3306",
-		"username": "root",
-		"password": "root",
-		"driver": "mysql",
-		"name": "test",
-		"maxConn": 10000
-	},
 	"floatingips": [{
 		"routableSubnet": "10.49.27.0/24",
 		"ips": ["10.49.27.205", "10.49.27.216~10.49.27.218"],
@@ -58,17 +46,3 @@ const (
 	}]
 }`
 )
-
-func NewTestDB() (*DBRecorder, error) {
-	var config struct {
-		*DBConfig `json:"database,omitempty"`
-	}
-	if err := json.Unmarshal([]byte(TestConfig), &config); err != nil {
-		return nil, err
-	}
-	db := NewDBRecorder(config.DBConfig)
-	if err := db.Run(); err != nil {
-		return nil, err
-	}
-	return db, nil
-}
