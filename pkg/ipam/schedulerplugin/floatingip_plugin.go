@@ -37,7 +37,6 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
-	"tkestack.io/galaxy/pkg/utils/database"
 	"tkestack.io/galaxy/pkg/utils/keylock"
 )
 
@@ -53,7 +52,6 @@ type FloatingIPPlugin struct {
 	conf                         *Conf
 	unreleased                   chan *releaseEvent
 	hasSecondIPConf              atomic.Value
-	db                           *database.DBRecorder
 	cloudProvider                cloudprovider.CloudProvider
 	// protect unbind immutable deployment pod
 	dpLockPool *keylock.Keylock
@@ -70,15 +68,7 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		unreleased:        make(chan *releaseEvent, 100),
 		dpLockPool:        keylock.NewKeylock(),
 	}
-	if conf.StorageDriver == "mysql" {
-		db := database.NewDBRecorder(conf.DBConfig)
-		if err := db.Run(); err != nil {
-			return nil, err
-		}
-		plugin.db = db
-		plugin.ipam = floatingip.NewIPAM(db)
-		plugin.secondIPAM = floatingip.NewIPAMWithTableName(db, database.SecondFloatingipTableName)
-	} else if conf.StorageDriver == "k8s-crd" {
+	if conf.StorageDriver == "k8s-crd" {
 		plugin.ipam = floatingip.NewCrdIPAM(args.CrdClient, floatingip.InternalIp)
 		plugin.secondIPAM = floatingip.NewCrdIPAM(args.CrdClient, floatingip.ExternalIp)
 	} else {

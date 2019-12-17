@@ -24,7 +24,6 @@ import (
 	crd_clientset "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned"
 	list "tkestack.io/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
-	"tkestack.io/galaxy/pkg/utils/database"
 	"tkestack.io/tapp/pkg/client/clientset/versioned"
 	"tkestack.io/tapp/pkg/client/listers/tappcontroller/v1"
 )
@@ -55,7 +54,6 @@ const (
 
 type Conf struct {
 	FloatingIPs           []*floatingip.FloatingIP `json:"floatingips,omitempty"`
-	DBConfig              *database.DBConfig       `json:"database"`
 	ResyncInterval        uint                     `json:"resyncInterval"`
 	ConfigMapName         string                   `json:"configMapName"`
 	ConfigMapNamespace    string                   `json:"configMapNamespace"`
@@ -82,6 +80,6 @@ func (conf *Conf) validate() {
 		conf.SecondFloatingIPKey = "second_floatingips"
 	}
 	if conf.StorageDriver == "" {
-		conf.StorageDriver = "mysql"
+		conf.StorageDriver = "k8s-crd"
 	}
 }

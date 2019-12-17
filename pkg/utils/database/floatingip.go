@@ -20,10 +20,12 @@ import (
 	"time"
 )
 
+/*
 var (
 	DefaultFloatingipTableName = "ip_pool"
 	SecondFloatingipTableName  = "ip_pool1"
 )
+*/
 
 // select concat((ip>>24)%256,".",(ip>>16)%256,".",(ip>>8)%256,".",ip%256) as ip,`key` from ip_pool
 type FloatingIP struct {
@@ -36,6 +38,7 @@ type FloatingIP struct {
 	UpdatedAt time.Time
 }
 
+/*
 func (f FloatingIP) TableName() string {
 	if f.Table == "" {
 		return DefaultFloatingipTableName
@@ -43,3 +46,4 @@ func (f FloatingIP) TableName() string {
 		return f.Table
 	}
 }
+*/

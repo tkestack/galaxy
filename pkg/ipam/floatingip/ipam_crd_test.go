@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	fakeGalaxyCli "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned/fake"
-	"tkestack.io/galaxy/pkg/utils/database"
+	"tkestack.io/galaxy/pkg/ipam/utils"
 )
 
 const (
@@ -42,7 +42,7 @@ func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
 	var conf struct {
 		Floatingips []*FloatingIP `json:"floatingips"`
 	}
-	if err := json.Unmarshal([]byte(database.TestConfig), &conf); err != nil {
+	if err := json.Unmarshal([]byte(utils.TestConfig), &conf); err != nil {
 		t.Fatal(err)
 	}
 	if err := crdIPAM.ConfigurePool(conf.Floatingips); err != nil {
@@ -247,6 +247,26 @@ func testByPrefix(t *testing.T, ipam IPAM) {
 	if err := checkByPrefix(ipam, "pod2", "pod2"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func checkByPrefix(ipam IPAM, prefix string, expectKeys ...string) error {
+	fips, err := ipam.ByPrefix(prefix)
+	if err != nil {
+		return err
+	}
+	if len(fips) != len(expectKeys) {
+		return fmt.Errorf("%v", fips)
+	}
+	expectMap := make(map[string]string)
+	for _, expect := range expectKeys {
+		expectMap[expect] = ""
+	}
+	for _, fip := range fips {
+		if _, ok := expectMap[fip.Key]; !ok {
+			return fmt.Errorf("expect %v, got %v", expectKeys, fips)
+		}
+	}
+	return nil
 }
 
 func checkIPKey(ipam IPAM, checkIP, expectKey string) error {
