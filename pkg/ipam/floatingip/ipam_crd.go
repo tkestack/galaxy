@@ -276,11 +276,10 @@ func (ci *crdIpam) First(key string) (*FloatingIPInfo, error) {
 	if fip.Key == "" {
 		return nil, nil
 	}
-	netIP := nets.IntToIP(fip.IP)
 	for _, fips := range ci.FloatingIPs {
-		if fips.Contains(netIP) {
+		if fips.Contains(fip.IP) {
 			ip := nets.IPNet(net.IPNet{
-				IP:   netIP,
+				IP:   fip.IP,
 				Mask: fips.Mask,
 			})
 			return &FloatingIPInfo{
@@ -294,7 +293,7 @@ func (ci *crdIpam) First(key string) (*FloatingIPInfo, error) {
 			}, nil
 		}
 	}
-	return nil, fmt.Errorf("could not find match floating ip config for ip %s", netIP.String())
+	return nil, fmt.Errorf("could not find match floating ip config for ip %s", fip.IP.String())
 }
 
 // ByIP transform a given IP to FloatingIP struct.
@@ -314,7 +313,7 @@ func (ci *crdIpam) ByIP(ip net.IP) (FloatingIP, error) {
 		fip.Policy = uint16(v.policy)
 		fip.Key = v.key
 		fip.Attr = v.att
-		fip.IP = nets.IPToInt(ip)
+		fip.IP = ip
 		fip.UpdatedAt = v.updateTime
 		return fip, nil
 	}
@@ -322,7 +321,7 @@ func (ci *crdIpam) ByIP(ip net.IP) (FloatingIP, error) {
 	fip.Policy = uint16(v.policy)
 	fip.Key = v.key
 	fip.Attr = v.att
-	fip.IP = nets.IPToInt(ip)
+	fip.IP = ip
 	fip.UpdatedAt = v.updateTime
 	return fip, nil
 }
@@ -339,7 +338,7 @@ func (ci *crdIpam) ByPrefix(prefix string) ([]FloatingIP, error) {
 				Subnet:    spec.subnet,
 				Attr:      spec.att,
 				Policy:    uint16(spec.policy),
-				IP:        nets.IPToInt(net.ParseIP(ip)),
+				IP:        net.ParseIP(ip),
 				UpdatedAt: spec.updateTime,
 			}
 			fips = append(fips, tmp)
@@ -352,7 +351,7 @@ func (ci *crdIpam) ByPrefix(prefix string) ([]FloatingIP, error) {
 				Subnet:    spec.subnet,
 				Attr:      spec.att,
 				Policy:    uint16(spec.policy),
-				IP:        nets.IPToInt(net.ParseIP(ip)),
+				IP:        net.ParseIP(ip),
 				UpdatedAt: spec.updateTime,
 			}
 			fips = append(fips, tmp)
@@ -521,7 +520,7 @@ func (ci *crdIpam) findFloatingIPByKey(key string) (FloatingIP, error) {
 	defer ci.caches.cacheLock.RUnlock()
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if spec.key == key {
-			fip.IP = nets.IPToInt(net.ParseIP(ip))
+			fip.IP = net.ParseIP(ip)
 			fip.Key = key
 			fip.Attr = spec.att
 			fip.Subnet = spec.subnet
@@ -577,7 +576,7 @@ func (ci *crdIpam) ByKeyword(keyword string) ([]FloatingIP, error) {
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if strings.Contains(spec.key, keyword) {
 			tmp := FloatingIP{
-				IP:        nets.IPToInt(net.ParseIP(ip)),
+				IP:        net.ParseIP(ip),
 				Key:       spec.key,
 				Subnet:    spec.subnet,
 				Attr:      spec.att,

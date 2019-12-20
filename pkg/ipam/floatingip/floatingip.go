@@ -26,11 +26,12 @@ import (
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
+// FloatingIP defines a floating ip
 type FloatingIP struct {
 	Key       string
 	Subnet    string // node subnet, not container ip's subnet
 	Attr      string
-	IP        uint32
+	IP        net.IP
 	Policy    uint16
 	UpdatedAt time.Time
 }

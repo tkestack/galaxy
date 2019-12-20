@@ -31,7 +31,6 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 	"tkestack.io/galaxy/pkg/utils/httputil"
-	"tkestack.io/galaxy/pkg/utils/nets"
 	pageutil "tkestack.io/galaxy/pkg/utils/page"
 )
 
@@ -373,7 +372,7 @@ func transform(fips []floatingip.FloatingIP) []FloatingIP {
 	var res []FloatingIP
 	for i := range fips {
 		keyObj := util.ParseKey(fips[i].Key)
-		res = append(res, FloatingIP{IP: nets.IntToIP(fips[i].IP).String(),
+		res = append(res, FloatingIP{IP: fips[i].IP.String(),
 			Namespace:    keyObj.Namespace,
 			AppName:      keyObj.AppName,
 			PodName:      keyObj.PodName,

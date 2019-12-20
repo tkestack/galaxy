@@ -23,7 +23,6 @@ import (
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
-	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 // cloudProviderAssignIP send assign ip req to cloud provider
@@ -84,14 +83,14 @@ func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, meta *re
 			continue
 		}
 		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName,
-			nets.IntToIP(obj.fip.IP).String(), key)
+			obj.fip.IP.String(), key)
 		if err := p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
 			NodeName:  attr.NodeName,
-			IPAddress: nets.IntToIP(obj.fip.IP).String(),
+			IPAddress: obj.fip.IP.String(),
 		}); err != nil {
 			// delete this record from allocatedIPs map to have a retry
 			delete(meta.allocatedIPs, key)
-			glog.Warningf("failed to unassign ip %s to %s: %v", nets.IntToIP(obj.fip.IP).String(), key, err)
+			glog.Warningf("failed to unassign ip %s to %s: %v", obj.fip.IP.String(), key, err)
 			continue
 		}
 		// for tapp and sts pod, we need to clean its node attr
