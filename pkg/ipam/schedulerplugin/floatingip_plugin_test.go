@@ -58,8 +58,9 @@ var (
 	immutableAnnotation = map[string]string{constant.ReleasePolicyAnnotation: constant.Immutable}
 	neverAnnotation     = map[string]string{constant.ReleasePolicyAnnotation: constant.Never}
 
-	pod    = CreateStatefulSetPod("pod1-0", "ns1", immutableAnnotation)
-	podKey = schedulerplugin_util.FormatKey(pod)
+	pod         = CreateStatefulSetPod("pod1-0", "ns1", immutableAnnotation)
+	podKey      = schedulerplugin_util.FormatKey(pod)
+	node3Subnet = &net.IPNet{IP: net.ParseIP("10.49.27.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
 )
 
 func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}, []corev1.Node) {
@@ -76,14 +77,9 @@ func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlu
 	allObjs := append([]runtime.Object{&nodes[0], &nodes[1], &nodes[2], &nodes[3]}, objs...)
 	fipPlugin, stopChan := newPlugin(t, conf, allObjs...)
 	// drain drainedNode 10.180.1.3/32
-	drainedNodeIPNet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.IPv4Mask(255, 255, 255, 255)}
-	for {
-		if _, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", drainedNodeIPNet, constant.ReleasePolicyPodDelete, ""); err != nil {
-			if err == floatingip.ErrNoEnoughIP {
-				break
-			}
-			t.Fatal(err)
-		}
+	subnet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.CIDRMask(32, 32)}
+	if err := drainNode(fipPlugin, subnet, nil); err != nil {
+		t.Fatal(err)
 	}
 	return fipPlugin, stopChan, nodes
 }
@@ -498,9 +494,6 @@ func newPlugin(t *testing.T, conf Conf, objs ...runtime.Object) (*FloatingIPPlug
 	pluginArgs, stopChan := createPluginFactoryArgs(t, objs...)
 	fipPlugin, err := NewFloatingIPPlugin(conf, pluginArgs)
 	if err != nil {
-		if strings.Contains(err.Error(), "Failed to open") {
-			t.Skipf("skip testing db due to %q", err.Error())
-		}
 		t.Fatal(err)
 	}
 	if err = fipPlugin.Init(); err != nil {
@@ -552,42 +545,35 @@ func TestLoadConfigMap(t *testing.T) {
 }
 
 func TestBind(t *testing.T) {
-	node := createNode("node1", nil, "10.49.27.2")
-	pod1 := CreateStatefulSetPod("sts1-1", "demo", nil)
-	pod1Key := schedulerplugin_util.FormatKey(pod1)
-	var conf Conf
-	if err := json.Unmarshal([]byte(utils.TestConfig), &conf); err != nil {
-		t.Fatal(err)
-	}
-	fipPlugin, stopChan := newPlugin(t, conf, pod1, &node)
+	fipPlugin, stopChan, _ := createPluginTestNodes(t, pod)
 	defer func() { stopChan <- struct{}{} }()
-	_, err := checkBind(fipPlugin, pod1, node.Name, pod1Key.KeyInDB, "10.49.27.205")
+	fipInfo, err := checkBind(fipPlugin, pod, node3, podKey.KeyInDB, node3Subnet)
 	if err != nil {
-		// FIXME.
-		t.Logf("checkBind error %v", err)
+		t.Fatalf("checkBind error %v", err)
 	}
-	fakePods := fipPlugin.PluginFactoryArgs.Client.CoreV1().Pods(pod1.Namespace).(*fakeV1.FakePods)
+	fakePods := fipPlugin.PluginFactoryArgs.Client.CoreV1().Pods(pod.Namespace).(*fakeV1.FakePods)
 
-	actualBinding, err := fakePods.GetBinding(pod1.GetName())
+	actualBinding, err := fakePods.GetBinding(pod.GetName())
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 		return
 	}
+	str, err := constant.FormatIPInfo([]constant.IPInfo{fipInfo.IPInfo})
+	if err != nil {
+		t.Fatal(err)
+	}
 	expect := &corev1.Binding{
 		ObjectMeta: v1.ObjectMeta{
-			Namespace: pod1.Namespace, Name: pod1.Name,
+			Namespace: pod.Namespace, Name: pod.Name,
 			Annotations: map[string]string{
-				constant.ExtendedCNIArgsAnnotation: `{"common":{"ipinfos":[{"ip":"10.49.27.205/24","vlan":2,"gateway":"10.49.27.1","routable_subnet":"10.49.27.0/24"}]}}`}},
+				constant.ExtendedCNIArgsAnnotation: str}},
 		Target: corev1.ObjectReference{
 			Kind: "Node",
-			Name: node.Name,
+			Name: node3,
 		},
 	}
 	if !reflect.DeepEqual(expect, actualBinding) {
-		// FIXME
-		t.Log("Binding did not match expectation")
-		t.Logf("Expected: %v", expect)
-		t.Logf("Actual:   %v", actualBinding)
+		t.Fatalf("Binding did not match expectation, expect %v, actual %v", expect, actualBinding)
 	}
 }
 
@@ -665,12 +651,7 @@ func (f *fakeCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssign
 func TestUnBind(t *testing.T) {
 	pod1 := CreateStatefulSetPod("pod1-1", "demo", map[string]string{})
 	keyObj := schedulerplugin_util.FormatKey(pod1)
-	node := createNode("TestUnBindNode", nil, "10.180.1.2")
-	var conf Conf
-	if err := json.Unmarshal([]byte(utils.TestConfig), &conf); err != nil {
-		t.Fatal(err)
-	}
-	fipPlugin, stopChan := newPlugin(t, conf, pod1, &node)
+	fipPlugin, stopChan, _ := createPluginTestNodes(t, pod1)
 	defer func() { stopChan <- struct{}{} }()
 	fipPlugin.cloudProvider = &fakeCloudProvider{}
 	// if a pod has not got cni args annotation, unbind should return nil
@@ -682,16 +663,14 @@ func TestUnBind(t *testing.T) {
 	if err := fipPlugin.unbind(pod1); err == nil {
 		t.Fatal(err)
 	}
-	// drain ips other than expectIP of this subnet
-	for _, ipStr := range []string{"10.180.154.3"} {
-		if err := fipPlugin.ipam.AllocateSpecificIP("not_existpod", net.ParseIP(ipStr), constant.ReleasePolicyPodDelete, ""); err != nil {
-			t.Fatal(err)
-		}
-	}
 	// bind before testing normal unbind
-	fakeCP := &fakeCloudProvider{expectIP: "10.180.154.2", expectNode: node.Name}
+	expectIP := net.ParseIP("10.49.27.205")
+	if err := drainNode(fipPlugin, node3Subnet, expectIP); err != nil {
+		t.Fatal(err)
+	}
+	fakeCP := &fakeCloudProvider{expectIP: expectIP.String(), expectNode: node3}
 	fipPlugin.cloudProvider = fakeCP
-	fipInfo, err := checkBind(fipPlugin, pod1, node.Name, keyObj.KeyInDB, "10.180.154.2")
+	fipInfo, err := checkBind(fipPlugin, pod1, node3, keyObj.KeyInDB, node3Subnet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -700,13 +679,29 @@ func TestUnBind(t *testing.T) {
 		t.Fatal(err)
 	}
 	pod1.Annotations[constant.ExtendedCNIArgsAnnotation] = str
-	pod1.Spec.NodeName = node.Name
+	pod1.Spec.NodeName = node3
 	if err := fipPlugin.unbind(pod1); err != nil {
 		t.Fatal(err)
 	}
 	if !fakeCP.invokedAssignIP || !fakeCP.invokedUnAssignIP {
 		t.Fatal()
 	}
+}
+
+func drainNode(fipPlugin *FloatingIPPlugin, subnet *net.IPNet, except net.IP) error {
+	for {
+		if _, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", subnet, constant.ReleasePolicyPodDelete,
+			""); err != nil {
+			if err == floatingip.ErrNoEnoughIP {
+				break
+			}
+			return err
+		}
+	}
+	if len(except) != 0 {
+		return fipPlugin.ipam.Release("ns_notexistpod", except)
+	}
+	return nil
 }
 
 func TestUnBindImmutablePod(t *testing.T) {
@@ -729,15 +724,13 @@ func TestUnBindImmutablePod(t *testing.T) {
 // #lizard forgives
 func TestAllocateRecentIPs(t *testing.T) {
 	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
-	pod2 := CreateDeploymentPod("dp2-aaa-bbb", "ns2", immutableAnnotation)
 	dp := createDeployment("dp", "ns1", pod.ObjectMeta, 1)
-	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2, dp)
+	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, dp)
 	defer func() { stopChan <- struct{}{} }()
-	podKey, pod2Key := schedulerplugin_util.FormatKey(pod), schedulerplugin_util.FormatKey(pod2)
+	podKey := schedulerplugin_util.FormatKey(pod)
 	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.PoolPrefix(), net.ParseIP("10.49.27.205"), constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Second)
 	// update time of 10.49.27.216 is more recently than 10.49.27.205
 	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.PoolPrefix(), net.ParseIP("10.49.27.216"), constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
@@ -748,16 +741,11 @@ func TestAllocateRecentIPs(t *testing.T) {
 	}, nodes); err != nil {
 		t.Fatal(err)
 	}
+	if err := checkIPKey(fipPlugin.ipam, "10.49.27.205", podKey.PoolPrefix()); err != nil {
+		t.Fatal(err)
+	}
 	if err := checkIPKey(fipPlugin.ipam, "10.49.27.216", podKey.KeyInDB); err != nil {
 		t.Fatal(err)
-	}
-	// check bind allocates recent ips for deployment from reserved ips
-	if err := fipPlugin.ipam.UpdatePolicy("", net.ParseIP("10.49.27.205"), constant.ReleasePolicyImmutable, ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := checkBind(fipPlugin, pod2, node4, pod2Key.KeyInDB, "10.173.13.15"); err != nil {
-		// FIXME.
-		t.Logf("checkBind error %v", err)
 	}
 }
 
@@ -776,7 +764,8 @@ func checkIPKey(ipam floatingip.IPAM, checkIP, expectKey string) error {
 	return nil
 }
 
-func checkBind(fipPlugin *FloatingIPPlugin, pod *corev1.Pod, nodeName, checkKey, expectIP string) (*floatingip.FloatingIPInfo, error) {
+func checkBind(fipPlugin *FloatingIPPlugin, pod *corev1.Pod, nodeName, checkKey string,
+	expectSubnet *net.IPNet) (*floatingip.FloatingIPInfo, error) {
 	if err := fipPlugin.Bind(&schedulerapi.ExtenderBindingArgs{
 		PodName:      pod.Name,
 		PodNamespace: pod.Namespace,
@@ -789,10 +778,11 @@ func checkBind(fipPlugin *FloatingIPPlugin, pod *corev1.Pod, nodeName, checkKey,
 		return nil, err
 	}
 	if fipInfo == nil {
-		return nil, fmt.Errorf("expect %s, got nil ipInfo", expectIP)
+		return nil, fmt.Errorf("got nil ipInfo")
 	}
-	if fipInfo.IPInfo.IP.IP.String() != expectIP {
-		return nil, fmt.Errorf("real IP: %s, expect %s", fipInfo.IPInfo.IP.IP.String(), expectIP)
+	if !expectSubnet.Contains(fipInfo.IPInfo.IP.IP) {
+		return nil, fmt.Errorf("allocated ip %s is not in expect subnet %s", fipInfo.IPInfo.IP.IP.String(),
+			expectSubnet.String())
 	}
 	return fipInfo, nil
 }

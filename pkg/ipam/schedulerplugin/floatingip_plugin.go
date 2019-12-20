@@ -185,7 +185,7 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 			failedNodesMap[nodeName] = "FloatingIPPlugin:NoFIPLeft"
 		}
 	}
-	if bool(glog.V(4)) {
+	if glog.V(5) {
 		nodeNames := make([]string, len(filteredNodes))
 		for i := range filteredNodes {
 			nodeNames[i] = filteredNodes[i].Name
@@ -240,7 +240,10 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		// So we'd better do the allocate in filter for reserve situation.
 		reserveSubnet := subnetSet.List()[0]
 		subnetSet = sets.NewString(reserveSubnet)
-		p.allocateDuringFilter(keyObj, p.enabledSecondIP(pod), reserve, isPoolSizeDefined, reserveSubnet, policy)
+		if err := p.allocateDuringFilter(keyObj, p.enabledSecondIP(pod), reserve, isPoolSizeDefined, reserveSubnet,
+			policy); err != nil {
+			return nil, err
+		}
 	}
 	return subnetSet, nil
 }

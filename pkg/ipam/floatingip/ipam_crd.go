@@ -185,10 +185,10 @@ func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy con
 	//find latest floatingIP by updateTime.
 	for k, v := range ci.caches.allocatedFIPs {
 		if v.key == oldK && v.subnet == subnet {
-			if v.updateTime.Unix() > recordTs {
+			if v.updateTime.UnixNano() > recordTs {
 				recordIP = k
 				latest = v
-				recordTs = v.updateTime.Unix()
+				recordTs = v.updateTime.UnixNano()
 			}
 		}
 	}
