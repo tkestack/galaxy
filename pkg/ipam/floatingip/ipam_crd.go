@@ -69,7 +69,7 @@ type FIPCache struct {
 }
 
 type crdIpam struct {
-	FloatingIPs []*FloatingIP `json:"floatingips,omitempty"`
+	FloatingIPs []*FloatingIPPool `json:"floatingips,omitempty"`
 	client      crd_clientset.Interface
 	ipType      Type
 	//caches for FloatingIP crd, both stores allocated FloatingIPs and unallocated FloatingIPs
@@ -87,11 +87,11 @@ func NewCrdIPAM(fipClient crd_clientset.Interface, ipType Type) IPAM {
 }
 
 // ConfigurePool init floatingIP pool.
-func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIP) error {
+func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
 	sort.Sort(FloatingIPSlice(floatIPs))
 	glog.V(3).Infof("floating ip config %v", floatIPs)
 	ci.FloatingIPs = floatIPs
-	floatingIPMap := make(map[string]*FloatingIP)
+	floatingIPMap := make(map[string]*FloatingIPPool)
 	for _, fip := range ci.FloatingIPs {
 		if _, exist := floatingIPMap[fip.Key()]; exist {
 			glog.Warningf("Exists floating ip conf %v", fip)
@@ -402,7 +402,7 @@ func (ci *crdIpam) Name() string {
 }
 
 // #lizard forgives
-func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
+func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIPPool) error {
 	glog.V(3).Infof("begin to fresh cache")
 	ips, err := ci.listFloatingIPs()
 	if err != nil {

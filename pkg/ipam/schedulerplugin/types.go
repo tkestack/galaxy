@@ -53,14 +53,14 @@ const (
 )
 
 type Conf struct {
-	FloatingIPs           []*floatingip.FloatingIP `json:"floatingips,omitempty"`
-	ResyncInterval        uint                     `json:"resyncInterval"`
-	ConfigMapName         string                   `json:"configMapName"`
-	ConfigMapNamespace    string                   `json:"configMapNamespace"`
-	FloatingIPKey         string                   `json:"floatingipKey"`       // configmap floatingip data key
-	SecondFloatingIPKey   string                   `json:"secondFloatingipKey"` // configmap second floatingip data key
-	CloudProviderGRPCAddr string                   `json:"cloudProviderGrpcAddr"`
-	StorageDriver         string                   `json:"storageDriver"`
+	FloatingIPs           []*floatingip.FloatingIPPool `json:"floatingips,omitempty"`
+	ResyncInterval        uint                         `json:"resyncInterval"`
+	ConfigMapName         string                       `json:"configMapName"`
+	ConfigMapNamespace    string                       `json:"configMapNamespace"`
+	FloatingIPKey         string                       `json:"floatingipKey"`       // configmap floatingip data key
+	SecondFloatingIPKey   string                       `json:"secondFloatingipKey"` // configmap second floatingip data key
+	CloudProviderGRPCAddr string                       `json:"cloudProviderGrpcAddr"`
+	StorageDriver         string                       `json:"storageDriver"`
 }
 
 func (conf *Conf) validate() {

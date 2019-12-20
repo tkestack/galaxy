@@ -37,7 +37,7 @@ func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) erro
 		glog.V(4).Infof("[%s] floatingip configmap unchanged", ipam.Name())
 		return nil
 	}
-	var conf []*floatingip.FloatingIP
+	var conf []*floatingip.FloatingIPPool
 	if err := json.Unmarshal([]byte(newConf), &conf); err != nil {
 		return fmt.Errorf("failed to unmarshal configmap val %s to floatingip config", newConf)
 	}

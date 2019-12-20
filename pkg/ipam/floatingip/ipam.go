@@ -33,7 +33,7 @@ var (
 // IPAM interface which implemented by database and kubernetes CRD
 type IPAM interface {
 	// ConfigurePool init floatingIP pool.
-	ConfigurePool([]*FloatingIP) error
+	ConfigurePool([]*FloatingIPPool) error
 	// ReleaseIPs releases given ips as long as their keys match and returned released and unreleased map
 	// released and unreleased map are guaranteed to be none nil even if err is not nil
 	// unreleased map stores ip with its latest key if key changed

@@ -40,7 +40,7 @@ func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
 	galaxyCli := fakeGalaxyCli.NewSimpleClientset(objs...)
 	crdIPAM := NewCrdIPAM(galaxyCli, InternalIp).(*crdIpam)
 	var conf struct {
-		Floatingips []*FloatingIP `json:"floatingips"`
+		Floatingips []*FloatingIPPool `json:"floatingips"`
 	}
 	if err := json.Unmarshal([]byte(utils.TestConfig), &conf); err != nil {
 		t.Fatal(err)
