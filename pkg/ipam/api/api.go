@@ -30,7 +30,6 @@ import (
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
-	"tkestack.io/galaxy/pkg/utils/database"
 	"tkestack.io/galaxy/pkg/utils/httputil"
 	"tkestack.io/galaxy/pkg/utils/nets"
 	pageutil "tkestack.io/galaxy/pkg/utils/page"
@@ -342,7 +341,7 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 
 // listIPs lists ips from ipams
 func listIPs(keyword string, ipam, secondIpam floatingip.IPAM, fuzzyQuery bool) ([]FloatingIP, error) {
-	var fips []database.FloatingIP
+	var fips []floatingip.FloatingIP
 	var err error
 	if fuzzyQuery {
 		fips, err = ipam.ByKeyword(keyword)
@@ -354,7 +353,7 @@ func listIPs(keyword string, ipam, secondIpam floatingip.IPAM, fuzzyQuery bool) 
 	}
 	resp := transform(fips)
 	if secondIpam != nil {
-		var secondFips []database.FloatingIP
+		var secondFips []floatingip.FloatingIP
 		if fuzzyQuery {
 			secondFips, err = secondIpam.ByKeyword(keyword)
 		} else {
@@ -369,8 +368,8 @@ func listIPs(keyword string, ipam, secondIpam floatingip.IPAM, fuzzyQuery bool) 
 	return resp, nil
 }
 
-// transform converts `database.FloatingIP` slice to `FloatingIP` slice
-func transform(fips []database.FloatingIP) []FloatingIP {
+// transform converts `floatingip.FloatingIP` slice to `FloatingIP` slice
+func transform(fips []floatingip.FloatingIP) []FloatingIP {
 	var res []FloatingIP
 	for i := range fips {
 		keyObj := util.ParseKey(fips[i].Key)

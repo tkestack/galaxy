@@ -43,7 +43,7 @@ func resolveDeploymentName(pod *corev1.Pod) string {
 }
 
 type KeyObj struct {
-	// stores the key format in database
+	// stores the key format in IPAM
 	// for deployment dp_namespace_deploymentName_podName,
 	// for pool pool__poolName_dp_namespace_deploymentName_podName, for statefulset
 	// sts_namespace_statefulsetName_podName
@@ -100,7 +100,7 @@ func (k *KeyObj) genKey() {
 	k.KeyInDB = fmt.Sprintf("%s%s%s_%s_%s", prefix, k.AppTypePrefix, k.Namespace, k.AppName, k.PodName)
 }
 
-// PoolPrefix returns the common key prefix in database, for deployment dp_namespace_deploymentName_
+// PoolPrefix returns the common key prefix in IPAM, for deployment dp_namespace_deploymentName_
 // for pool pool__poolName_, for statefulset sts_namespace_statefulsetName_
 // For now, if it is a statefulset pod, PoolPrefix is useless since we reserve ip by full pod name
 // PoolPrefix is used by pool and deployment only.

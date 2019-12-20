@@ -21,9 +21,19 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
+
+type FloatingIP struct {
+	Key       string
+	Subnet    string // node subnet, not container ip's subnet
+	Attr      string
+	IP        uint32
+	Policy    uint16
+	UpdatedAt time.Time
+}
 
 // FloatingIPPool is FloatingIPPool structure.
 type FloatingIPPool struct {

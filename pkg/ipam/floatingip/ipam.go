@@ -21,7 +21,6 @@ import (
 	"net"
 
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
-	"tkestack.io/galaxy/pkg/utils/database"
 )
 
 var (
@@ -30,7 +29,7 @@ var (
 	ErrNoFIPForSubnet = fmt.Errorf("no fip configured for subnet")
 )
 
-// IPAM interface which implemented by database and kubernetes CRD
+// IPAM interface which implemented by kubernetes CRD
 type IPAM interface {
 	// ConfigurePool init floatingIP pool.
 	ConfigurePool([]*FloatingIPPool) error
@@ -52,12 +51,12 @@ type IPAM interface {
 	Release(string, net.IP) error
 	// First returns the first matched IP by key.
 	First(string) (*FloatingIPInfo, error) // returns nil,nil if key is not found
-	// ByIP transform a given IP to database.FloatingIP struct.
-	ByIP(net.IP) (database.FloatingIP, error)
+	// ByIP transform a given IP to FloatingIP struct.
+	ByIP(net.IP) (FloatingIP, error)
 	// ByPrefix filter floatingIPs by prefix key.
-	ByPrefix(string) ([]database.FloatingIP, error)
+	ByPrefix(string) ([]FloatingIP, error)
 	// ByKeyword returns floatingIP set by a given keyword.
-	ByKeyword(string) ([]database.FloatingIP, error)
+	ByKeyword(string) ([]FloatingIP, error)
 	// RoutableSubnet returns node's net subnet.
 	RoutableSubnet(net.IP) *net.IPNet
 	// RoutableSubnet returns node's net subnet.
@@ -71,5 +70,5 @@ type IPAM interface {
 // FloatingIPInfo is floatingIP information
 type FloatingIPInfo struct {
 	IPInfo constant.IPInfo
-	FIP    database.FloatingIP
+	FIP    FloatingIP
 }

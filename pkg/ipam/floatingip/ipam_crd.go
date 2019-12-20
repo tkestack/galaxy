@@ -27,7 +27,6 @@ import (
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	crd_clientset "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned"
-	"tkestack.io/galaxy/pkg/utils/database"
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
@@ -298,9 +297,9 @@ func (ci *crdIpam) First(key string) (*FloatingIPInfo, error) {
 	return nil, fmt.Errorf("could not find match floating ip config for ip %s", netIP.String())
 }
 
-// ByIP transform a given IP to database.FloatingIP struct.
-func (ci *crdIpam) ByIP(ip net.IP) (database.FloatingIP, error) {
-	fip := database.FloatingIP{}
+// ByIP transform a given IP to FloatingIP struct.
+func (ci *crdIpam) ByIP(ip net.IP) (FloatingIP, error) {
+	fip := FloatingIP{}
 
 	ipStr := ip.String()
 	ci.caches.cacheLock.RLock()
@@ -329,13 +328,13 @@ func (ci *crdIpam) ByIP(ip net.IP) (database.FloatingIP, error) {
 }
 
 // ByPrefix filter floatingIPs by prefix key.
-func (ci *crdIpam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
-	var fips []database.FloatingIP
+func (ci *crdIpam) ByPrefix(prefix string) ([]FloatingIP, error) {
+	var fips []FloatingIP
 	ci.caches.cacheLock.RLock()
 	defer ci.caches.cacheLock.RUnlock()
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if strings.HasPrefix(spec.key, prefix) {
-			tmp := database.FloatingIP{
+			tmp := FloatingIP{
 				Key:       spec.key,
 				Subnet:    spec.subnet,
 				Attr:      spec.att,
@@ -348,7 +347,7 @@ func (ci *crdIpam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
 	}
 	if prefix == "" {
 		for ip, spec := range ci.caches.unallocatedFIPs {
-			tmp := database.FloatingIP{
+			tmp := FloatingIP{
 				Key:       spec.key,
 				Subnet:    spec.subnet,
 				Attr:      spec.att,
@@ -516,8 +515,8 @@ func (ci *crdIpam) syncCacheAfterDel(ip string) {
 	return
 }
 
-func (ci *crdIpam) findFloatingIPByKey(key string) (database.FloatingIP, error) {
-	var fip database.FloatingIP
+func (ci *crdIpam) findFloatingIPByKey(key string) (FloatingIP, error) {
+	var fip FloatingIP
 	ci.caches.cacheLock.RLock()
 	defer ci.caches.cacheLock.RUnlock()
 	for ip, spec := range ci.caches.allocatedFIPs {
@@ -567,9 +566,9 @@ func (ci *crdIpam) filterUnallocatedSubnet() (result []string) {
 }
 
 // ByKeyword returns floatingIP set by a given keyword.
-func (ci *crdIpam) ByKeyword(keyword string) ([]database.FloatingIP, error) {
+func (ci *crdIpam) ByKeyword(keyword string) ([]FloatingIP, error) {
 	//not implement
-	var fips []database.FloatingIP
+	var fips []FloatingIP
 	ci.caches.cacheLock.RLock()
 	defer ci.caches.cacheLock.RUnlock()
 	if ci.caches.allocatedFIPs == nil {
@@ -577,7 +576,7 @@ func (ci *crdIpam) ByKeyword(keyword string) ([]database.FloatingIP, error) {
 	}
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if strings.Contains(spec.key, keyword) {
-			tmp := database.FloatingIP{
+			tmp := FloatingIP{
 				IP:        nets.IPToInt(net.ParseIP(ip)),
 				Key:       spec.key,
 				Subnet:    spec.subnet,
