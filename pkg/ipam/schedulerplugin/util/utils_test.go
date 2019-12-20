@@ -58,7 +58,6 @@ func TestFormatKey(t *testing.T) {
 			pod: CreateStatefulSetPod("sts-1", "ns1", nil),
 			expect: KeyObj{
 				KeyInDB:       "sts_ns1_sts_sts-1",
-				IsDeployment:  false,
 				AppTypePrefix: StatefulsetPrefixKey,
 				AppName:       "sts",
 				PodName:       "sts-1",
@@ -72,7 +71,6 @@ func TestFormatKey(t *testing.T) {
 			pod: CreateStatefulSetPod("sts-1", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
 			expect: KeyObj{
 				KeyInDB:       "pool__pl1_sts_ns1_sts_sts-1",
-				IsDeployment:  false,
 				AppTypePrefix: StatefulsetPrefixKey,
 				AppName:       "sts",
 				PodName:       "sts-1",
@@ -86,7 +84,6 @@ func TestFormatKey(t *testing.T) {
 			pod: CreateDeploymentPod("dp-xxx-yyy", "ns1", nil),
 			expect: KeyObj{
 				KeyInDB:       "dp_ns1_dp_dp-xxx-yyy",
-				IsDeployment:  true,
 				AppTypePrefix: DeploymentPrefixKey,
 				AppName:       "dp",
 				PodName:       "dp-xxx-yyy",
@@ -100,7 +97,6 @@ func TestFormatKey(t *testing.T) {
 			pod: CreateDeploymentPod("dp-xxx-yyy", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
 			expect: KeyObj{
 				KeyInDB:       "pool__pl1_dp_ns1_dp_dp-xxx-yyy",
-				IsDeployment:  true,
 				AppTypePrefix: DeploymentPrefixKey,
 				AppName:       "dp",
 				PodName:       "dp-xxx-yyy",
@@ -114,7 +110,6 @@ func TestFormatKey(t *testing.T) {
 			pod: CreateTAppPod("tapp-1", "ns1", nil),
 			expect: KeyObj{
 				KeyInDB:       "tapp_ns1_tapp_tapp-1",
-				IsDeployment:  false,
 				AppTypePrefix: TAppPrefixKey,
 				AppName:       "tapp",
 				PodName:       "tapp-1",
@@ -128,7 +123,6 @@ func TestFormatKey(t *testing.T) {
 			pod: CreateTAppPod("tapp-1", "ns1", map[string]string{constant.IPPoolAnnotation: "pl1"}),
 			expect: KeyObj{
 				KeyInDB:       "pool__pl1_tapp_ns1_tapp_tapp-1",
-				IsDeployment:  false,
 				AppTypePrefix: TAppPrefixKey,
 				AppName:       "tapp",
 				PodName:       "tapp-1",
@@ -165,7 +159,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "sts_ns1_demo_demo-1",
 			expect: KeyObj{
 				KeyInDB:       "sts_ns1_demo_demo-1",
-				IsDeployment:  false,
 				AppTypePrefix: StatefulsetPrefixKey,
 				AppName:       "demo",
 				PodName:       "demo-1",
@@ -179,7 +172,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "sts_ns1_sts-demo_sts-demo-1",
 			expect: KeyObj{
 				KeyInDB:       "sts_ns1_sts-demo_sts-demo-1",
-				IsDeployment:  false,
 				AppTypePrefix: StatefulsetPrefixKey,
 				AppName:       "sts-demo",
 				PodName:       "sts-demo-1",
@@ -193,7 +185,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "pool__pl1_sts_ns1_demo_demo-1",
 			expect: KeyObj{
 				KeyInDB:       "pool__pl1_sts_ns1_demo_demo-1",
-				IsDeployment:  false,
 				AppTypePrefix: StatefulsetPrefixKey,
 				AppName:       "demo",
 				PodName:       "demo-1",
@@ -207,7 +198,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "sts_ns1_demo_",
 			expect: KeyObj{
 				KeyInDB:       "sts_ns1_demo_",
-				IsDeployment:  false,
 				AppTypePrefix: StatefulsetPrefixKey,
 				AppName:       "demo",
 				PodName:       "",
@@ -221,7 +211,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "pool__pl1_",
 			expect: KeyObj{
 				KeyInDB:       "pool__pl1_",
-				IsDeployment:  false,
 				AppTypePrefix: "",
 				AppName:       "",
 				PodName:       "",
@@ -235,7 +224,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "dp_ns1_dp_dp-xxx-yyy",
 			expect: KeyObj{
 				KeyInDB:       "dp_ns1_dp_dp-xxx-yyy",
-				IsDeployment:  true,
 				AppTypePrefix: DeploymentPrefixKey,
 				AppName:       "dp",
 				PodName:       "dp-xxx-yyy",
@@ -249,7 +237,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "dp_ns1_dp_",
 			expect: KeyObj{
 				KeyInDB:       "dp_ns1_dp_",
-				IsDeployment:  true,
 				AppTypePrefix: DeploymentPrefixKey,
 				AppName:       "dp",
 				PodName:       "",
@@ -263,7 +250,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "pool__pl1_dp_ns1_dp_dp-xxx-yyy",
 			expect: KeyObj{
 				KeyInDB:       "pool__pl1_dp_ns1_dp_dp-xxx-yyy",
-				IsDeployment:  true,
 				AppTypePrefix: DeploymentPrefixKey,
 				AppName:       "dp",
 				PodName:       "dp-xxx-yyy",
@@ -277,7 +263,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "tapp_ns1_demo_demo-1",
 			expect: KeyObj{
 				KeyInDB:       "tapp_ns1_demo_demo-1",
-				IsDeployment:  false,
 				AppTypePrefix: TAppPrefixKey,
 				AppName:       "demo",
 				PodName:       "demo-1",
@@ -291,7 +276,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "tapp_ns1_sts-demo_sts-demo-1",
 			expect: KeyObj{
 				KeyInDB:       "tapp_ns1_sts-demo_sts-demo-1",
-				IsDeployment:  false,
 				AppTypePrefix: TAppPrefixKey,
 				AppName:       "sts-demo",
 				PodName:       "sts-demo-1",
@@ -305,7 +289,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "pool__pl1_tapp_ns1_demo_demo-1",
 			expect: KeyObj{
 				KeyInDB:       "pool__pl1_tapp_ns1_demo_demo-1",
-				IsDeployment:  false,
 				AppTypePrefix: TAppPrefixKey,
 				AppName:       "demo",
 				PodName:       "demo-1",
@@ -319,7 +302,6 @@ func TestParseKey(t *testing.T) {
 			keyInDB: "tapp_ns1_demo_",
 			expect: KeyObj{
 				KeyInDB:       "tapp_ns1_demo_",
-				IsDeployment:  false,
 				AppTypePrefix: TAppPrefixKey,
 				AppName:       "demo",
 				PodName:       "",

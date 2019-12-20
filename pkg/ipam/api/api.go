@@ -21,7 +21,6 @@ import (
 	"net"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -51,34 +50,31 @@ func NewController(ipam, secondIpam floatingip.IPAM, lister v1.PodLister) *Contr
 
 // FloatingIP is the floating ip info
 type FloatingIP struct {
-	IP        string `json:"ip"`
-	Namespace string `json:"namespace,omitempty"`
-	AppName   string `json:"appName,omitempty"`
-	PodName   string `json:"podName,omitempty"`
-	PoolName  string `json:"poolName,omitempty"`
-	Policy    uint16 `json:"policy"`
-	// Deprecate
-	IsDeployment bool      `json:"isDeployment,omitempty"`
-	AppType      string    `json:"appType,omitempty"`
-	UpdateTime   time.Time `json:"updateTime,omitempty"`
-	Status       string    `json:"status,omitempty"`
-	Releasable   bool      `json:"releasable,omitempty"`
-	attr         string    `json:"-"`
+	IP         string    `json:"ip"`
+	Namespace  string    `json:"namespace,omitempty"`
+	AppName    string    `json:"appName,omitempty"`
+	PodName    string    `json:"podName,omitempty"`
+	PoolName   string    `json:"poolName,omitempty"`
+	Policy     uint16    `json:"policy"`
+	AppType    string    `json:"appType,omitempty"`
+	UpdateTime time.Time `json:"updateTime,omitempty"`
+	Status     string    `json:"status,omitempty"`
+	Releasable bool      `json:"releasable,omitempty"`
+	attr       string    `json:"-"`
 }
 
 // SwaggerDoc is to generate Swagger docs
 func (FloatingIP) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"ip":           "ip",
-		"namespace":    "namespace",
-		"appName":      "deployment or statefulset name",
-		"podName":      "pod name",
-		"policy":       "ip release policy",
-		"isDeployment": "deployment or statefulset, deprecated please set appType",
-		"appType":      "deployment, statefulset or tapp",
-		"updateTime":   "last allocate or release time of this ip",
-		"status":       "pod status if exists",
-		"releasable":   "if the ip is releasable. An ip is releasable if it isn't belong to any pod",
+		"ip":         "ip",
+		"namespace":  "namespace",
+		"appName":    "deployment or statefulset name",
+		"podName":    "pod name",
+		"policy":     "ip release policy",
+		"appType":    "deployment, statefulset or tapp, default statefulset",
+		"updateTime": "last allocate or release time of this ip",
+		"status":     "pod status if exists",
+		"releasable": "if the ip is releasable. An ip is releasable if it isn't belong to any pod",
 	}
 }
 
@@ -102,22 +98,7 @@ func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 		appType := req.QueryParameter("appType")
 		var appTypePrefix string
 		if appType == "" {
-			// compatible change with past api
-			isDepStr := req.QueryParameter("isDeployment")
-			if isDepStr != "" {
-				isDep, err := strconv.ParseBool(isDepStr)
-				if err != nil {
-					httputil.BadRequest(resp, fmt.Errorf("invalid isDeployment(bool field): %s", isDepStr))
-					return
-				}
-				if isDep {
-					appTypePrefix = util.DeploymentPrefixKey
-				} else {
-					appTypePrefix = util.StatefulsetPrefixKey
-				}
-			} else {
-				appTypePrefix = util.StatefulsetPrefixKey
-			}
+			appTypePrefix = util.StatefulsetPrefixKey
 		} else {
 			appTypePrefix = toAppTypePrefix(appType)
 		}
@@ -293,17 +274,12 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 		}
 		var appTypePrefix string
 		if temp.AppType == "" {
-			if temp.IsDeployment {
-				appTypePrefix = util.DeploymentPrefixKey
-			} else {
-				appTypePrefix = util.StatefulsetPrefixKey
-			}
-		} else {
-			appTypePrefix = toAppTypePrefix(temp.AppType)
-			if appTypePrefix == "" {
-				httputil.BadRequest(resp, fmt.Errorf("unknown app type %q", temp.AppType))
-				return
-			}
+			appTypePrefix = util.StatefulsetPrefixKey
+		}
+		appTypePrefix = toAppTypePrefix(temp.AppType)
+		if appTypePrefix == "" {
+			httputil.BadRequest(resp, fmt.Errorf("unknown app type %q", temp.AppType))
+			return
 		}
 		keyObj := util.NewKeyObj(appTypePrefix, temp.Namespace, temp.AppName, temp.PodName, temp.PoolName)
 		expectIPtoKey[temp.IP] = keyObj.KeyInDB
@@ -373,15 +349,14 @@ func transform(fips []floatingip.FloatingIP) []FloatingIP {
 	for i := range fips {
 		keyObj := util.ParseKey(fips[i].Key)
 		res = append(res, FloatingIP{IP: fips[i].IP.String(),
-			Namespace:    keyObj.Namespace,
-			AppName:      keyObj.AppName,
-			PodName:      keyObj.PodName,
-			PoolName:     keyObj.PoolName,
-			IsDeployment: keyObj.IsDeployment,
-			AppType:      toAppType(keyObj.AppTypePrefix),
-			Policy:       fips[i].Policy,
-			UpdateTime:   fips[i].UpdatedAt,
-			attr:         fips[i].Attr})
+			Namespace:  keyObj.Namespace,
+			AppName:    keyObj.AppName,
+			PodName:    keyObj.PodName,
+			PoolName:   keyObj.PoolName,
+			AppType:    toAppType(keyObj.AppTypePrefix),
+			Policy:     fips[i].Policy,
+			UpdateTime: fips[i].UpdatedAt,
+			attr:       fips[i].Attr})
 	}
 	return res
 }
