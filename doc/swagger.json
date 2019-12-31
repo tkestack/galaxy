@@ -59,18 +59,10 @@
         "allowMultiple": false
        },
        {
-        "type": "boolean",
-        "paramType": "query",
-        "name": "isDeployment",
-        "description": "listing deployments or statefulsets. Deprecated, please set appType",
-        "required": false,
-        "allowMultiple": false
-       },
-       {
         "type": "string",
         "paramType": "query",
         "name": "appType",
-        "description": "app type, deployment, statefulset or tapp",
+        "description": "app type, deployment, statefulset or tapp, default statefulset",
         "required": false,
         "allowMultiple": false
        },
@@ -384,10 +376,6 @@
      "policy": {
       "type": "integer",
       "description": "ip release policy"
-     },
-     "isDeployment": {
-      "type": "boolean",
-      "description": "deployment or statefulset, deprecated please set appType"
      },
      "appType": {
       "type": "string",

@@ -29,7 +29,6 @@ import (
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
-	"tkestack.io/galaxy/pkg/utils/database"
 )
 
 func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) error {
@@ -37,7 +36,7 @@ func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) erro
 		glog.V(4).Infof("[%s] floatingip configmap unchanged", ipam.Name())
 		return nil
 	}
-	var conf []*floatingip.FloatingIP
+	var conf []*floatingip.FloatingIPPool
 	if err := json.Unmarshal([]byte(newConf), &conf); err != nil {
 		return fmt.Errorf("failed to unmarshal configmap val %s to floatingip config", newConf)
 	}
@@ -76,7 +75,7 @@ func allocateInSubnetWithKey(ipam floatingip.IPAM, oldK, newK, subnet string, po
 func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy constant.ReleasePolicy, replicas int,
 	isPoolSizeDefined bool) (subnets []string, reserve bool, err error) {
 	if keyObj.Deployment() && policy != constant.ReleasePolicyPodDelete {
-		var ips []database.FloatingIP
+		var ips []floatingip.FloatingIP
 		poolPrefix := keyObj.PoolPrefix()
 		poolAppPrefix := keyObj.PoolAppPrefix()
 		ips, err = ipam.ByPrefix(poolPrefix)

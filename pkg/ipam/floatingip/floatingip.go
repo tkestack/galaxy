@@ -21,19 +21,30 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
-// FloatingIP is FloatingIP structure.
+// FloatingIP defines a floating ip
 type FloatingIP struct {
+	Key       string
+	Subnet    string // node subnet, not container ip's subnet
+	Attr      string
+	IP        net.IP
+	Policy    uint16
+	UpdatedAt time.Time
+}
+
+// FloatingIPPool is FloatingIPPool structure.
+type FloatingIPPool struct {
 	RoutableSubnet *net.IPNet // the node subnet
 	nets.SparseSubnet
 	sync.RWMutex
 }
 
-// FloatingIPConf is FloatingIP config structure.
-type FloatingIPConf struct {
+// FloatingIPPoolConf is FloatingIP config structure.
+type FloatingIPPoolConf struct {
 	RoutableSubnet *nets.IPNet `json:"routableSubnet"` // the node subnet
 	IPs            []string    `json:"ips"`
 	Subnet         *nets.IPNet `json:"subnet"` // the vip subnet
@@ -41,9 +52,9 @@ type FloatingIPConf struct {
 	Vlan           uint16      `json:"vlan,omitempty"`
 }
 
-// MarshalJSON can marshal FloatingIPConf to byte slice.
-func (fip *FloatingIP) MarshalJSON() ([]byte, error) {
-	conf := FloatingIPConf{}
+// MarshalJSON can marshal FloatingIPPoolConf to byte slice.
+func (fip *FloatingIPPool) MarshalJSON() ([]byte, error) {
+	conf := FloatingIPPoolConf{}
 	conf.RoutableSubnet = nets.NetsIPNet(fip.RoutableSubnet)
 	conf.Subnet = nets.NetsIPNet(fip.IPNet())
 	conf.Gateway = fip.Gateway
@@ -55,9 +66,9 @@ func (fip *FloatingIP) MarshalJSON() ([]byte, error) {
 	return json.Marshal(conf)
 }
 
-// UnmarshalJSON can unmarshal byte slice to FloatingIPConf
-func (fip *FloatingIP) UnmarshalJSON(data []byte) error {
-	var conf FloatingIPConf
+// UnmarshalJSON can unmarshal byte slice to FloatingIPPoolConf
+func (fip *FloatingIPPool) UnmarshalJSON(data []byte) error {
+	var conf FloatingIPPoolConf
 	if err := json.Unmarshal(data, &conf); err != nil {
 		return err
 	}
@@ -89,7 +100,7 @@ func (fip *FloatingIP) UnmarshalJSON(data []byte) error {
 	return fipCheck(fip)
 }
 
-func fipCheck(fip *FloatingIP) error {
+func fipCheck(fip *FloatingIPPool) error {
 	net := net.IPNet{IP: fip.Gateway, Mask: fip.Mask}
 	for i := range fip.IPRanges {
 		if !net.Contains(fip.IPRanges[i].First) || !net.Contains(fip.IPRanges[i].Last) {
@@ -106,7 +117,7 @@ func fipCheck(fip *FloatingIP) error {
 }
 
 // String can transform FloatingIP to string.
-func (fip *FloatingIP) String() string {
+func (fip *FloatingIPPool) String() string {
 	data, err := fip.MarshalJSON()
 	if err != nil {
 		return "<nil>"
@@ -115,12 +126,12 @@ func (fip *FloatingIP) String() string {
 }
 
 // Key transform floatingIP's subnet to string.
-func (fip *FloatingIP) Key() string {
+func (fip *FloatingIPPool) Key() string {
 	return fip.RoutableSubnet.String()
 }
 
 // Contains judge whether FloatingIP struct contains a given ip.
-func (fip *FloatingIP) Contains(ip net.IP) bool {
+func (fip *FloatingIPPool) Contains(ip net.IP) bool {
 	for _, ipr := range fip.IPRanges {
 		if ipr.Contains(ip) {
 			return true
@@ -131,7 +142,7 @@ func (fip *FloatingIP) Contains(ip net.IP) bool {
 
 // #lizard forgives
 // InsertIP can insert a given ip to FloatingIP struct.
-func (fip *FloatingIP) InsertIP(ip net.IP) bool {
+func (fip *FloatingIPPool) InsertIP(ip net.IP) bool {
 	if !fip.SparseSubnet.IPNet().Contains(ip) {
 		return false
 	}
@@ -170,7 +181,7 @@ func (fip *FloatingIP) InsertIP(ip net.IP) bool {
 	return true
 }
 
-func (fip *FloatingIP) tryMerge(i int) {
+func (fip *FloatingIPPool) tryMerge(i int) {
 	if i < 0 || i+1 == len(fip.IPRanges) {
 		return
 	}
@@ -185,7 +196,7 @@ func (fip *FloatingIP) tryMerge(i int) {
 }
 
 // RemoveIP can remove a given ip from FloatingIP struct.
-func (fip *FloatingIP) RemoveIP(ip net.IP) bool {
+func (fip *FloatingIPPool) RemoveIP(ip net.IP) bool {
 	if !fip.IPNet().Contains(ip) {
 		return false
 	}
@@ -222,7 +233,7 @@ func Minus(a, b net.IP) int64 {
 	return int64(nets.IPToInt(a)) - int64(nets.IPToInt(b))
 }
 
-type FloatingIPSlice []*FloatingIP
+type FloatingIPSlice []*FloatingIPPool
 
 // Len returns number of FloatingIPSlice.
 func (s FloatingIPSlice) Len() int {

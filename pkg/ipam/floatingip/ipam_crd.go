@@ -27,7 +27,6 @@ import (
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	crd_clientset "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned"
-	"tkestack.io/galaxy/pkg/utils/database"
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
@@ -69,7 +68,7 @@ type FIPCache struct {
 }
 
 type crdIpam struct {
-	FloatingIPs []*FloatingIP `json:"floatingips,omitempty"`
+	FloatingIPs []*FloatingIPPool `json:"floatingips,omitempty"`
 	client      crd_clientset.Interface
 	ipType      Type
 	//caches for FloatingIP crd, both stores allocated FloatingIPs and unallocated FloatingIPs
@@ -87,11 +86,11 @@ func NewCrdIPAM(fipClient crd_clientset.Interface, ipType Type) IPAM {
 }
 
 // ConfigurePool init floatingIP pool.
-func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIP) error {
+func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
 	sort.Sort(FloatingIPSlice(floatIPs))
 	glog.V(3).Infof("floating ip config %v", floatIPs)
 	ci.FloatingIPs = floatIPs
-	floatingIPMap := make(map[string]*FloatingIP)
+	floatingIPMap := make(map[string]*FloatingIPPool)
 	for _, fip := range ci.FloatingIPs {
 		if _, exist := floatingIPMap[fip.Key()]; exist {
 			glog.Warningf("Exists floating ip conf %v", fip)
@@ -186,10 +185,10 @@ func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy con
 	//find latest floatingIP by updateTime.
 	for k, v := range ci.caches.allocatedFIPs {
 		if v.key == oldK && v.subnet == subnet {
-			if v.updateTime.Unix() > recordTs {
+			if v.updateTime.UnixNano() > recordTs {
 				recordIP = k
 				latest = v
-				recordTs = v.updateTime.Unix()
+				recordTs = v.updateTime.UnixNano()
 			}
 		}
 	}
@@ -277,11 +276,10 @@ func (ci *crdIpam) First(key string) (*FloatingIPInfo, error) {
 	if fip.Key == "" {
 		return nil, nil
 	}
-	netIP := nets.IntToIP(fip.IP)
 	for _, fips := range ci.FloatingIPs {
-		if fips.Contains(netIP) {
+		if fips.Contains(fip.IP) {
 			ip := nets.IPNet(net.IPNet{
-				IP:   netIP,
+				IP:   fip.IP,
 				Mask: fips.Mask,
 			})
 			return &FloatingIPInfo{
@@ -295,12 +293,12 @@ func (ci *crdIpam) First(key string) (*FloatingIPInfo, error) {
 			}, nil
 		}
 	}
-	return nil, fmt.Errorf("could not find match floating ip config for ip %s", netIP.String())
+	return nil, fmt.Errorf("could not find match floating ip config for ip %s", fip.IP.String())
 }
 
-// ByIP transform a given IP to database.FloatingIP struct.
-func (ci *crdIpam) ByIP(ip net.IP) (database.FloatingIP, error) {
-	fip := database.FloatingIP{}
+// ByIP transform a given IP to FloatingIP struct.
+func (ci *crdIpam) ByIP(ip net.IP) (FloatingIP, error) {
+	fip := FloatingIP{}
 
 	ipStr := ip.String()
 	ci.caches.cacheLock.RLock()
@@ -315,7 +313,7 @@ func (ci *crdIpam) ByIP(ip net.IP) (database.FloatingIP, error) {
 		fip.Policy = uint16(v.policy)
 		fip.Key = v.key
 		fip.Attr = v.att
-		fip.IP = nets.IPToInt(ip)
+		fip.IP = ip
 		fip.UpdatedAt = v.updateTime
 		return fip, nil
 	}
@@ -323,24 +321,24 @@ func (ci *crdIpam) ByIP(ip net.IP) (database.FloatingIP, error) {
 	fip.Policy = uint16(v.policy)
 	fip.Key = v.key
 	fip.Attr = v.att
-	fip.IP = nets.IPToInt(ip)
+	fip.IP = ip
 	fip.UpdatedAt = v.updateTime
 	return fip, nil
 }
 
 // ByPrefix filter floatingIPs by prefix key.
-func (ci *crdIpam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
-	var fips []database.FloatingIP
+func (ci *crdIpam) ByPrefix(prefix string) ([]FloatingIP, error) {
+	var fips []FloatingIP
 	ci.caches.cacheLock.RLock()
 	defer ci.caches.cacheLock.RUnlock()
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if strings.HasPrefix(spec.key, prefix) {
-			tmp := database.FloatingIP{
+			tmp := FloatingIP{
 				Key:       spec.key,
 				Subnet:    spec.subnet,
 				Attr:      spec.att,
 				Policy:    uint16(spec.policy),
-				IP:        nets.IPToInt(net.ParseIP(ip)),
+				IP:        net.ParseIP(ip),
 				UpdatedAt: spec.updateTime,
 			}
 			fips = append(fips, tmp)
@@ -348,12 +346,12 @@ func (ci *crdIpam) ByPrefix(prefix string) ([]database.FloatingIP, error) {
 	}
 	if prefix == "" {
 		for ip, spec := range ci.caches.unallocatedFIPs {
-			tmp := database.FloatingIP{
+			tmp := FloatingIP{
 				Key:       spec.key,
 				Subnet:    spec.subnet,
 				Attr:      spec.att,
 				Policy:    uint16(spec.policy),
-				IP:        nets.IPToInt(net.ParseIP(ip)),
+				IP:        net.ParseIP(ip),
 				UpdatedAt: spec.updateTime,
 			}
 			fips = append(fips, tmp)
@@ -402,7 +400,7 @@ func (ci *crdIpam) Name() string {
 }
 
 // #lizard forgives
-func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIP) error {
+func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIPPool) error {
 	glog.V(3).Infof("begin to fresh cache")
 	ips, err := ci.listFloatingIPs()
 	if err != nil {
@@ -516,13 +514,13 @@ func (ci *crdIpam) syncCacheAfterDel(ip string) {
 	return
 }
 
-func (ci *crdIpam) findFloatingIPByKey(key string) (database.FloatingIP, error) {
-	var fip database.FloatingIP
+func (ci *crdIpam) findFloatingIPByKey(key string) (FloatingIP, error) {
+	var fip FloatingIP
 	ci.caches.cacheLock.RLock()
 	defer ci.caches.cacheLock.RUnlock()
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if spec.key == key {
-			fip.IP = nets.IPToInt(net.ParseIP(ip))
+			fip.IP = net.ParseIP(ip)
 			fip.Key = key
 			fip.Attr = spec.att
 			fip.Subnet = spec.subnet
@@ -567,9 +565,9 @@ func (ci *crdIpam) filterUnallocatedSubnet() (result []string) {
 }
 
 // ByKeyword returns floatingIP set by a given keyword.
-func (ci *crdIpam) ByKeyword(keyword string) ([]database.FloatingIP, error) {
+func (ci *crdIpam) ByKeyword(keyword string) ([]FloatingIP, error) {
 	//not implement
-	var fips []database.FloatingIP
+	var fips []FloatingIP
 	ci.caches.cacheLock.RLock()
 	defer ci.caches.cacheLock.RUnlock()
 	if ci.caches.allocatedFIPs == nil {
@@ -577,8 +575,8 @@ func (ci *crdIpam) ByKeyword(keyword string) ([]database.FloatingIP, error) {
 	}
 	for ip, spec := range ci.caches.allocatedFIPs {
 		if strings.Contains(spec.key, keyword) {
-			tmp := database.FloatingIP{
-				IP:        nets.IPToInt(net.ParseIP(ip)),
+			tmp := FloatingIP{
+				IP:        net.ParseIP(ip),
 				Key:       spec.key,
 				Subnet:    spec.subnet,
 				Attr:      spec.att,

@@ -50,28 +50,17 @@ If you want to limit each node's max Float IPs, please set ignoredByScheduler to
 
 ## Galaxy-ipam Configuration
 
-Galaxy uses MySQL or CRD to persist allocated IPs. Please update galaxy-ipam-etc ConfigMap to replace MySQL address, username and password.
+Galaxy uses CRD to persist allocated IPs.
 
 ```
   galaxy-ipam.json: |
     {
       "schedule_plugin": {
-        "database": {
-          "protocol": "tcp",
-          "addr": "127.0.0.1:3306",
-          "username": "***",
-          "password": "***",
-          "driver": "mysql",
-          "name": "test",
-          "maxConn": 10000
-        },
+        "storageDriver": "k8s-crd",
         "cloudProviderGrpcAddr": "127.0.0.2:80"
       }
     }
 ```
-
-Please replace `database: {...}` with `"storageDriver": "k8s-crd"` to use CRD to persist allocated IPs.
-Note that preserved IPs will be lost if changing storage driver.
 
 ## Float IP Configuration
 

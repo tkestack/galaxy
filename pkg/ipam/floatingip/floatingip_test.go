@@ -30,10 +30,10 @@ var (
 	ip    = net.IPv4(10, 173, 14, 1)
 )
 
-// TestMarshalFloatingIPConf test FloatingIPConf Marshal function.
-func TestMarshalFloatingIPConf(t *testing.T) {
+// TestMarshalFloatingIPPoolConf test FloatingIPPoolConf Marshal function.
+func TestMarshalFloatingIPPoolConf(t *testing.T) {
 	subnet := nets.NetsIPNet(ipNet)
-	conf := FloatingIPConf{
+	conf := FloatingIPPoolConf{
 		RoutableSubnet: subnet,
 		IPs: []string{
 			"10.173.14.205",
@@ -48,10 +48,10 @@ func TestMarshalFloatingIPConf(t *testing.T) {
 	}
 }
 
-// TestMarshalFloatingIP test FloatingIP Marshal function.
-func TestMarshalFloatingIP(t *testing.T) {
+// TestMarshalFloatingIPPool test FloatingIPPool Marshal function.
+func TestMarshalFloatingIPPool(t *testing.T) {
 	ipr := nets.ParseIPRange("10.173.14.206~10.173.14.208")
-	fip := FloatingIP{
+	fip := FloatingIPPool{
 		RoutableSubnet: ipNet,
 		SparseSubnet: nets.SparseSubnet{
 			IPRanges: []nets.IPRange{nets.IPtoIPRange(net.ParseIP("10.173.14.205")), *ipr},
@@ -66,12 +66,12 @@ func TestMarshalFloatingIP(t *testing.T) {
 }
 
 // #lizard forgives
-// TestUnmarshalFloatingIP test FloatingIP unmarshal function.
-func TestUnmarshalFloatingIP(t *testing.T) {
+// TestUnmarshalFloatingIPPool test FloatingIPPool unmarshal function.
+func TestUnmarshalFloatingIPPool(t *testing.T) {
 	var (
 		confStr  = `{"routableSubnet":"10.173.14.1/24","ips":["10.173.14.203","10.173.14.206~10.173.14.208"],"subnet":"10.173.14.0/24","gateway":"10.173.14.1","vlan":2}`
 		wrongStr = `{"routableSubnet":"10.173.14.0/24","ips":["10.173.14.205","10.173.14.206~10.173.14.208"],"subnet":"10.173.14.0/24","gateway":"10.173.14.1","vlan":2}`
-		fip      FloatingIP
+		fip      FloatingIPPool
 	)
 	if err := json.Unmarshal([]byte(confStr), &fip); err != nil {
 		t.Fatal(err)
@@ -109,9 +109,9 @@ func TestUnmarshalFloatingIP(t *testing.T) {
 }
 
 // #lizard forgives
-// TestInsertRemoveIP test FloatingIP's InsertIP and RemoveIP functions.
+// TestInsertRemoveIP test FloatingIPPool's InsertIP and RemoveIP functions.
 func TestInsertRemoveIP(t *testing.T) {
-	fip := &FloatingIP{
+	fip := &FloatingIPPool{
 		SparseSubnet: nets.SparseSubnet{
 			Gateway: net.ParseIP("10.166.141.65"),
 			Mask:    net.CIDRMask(26, 32),

@@ -43,7 +43,7 @@ func resolveDeploymentName(pod *corev1.Pod) string {
 }
 
 type KeyObj struct {
-	// stores the key format in database
+	// stores the key format in IPAM
 	// for deployment dp_namespace_deploymentName_podName,
 	// for pool pool__poolName_dp_namespace_deploymentName_podName, for statefulset
 	// sts_namespace_statefulsetName_podName
@@ -51,9 +51,7 @@ type KeyObj struct {
 	// deployment pod name will be 63 bytes with modified suffix, e.g.
 	// dp1234567890dp1234567890dp1234567890dp1234567890dp1234567848p74
 	// So we can't get deployment name from pod name and have to store deployment name with pod name
-	KeyInDB string
-	// Deprecated, please use Deployment() instead
-	IsDeployment  bool
+	KeyInDB       string
 	AppName       string
 	AppTypePrefix string
 	PodName       string
@@ -65,9 +63,6 @@ type KeyObj struct {
 func NewKeyObj(appTypePrefix string, namespace, appName, podName, poolName string) *KeyObj {
 	k := &KeyObj{AppTypePrefix: appTypePrefix, AppName: appName, PodName: podName, Namespace: namespace,
 		PoolName: poolName}
-	if appTypePrefix == DeploymentPrefixKey {
-		k.IsDeployment = true
-	}
 	k.genKey()
 	return k
 }
@@ -100,7 +95,7 @@ func (k *KeyObj) genKey() {
 	k.KeyInDB = fmt.Sprintf("%s%s%s_%s_%s", prefix, k.AppTypePrefix, k.Namespace, k.AppName, k.PodName)
 }
 
-// PoolPrefix returns the common key prefix in database, for deployment dp_namespace_deploymentName_
+// PoolPrefix returns the common key prefix in IPAM, for deployment dp_namespace_deploymentName_
 // for pool pool__poolName_, for statefulset sts_namespace_statefulsetName_
 // For now, if it is a statefulset pod, PoolPrefix is useless since we reserve ip by full pod name
 // PoolPrefix is used by pool and deployment only.
@@ -147,7 +142,6 @@ func FormatKey(pod *corev1.Pod) *KeyObj {
 			return keyObj
 		}
 		keyObj.AppName = deploymentName
-		keyObj.IsDeployment = true
 		keyObj.AppTypePrefix = DeploymentPrefixKey
 	}
 	keyObj.genKey()
@@ -170,7 +164,6 @@ func ParseKey(key string) *KeyObj {
 	}
 	if strings.HasPrefix(removedPoolKey, DeploymentPrefixKey) {
 		keyObj.AppTypePrefix = DeploymentPrefixKey
-		keyObj.IsDeployment = true
 	} else if strings.HasPrefix(removedPoolKey, StatefulsetPrefixKey) {
 		keyObj.AppTypePrefix = StatefulsetPrefixKey
 	} else if strings.HasPrefix(removedPoolKey, TAppPrefixKey) {

@@ -31,7 +31,6 @@ import (
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
-	"tkestack.io/galaxy/pkg/utils/database"
 	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
 )
 
@@ -65,7 +64,7 @@ func (p *FloatingIPPlugin) storeReady() bool {
 
 type resyncObj struct {
 	keyObj *util.KeyObj
-	fip    database.FloatingIP
+	fip    floatingip.FloatingIP
 }
 
 // resyncPod releases ips from

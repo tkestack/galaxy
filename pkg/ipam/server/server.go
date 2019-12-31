@@ -276,9 +276,7 @@ func (s *Server) startAPIServer() {
 		Param(ws.QueryParameter("appName", "app name").DataType("string")).
 		Param(ws.QueryParameter("podName", "pod name").DataType("string")).
 		Param(ws.QueryParameter("namespace", "namespace").DataType("string")).
-		Param(ws.QueryParameter("isDeployment", "listing deployments or statefulsets. Deprecated, please set appType").
-			DataType("boolean")).
-		Param(ws.QueryParameter("appType", "app type, deployment, statefulset or tapp").DataType("string")).
+		Param(ws.QueryParameter("appType", "app type, deployment, statefulset or tapp, default statefulset").DataType("string")).
 		Param(ws.QueryParameter("page", "page number, valid range [0,99999]").DataType("integer")).
 		Param(ws.QueryParameter("size", "page size, valid range (0,9999]").DataType("integer").DefaultValue("10")).
 		Param(ws.QueryParameter("sort", "sort by which field, supports ip/namespace/podname/policy asc/desc").
