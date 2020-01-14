@@ -25,7 +25,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metaErrs "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -421,7 +421,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 }
 
 func isPodNotFoundError(err error) bool {
-	return metaErrs.IsNotFound(err)
+	return apierrors.IsNotFound(err)
 }
 
 // unbind release ip from pod
@@ -498,7 +498,7 @@ func (p *FloatingIPPlugin) queryNodeSubnet(nodeName string) (*net.IPNet, error) 
 	if subnet, ok := p.nodeSubnet[nodeName]; !ok {
 		if err := wait.Poll(time.Millisecond*100, time.Minute, func() (done bool, err error) {
 			node, err = p.Client.CoreV1().Nodes().Get(nodeName, v1.GetOptions{})
-			if !metaErrs.IsServerTimeout(err) {
+			if !apierrors.IsServerTimeout(err) {
 				return true, err
 			}
 			return false, nil
