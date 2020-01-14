@@ -14,6 +14,7 @@
  * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
 package schedulerplugin
 
 import (
@@ -21,25 +22,10 @@ import (
 	"net"
 	"testing"
 
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	schedulerplugin_util "tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
-
-type fakeCloudProvider1 struct {
-	proceedBind chan struct{}
-}
-
-func (f *fakeCloudProvider1) AssignIP(in *rpc.AssignIPRequest) (*rpc.AssignIPReply, error) {
-	f.proceedBind <- struct{}{} // notify we are waiting in AssignIP now
-	<-f.proceedBind             // sleep before we receive signal to continue again
-	return &rpc.AssignIPReply{Success: true}, nil
-}
-
-func (f *fakeCloudProvider1) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssignIPReply, error) {
-	return &rpc.UnAssignIPReply{Success: true}, nil
-}
 
 func TestBindingAfterReceivingDeleteEvent(t *testing.T) {
 	node := createNode("node1", nil, "10.49.27.2")
@@ -68,7 +54,7 @@ func TestBindingAfterReceivingDeleteEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	// before bind is done, we delete this pod
-	if err := plugin.PluginFactoryArgs.Client.CoreV1().Pods(pod.Namespace).Delete(pod.Name, &v1.DeleteOptions{}); err != nil {
+	if err := plugin.PluginFactoryArgs.Client.CoreV1().Pods(pod.Namespace).Delete(pod.Name, &metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := waitForUnbind(plugin); err != nil {
