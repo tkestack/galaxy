@@ -46,7 +46,7 @@ type FloatingIPPlugin struct {
 	// node name to subnet cache
 	nodeSubnet     map[string]*net.IPNet
 	nodeSubnetLock sync.Mutex
-	sync.Mutex
+	resyncLock     sync.RWMutex
 	*PluginFactoryArgs
 	lastIPConf, lastSecondIPConf string
 	conf                         *Conf
@@ -65,7 +65,7 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		nodeSubnet:        make(map[string]*net.IPNet),
 		PluginFactoryArgs: args,
 		conf:              &conf,
-		unreleased:        make(chan *releaseEvent, 100),
+		unreleased:        make(chan *releaseEvent, 1000),
 		dpLockPool:        keylock.NewKeylock(),
 	}
 	if conf.StorageDriver == "k8s-crd" {
@@ -116,7 +116,13 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 			}
 		}, time.Minute, stop)
 	}
+	firstTime := true
 	go wait.Until(func() {
+		if firstTime {
+			glog.Infof("start resyncing for the first time")
+			defer glog.Infof("resyncing complete for the first time")
+			firstTime = false
+		}
 		if err := p.resyncPod(p.ipam); err != nil {
 			glog.Warningf("[%s] %v", p.ipam.Name(), err)
 		}
@@ -163,6 +169,8 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 // If the given pod doesn't want floating IP, none failedNodes returns
 func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev1.Node, schedulerapi.FailedNodesMap,
 	error) {
+	p.resyncLock.RLock()
+	defer p.resyncLock.RUnlock()
 	failedNodesMap := schedulerapi.FailedNodesMap{}
 	if !p.hasResourceName(&pod.Spec) {
 		return nodes, failedNodesMap, nil
@@ -341,6 +349,8 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 
 // Bind binds a new floatingip or reuse an old one to pod
 func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
+	p.resyncLock.RLock()
+	defer p.resyncLock.RUnlock()
 	pod, err := p.PluginFactoryArgs.PodLister.Pods(args.PodNamespace).Get(args.PodName)
 	if err != nil {
 		return fmt.Errorf("failed to find pod %s: %v", util.Join(args.PodName, args.PodNamespace), err)
@@ -382,42 +392,54 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 			},
 		}); err != nil {
 			err1 = err
+			if isPodNotFoundError(err) {
+				// break retry if pod no longer exists
+				return false, err
+			}
 			return false, nil
 		}
 		glog.Infof("bind pod %s to %s with ip %v", keyObj.KeyInDB, args.Node,
 			bindAnnotation[constant.ExtendedCNIArgsAnnotation])
 		return true, nil
 	}); err != nil {
+		if isPodNotFoundError(err1) {
+			glog.Infof("binding returns not found for pod %s, putting it into unreleased chan", keyObj.KeyInDB)
+			// attach ip annotation
+			p.unreleased <- &releaseEvent{pod: pod}
+		}
 		// If fails to update, depending on resync to update
-		return fmt.Errorf("failed to update pod %s: %v", keyObj.KeyInDB, err1)
-		//TODO release ip
+		return fmt.Errorf("update pod %s: %w", keyObj.KeyInDB, err1)
 	}
 	return nil
 }
 
+func isPodNotFoundError(err error) bool {
+	return metaErrs.IsNotFound(err)
+}
+
 // unbind release ip from pod
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
+	p.resyncLock.RLock()
+	defer p.resyncLock.RUnlock()
 	glog.V(3).Infof("handle unbind pod %s", pod.Name)
 	keyObj := util.FormatKey(pod)
 	key := keyObj.KeyInDB
 	if p.cloudProvider != nil {
-		if pod.Annotations == nil || pod.Annotations[constant.ExtendedCNIArgsAnnotation] == "" {
-			// If a pod has not been allocated an ip, e.g. ip pool is drained, do nothing
-			// If the annotation is deleted manually, we count on resync to release ips
+		ipInfo, err := p.ipam.First(key)
+		if err != nil {
+			return fmt.Errorf("failed to query floating ip of %s: %v", key, err)
+		}
+		if ipInfo == nil {
+			glog.Infof("pod %s hasn't an allocated ip", key)
 			return nil
 		}
-		ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
-		if err != nil || len(ipInfos) == 0 || ipInfos[0].IP == nil {
-			return fmt.Errorf("bad format of %s: %s, err %v", key,
-				pod.Annotations[constant.ExtendedCNIArgsAnnotation], err)
-		} else {
-			glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", pod.Spec.NodeName, ipInfos[0].IP.IP.String(), key)
-			if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
-				NodeName:  pod.Spec.NodeName,
-				IPAddress: ipInfos[0].IP.IP.String(),
-			}); err != nil {
-				return fmt.Errorf("failed to unassign ip %s from %s: %v", ipInfos[0].IP.IP.String(), key, err)
-			}
+		ipStr := ipInfo.IPInfo.IP.IP.String()
+		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", pod.Spec.NodeName, ipStr, key)
+		if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
+			NodeName:  pod.Spec.NodeName,
+			IPAddress: ipStr,
+		}); err != nil {
+			return fmt.Errorf("failed to unassign ip %s from %s: %v", ipStr, key, err)
 		}
 	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)

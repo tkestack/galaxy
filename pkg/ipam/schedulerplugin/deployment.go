@@ -43,11 +43,11 @@ func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, pol
 		replicas = int(*dp.Spec.Replicas)
 	}
 	// if ipam or secondIPAM failed, we can depend on resync to release ip
-	if err := unbindDpPod(key, prefixKey, p.ipam, p.dpLockPool, replicas, policy, "unbinding pod"); err != nil {
+	if err := unbindDpPod(key, prefixKey, p.ipam, p.dpLockPool, replicas, policy, "during unbinding pod"); err != nil {
 		return err
 	}
 	if p.enabledSecondIP(pod) {
-		return unbindDpPod(key, prefixKey, p.secondIPAM, p.dpLockPool, replicas, policy, "unbinding pod")
+		return unbindDpPod(key, prefixKey, p.secondIPAM, p.dpLockPool, replicas, policy, "during unbinding pod")
 	}
 	return nil
 }
