@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,7 +46,7 @@ type FloatingIPPlugin struct {
 	// node name to subnet cache
 	nodeSubnet     map[string]*net.IPNet
 	nodeSubnetLock sync.Mutex
-	sync.Mutex
+	resyncLock     sync.RWMutex
 	*PluginFactoryArgs
 	lastIPConf, lastSecondIPConf string
 	conf                         *Conf
@@ -66,7 +65,7 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		nodeSubnet:        make(map[string]*net.IPNet),
 		PluginFactoryArgs: args,
 		conf:              &conf,
-		unreleased:        make(chan *releaseEvent, 100),
+		unreleased:        make(chan *releaseEvent, 1000),
 		dpLockPool:        keylock.NewKeylock(),
 	}
 	if conf.StorageDriver == "k8s-crd" {
@@ -117,7 +116,13 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 			}
 		}, time.Minute, stop)
 	}
+	firstTime := true
 	go wait.Until(func() {
+		if firstTime {
+			glog.Infof("start resyncing for the first time")
+			defer glog.Infof("resyncing complete for the first time")
+			firstTime = false
+		}
 		if err := p.resyncPod(p.ipam); err != nil {
 			glog.Warningf("[%s] %v", p.ipam.Name(), err)
 		}
@@ -164,6 +169,8 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 // If the given pod doesn't want floating IP, none failedNodes returns
 func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev1.Node, schedulerapi.FailedNodesMap,
 	error) {
+	p.resyncLock.RLock()
+	defer p.resyncLock.RUnlock()
 	failedNodesMap := schedulerapi.FailedNodesMap{}
 	if !p.hasResourceName(&pod.Spec) {
 		return nodes, failedNodesMap, nil
@@ -342,6 +349,8 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 
 // Bind binds a new floatingip or reuse an old one to pod
 func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
+	p.resyncLock.RLock()
+	defer p.resyncLock.RUnlock()
 	pod, err := p.PluginFactoryArgs.PodLister.Pods(args.PodNamespace).Get(args.PodName)
 	if err != nil {
 		return fmt.Errorf("failed to find pod %s: %v", util.Join(args.PodName, args.PodNamespace), err)
@@ -394,7 +403,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 		return true, nil
 	}); err != nil {
 		if isPodNotFoundError(err1) {
-			glog.Infof("binding returns not found for pod %s, putting it into unreleased chan, metaErrs.IsNotFound(err1)=%v", keyObj.KeyInDB, metaErrs.IsNotFound(err1))
+			glog.Infof("binding returns not found for pod %s, putting it into unreleased chan", keyObj.KeyInDB)
 			// attach ip annotation
 			p.unreleased <- &releaseEvent{pod: pod}
 		}
@@ -405,11 +414,13 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 }
 
 func isPodNotFoundError(err error) bool {
-	return metaErrs.IsNotFound(err) || strings.Contains(err.Error(), "not found")
+	return metaErrs.IsNotFound(err)
 }
 
 // unbind release ip from pod
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
+	p.resyncLock.RLock()
+	defer p.resyncLock.RUnlock()
 	glog.V(3).Infof("handle unbind pod %s", pod.Name)
 	keyObj := util.FormatKey(pod)
 	key := keyObj.KeyInDB

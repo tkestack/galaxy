@@ -74,6 +74,8 @@ type resyncObj struct {
 // 4. deleted pods whose parent statefulset/tapp exist but pod index > .spec.replica
 // 5. existing pods but its status is evicted
 func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
+	p.resyncLock.Lock()
+	defer p.resyncLock.Unlock()
 	glog.V(4).Infof("resync pods+")
 	defer glog.V(4).Infof("resync pods-")
 	resyncMeta := &resyncMeta{
