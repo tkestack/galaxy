@@ -24,9 +24,9 @@ import (
 	"k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
 	glog "k8s.io/klog"
-	"k8s.io/kubernetes/pkg/version/verflag"
 	"tkestack.io/galaxy/pkg/galaxy"
 	"tkestack.io/galaxy/pkg/signal"
+	"tkestack.io/galaxy/pkg/utils/ldflags"
 )
 
 func main() {
@@ -40,7 +40,7 @@ func main() {
 	defer logs.FlushLogs()
 
 	// if checking version, print it and exit
-	verflag.PrintAndExitIfRequested()
+	ldflags.PrintAndExitIfRequested()
 	if err := galaxy.Start(); err != nil {
 		glog.Fatalf("Error start galaxy: %v", err)
 	}

@@ -49,8 +49,8 @@ function build::galaxy() {
 
   # build galaxy
   echo "Building galaxy"
-  echo go build -o $BINDIR/galaxy $GOBUILD_FLAGS $PKG/cmd/galaxy
-  go build -o $BINDIR/galaxy $GOBUILD_FLAGS $PKG/cmd/galaxy
+  echo go build -o $BINDIR/galaxy $GOBUILD_FLAGS -ldflags "$(init::print_ldflags)" $PKG/cmd/galaxy
+  go build -o $BINDIR/galaxy $GOBUILD_FLAGS -ldflags "$(init::print_ldflags)" $PKG/cmd/galaxy
 }
 
 function build::ipam() {

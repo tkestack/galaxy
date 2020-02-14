@@ -14,39 +14,34 @@
  * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations under the License.
  */
-package main
+package ldflags
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
-	"time"
 
-	"github.com/spf13/pflag"
-	"k8s.io/component-base/cli/flag"
-	"k8s.io/component-base/logs"
-	"tkestack.io/galaxy/pkg/ipam/server"
-	"tkestack.io/galaxy/pkg/utils/ldflags"
+	flag "github.com/spf13/pflag"
 )
 
-func main() {
-	// initialize rand seed
-	rand.Seed(time.Now().UTC().UnixNano())
+var (
+	GO_VERSION string
+	GIT_COMMIT string
+	BUILD_TIME string
+)
 
-	s := server.NewServer()
-	// add command line args
-	s.AddFlags(pflag.CommandLine)
+func footprint() string {
+	return fmt.Sprintf("go-version %s, git-commit %s, build-time %s", GO_VERSION, GIT_COMMIT, BUILD_TIME)
+}
 
-	flag.InitFlags()
-	logs.InitLogs()
-	defer logs.FlushLogs()
+var (
+	versionFlag = flag.Bool("version", false, "Print version information and quit")
+)
 
-	// if checking version, print it and exit
-	ldflags.PrintAndExitIfRequested()
-
-	if err := s.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err) // nolint: errcheck
-		os.Exit(1)
+// PrintAndExitIfRequested will check if the -version flag was passed
+// and, if so, print the version and exit.
+func PrintAndExitIfRequested() {
+	if *versionFlag == true {
+		fmt.Printf("%s\n", footprint())
+		os.Exit(0)
 	}
-	//TODO handle signal ?
 }
