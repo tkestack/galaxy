@@ -27,7 +27,7 @@ function init::print_ldflags() {
 function init::docker_builded() {
     if [[ "$(go env GOOS)" == "darwin" ]] && [[ "$1" = "binary_"* ]]; then
       echo "Building $1 via docker"
-      docker run --rm -v $(pwd):/go/src/$PKG -w /go/src/$PKG golang:1.13 hack/build.sh "$1"
+      docker run --rm -v $(pwd):/go/src/$PKG -v $GOPATH/pkg:/go/pkg -w /go/src/$PKG golang:1.13 hack/build.sh "$1"
       return
     fi
     false
