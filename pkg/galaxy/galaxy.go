@@ -50,6 +50,9 @@ type Galaxy struct {
 type JsonConf struct {
 	NetworkConf     []map[string]interface{} // all detailed network configurations
 	DefaultNetworks []string                 // pod's default networks if it doesn't have networks annotation
+	// If not empty, set pod's default network to `ENIIPNetwork` regardless of `DefaultNetworks` if pod wants eni ip
+	// and has no networks annotation
+	ENIIPNetwork string
 }
 
 func NewGalaxy() *Galaxy {

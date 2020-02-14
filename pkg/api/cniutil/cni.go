@@ -161,9 +161,8 @@ type NetworkInfo struct {
 }
 
 // NewNetworkInfo creates a NetworkInfo
-func NewNetworkInfo(networkType string, args map[string]string, conf map[string]interface{},
-	ifName string) *NetworkInfo {
-	return &NetworkInfo{NetworkType: networkType, Args: args, Conf: conf, IfName: ifName}
+func NewNetworkInfo(networkType string, conf map[string]interface{}, ifName string) *NetworkInfo {
+	return &NetworkInfo{NetworkType: networkType, Args: map[string]string{}, Conf: conf, IfName: ifName}
 }
 
 func reverse(infos []*NetworkInfo) {

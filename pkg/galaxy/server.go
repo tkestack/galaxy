@@ -40,6 +40,7 @@ import (
 	"tkestack.io/galaxy/pkg/api/cniutil"
 	galaxyapi "tkestack.io/galaxy/pkg/api/galaxy"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant/utils"
 	"tkestack.io/galaxy/pkg/api/galaxy/private"
 	"tkestack.io/galaxy/pkg/api/k8s"
 	k8sutil "tkestack.io/galaxy/pkg/api/k8s/utils"
@@ -183,9 +184,14 @@ func parsePorts(pod *corev1.Pod, portMappingOn bool) []k8s.Port {
 func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]*cniutil.NetworkInfo, error) {
 	var networkInfos []*cniutil.NetworkInfo
 	if pod.Annotations == nil || pod.Annotations[constant.MultusCNIAnnotation] == "" {
-		for i, netName := range g.DefaultNetworks {
-			networkInfos = append(networkInfos, cniutil.NewNetworkInfo(netName, map[string]string{},
-				g.getNetworkConf(netName), setNetInterface("", i, req.IfName)))
+		if utils.WantENIIP(&pod.Spec) && g.ENIIPNetwork != "" {
+			networkInfos = append(networkInfos, cniutil.NewNetworkInfo(g.ENIIPNetwork, g.getNetworkConf(g.ENIIPNetwork),
+				req.IfName))
+		} else {
+			for i, netName := range g.DefaultNetworks {
+				networkInfos = append(networkInfos, cniutil.NewNetworkInfo(netName, g.getNetworkConf(netName),
+					setNetInterface("", i, req.IfName)))
+			}
 		}
 	} else {
 		v := pod.Annotations[constant.MultusCNIAnnotation]
@@ -201,7 +207,7 @@ func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]
 				return nil, fmt.Errorf("pod %s_%s requires network %s which is not configured", pod.Name,
 					pod.Namespace, network.Name)
 			}
-			networkInfo := cniutil.NewNetworkInfo(network.Name, map[string]string{}, netConf,
+			networkInfo := cniutil.NewNetworkInfo(network.Name, netConf,
 				setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName))
 			networkInfos = append(networkInfos, networkInfo)
 		}

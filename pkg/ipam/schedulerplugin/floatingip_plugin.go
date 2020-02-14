@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant/utils"
 	"tkestack.io/galaxy/pkg/api/galaxy/private"
 	"tkestack.io/galaxy/pkg/api/k8s/schedulerapi"
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider"
@@ -451,15 +452,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 
 // hasResourceName checks if the podspec has floatingip resource name
 func (p *FloatingIPPlugin) hasResourceName(spec *corev1.PodSpec) bool {
-	for i := range spec.Containers {
-		reqResource := spec.Containers[i].Resources.Requests
-		for name := range reqResource {
-			if name == constant.ResourceName {
-				return true
-			}
-		}
-	}
-	return false
+	return utils.WantENIIP(spec)
 }
 
 func getNodeIP(node *corev1.Node) net.IP {
