@@ -135,8 +135,8 @@ func TestFormatKey(t *testing.T) {
 	}
 	for i := range testCases {
 		testCase := testCases[i]
-		got := FormatKey(testCase.pod)
-		if got == nil {
+		got, err := FormatKey(testCase.pod)
+		if got == nil || err != nil {
 			t.Fatal()
 		}
 		if !reflect.DeepEqual(*got, testCase.expect) {
@@ -326,7 +326,7 @@ func TestParseKey(t *testing.T) {
 	}
 }
 
-func TestResolveDeploymentName(t *testing.T) {
+func TestResolveParentNames(t *testing.T) {
 	longNamePod := CreateDeploymentPod("dp1234567890dp1234567890dp1234567890dp1234567890dp1234567848p74", "ns1", nil)
 	longNamePod.OwnerReferences = []v1.OwnerReference{{
 		Kind: "ReplicaSet",
@@ -338,7 +338,7 @@ func TestResolveDeploymentName(t *testing.T) {
 	}{
 		{pod: CreateDeploymentPod("dp1-1-2", "ns1", nil), expect: "dp1"},
 		{pod: CreateDeploymentPod("dp2-1-1-2", "ns1", nil), expect: "dp2-1"},
-		{pod: CreateDeploymentPod("baddp-2", "ns1", nil), expect: ""},
+		{pod: CreateDeploymentPod("baddp-2", "ns1", nil), expect: "baddp"},
 		{pod: longNamePod, expect: "dp1234567890dp1234567890dp1234567890dp1234567890dp1234567890dp1"},
 	}
 	for i := range testCases {

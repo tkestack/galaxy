@@ -44,7 +44,7 @@ func (f *fakeCloudProvider1) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssig
 func TestBindingAfterReceivingDeleteEvent(t *testing.T) {
 	node := createNode("node1", nil, "10.49.27.2")
 	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
-	podKey := schedulerplugin_util.FormatKey(pod)
+	podKey, _ := schedulerplugin_util.FormatKey(pod)
 	dp1 := createDeployment("dp", "ns1", pod.ObjectMeta, 1)
 	expectIP := "10.49.27.205"
 	plugin, stopChan := createPlugin(t, pod, dp1, &node)

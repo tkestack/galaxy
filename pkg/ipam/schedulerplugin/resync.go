@@ -95,7 +95,6 @@ type resyncMeta struct {
 	assignedPods map[string]resyncObj // pods assigned ENI ips from cloudprovider
 	allocatedIPs map[string]resyncObj // allocated ips from galaxy pool
 	existPods    map[string]*corev1.Pod
-	dpMap        map[string]*appv1.Deployment
 	tappMap      map[string]*tappv1.TApp
 	ssMap        map[string]*appv1.StatefulSet
 }
@@ -144,10 +143,6 @@ func (p *FloatingIPPlugin) fetchAppAndPodMeta(meta *resyncMeta) error {
 		return err
 	}
 	meta.ssMap, err = p.getSSMap()
-	if err != nil {
-		return err
-	}
-	meta.dpMap, err = p.getDPMap()
 	if err != nil {
 		return err
 	}
@@ -200,13 +195,7 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, meta *resync
 			}
 			continue
 		}
-		var replicas int
-		dp, ok := meta.dpMap[appFullName]
-		if ok {
-			replicas = int(*dp.Spec.Replicas)
-		}
-		if err := unbindDpPod(key, obj.keyObj.PoolPrefix(), ipam, p.dpLockPool, replicas, releasePolicy,
-			"during resyncing"); err != nil {
+		if err := p.unbindDpPodForIPAM(obj.keyObj, ipam, releasePolicy, "during resyncing"); err != nil {
 			glog.Error(err)
 		}
 	}
@@ -253,7 +242,10 @@ func (p *FloatingIPPlugin) listWantedPodsToMap() (map[string]*corev1.Pod, error)
 			// for evicted pod, treat as not exist
 			continue
 		}
-		keyObj := util.FormatKey(pods[i])
+		keyObj, err := util.FormatKey(pods[i])
+		if err != nil {
+			continue
+		}
 		existPods[keyObj.KeyInDB] = pods[i]
 	}
 	return existPods, nil
@@ -284,7 +276,10 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 	if pod.Annotations == nil {
 		return nil
 	}
-	keyObj := util.FormatKey(pod)
+	keyObj, err := util.FormatKey(pod)
+	if err != nil {
+		return err
+	}
 	ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
 	if err != nil {
 		return err

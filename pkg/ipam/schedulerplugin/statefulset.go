@@ -102,7 +102,6 @@ func (p *FloatingIPPlugin) shouldReserve(pod *corev1.Pod, keyObj *util.KeyObj,
 	} else {
 		return true, "", nil
 	}
-	return false, deletedAndParentAppNotExistPod, nil
 }
 
 func (p *FloatingIPPlugin) shouldReleaseDuringResync(keyObj *util.KeyObj, releasePolicy constant.ReleasePolicy,

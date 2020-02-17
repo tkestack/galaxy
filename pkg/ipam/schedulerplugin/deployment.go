@@ -19,42 +19,43 @@ package schedulerplugin
 import (
 	"fmt"
 
-	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
-	"tkestack.io/galaxy/pkg/utils/keylock"
 )
 
-// unbindDpPod unbind deployment pod
-func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy) error {
-	key, prefixKey := keyObj.KeyInDB, keyObj.PoolPrefix()
+func (p *FloatingIPPlugin) getReplicasOfDeployment(keyObj *util.KeyObj) (int, error) {
 	dp, err := p.DeploymentLister.Deployments(keyObj.Namespace).Get(keyObj.AppName)
 	replicas := 0
 	if err != nil {
 		if !metaErrs.IsNotFound(err) {
-			return err
+			return 0, err
 		}
 	} else {
 		replicas = int(*dp.Spec.Replicas)
 	}
+	return replicas, nil
+}
+
+// unbindDpPod unbind deployment pod
+func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy, when string) error {
 	// if ipam or secondIPAM failed, we can depend on resync to release ip
-	if err := unbindDpPod(key, prefixKey, p.ipam, p.dpLockPool, replicas, policy, "during unbinding pod"); err != nil {
+	if err := p.unbindDpPodForIPAM(keyObj, p.ipam, policy, when); err != nil {
 		return err
 	}
 	if p.enabledSecondIP(pod) {
-		return unbindDpPod(key, prefixKey, p.secondIPAM, p.dpLockPool, replicas, policy, "during unbinding pod")
+		return p.unbindDpPodForIPAM(keyObj, p.secondIPAM, policy, when)
 	}
 	return nil
 }
 
 // unbindDpPod unbind deployment pod
-func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keylock.Keylock, replicas int,
-	policy constant.ReleasePolicy, when string) error {
+func (p *FloatingIPPlugin) unbindDpPodForIPAM(keyObj *util.KeyObj, ipam floatingip.IPAM, policy constant.ReleasePolicy,
+	when string) error {
+	key, prefixKey := keyObj.KeyInDB, keyObj.PoolPrefix()
 	if policy == constant.ReleasePolicyPodDelete {
 		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
 	} else if policy == constant.ReleasePolicyNever {
@@ -63,14 +64,22 @@ func unbindDpPod(key, prefixKey string, ipam floatingip.IPAM, dpLockPool *keyloc
 		}
 		return nil
 	}
+	// TODO AppName stored in fip crd is a deployment name for replicasets pods
+	// which makes it impossible to support ReleasePolicyImmutable right now
+	replicas, err := p.getReplicasOfDeployment(keyObj)
+	if err != nil {
+		if !metaErrs.IsNotFound(err) {
+			return fmt.Errorf("unbind dp pod %s: %w", key, err)
+		}
+	}
 	if replicas == 0 {
 		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
 	}
 	// locks the pool name if it is a pool
 	// locks the deployment app name if it isn't a pool
-	lockIndex := dpLockPool.GetLockIndex([]byte(prefixKey))
-	dpLockPool.RawLock(lockIndex)
-	defer dpLockPool.RawUnlock(lockIndex)
+	lockIndex := p.dpLockPool.GetLockIndex([]byte(prefixKey))
+	p.dpLockPool.RawLock(lockIndex)
+	defer p.dpLockPool.RawUnlock(lockIndex)
 	fips, err := ipam.ByPrefix(prefixKey)
 	if err != nil {
 		return err
@@ -100,27 +109,9 @@ func (p *FloatingIPPlugin) getDpReplicas(keyObj *util.KeyObj) (int, bool, error)
 			// pool not found, get replicas from deployment
 		}
 	}
-	deployment, err := p.DeploymentLister.Deployments(keyObj.Namespace).Get(keyObj.AppName)
+	replicas, err := p.getReplicasOfDeployment(keyObj)
 	if err != nil {
-		return 0, false, err
+		return 0, false, fmt.Errorf("get replicas for %s: %w", keyObj.KeyInDB, err)
 	}
-	return int(*deployment.Spec.Replicas), false, nil
-}
-
-// getDPMap gets deployments from apiserver
-func (p *FloatingIPPlugin) getDPMap() (map[string]*appv1.Deployment, error) {
-	dps, err := p.DeploymentLister.List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-	key2App := make(map[string]*appv1.Deployment)
-	for i := range dps {
-		// ignore those don't have floating ip resource
-		if !p.hasResourceName(&dps[i].Spec.Template.Spec) {
-			continue
-		}
-		key2App[util.DeploymentName(dps[i])] = dps[i]
-	}
-	glog.V(5).Infof("%v", key2App)
-	return key2App, nil
+	return replicas, false, nil
 }
