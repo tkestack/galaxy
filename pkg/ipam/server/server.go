@@ -101,24 +101,26 @@ func (s *Server) init() error {
 	deploymentInformer := s.informerFactory.Apps().V1().Deployments()
 	s.crdInformerFactory = crdInformer.NewSharedInformerFactory(s.crdClient, 0)
 	poolInformer := s.crdInformerFactory.Galaxy().V1alpha1().Pools()
-	s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)
-	tappInformer := s.tappInformerFactory.Tappcontroller().V1().TApps()
 
 	pluginArgs := &schedulerplugin.PluginFactoryArgs{
 		PodLister:         podInformer.Lister(),
 		StatefulSetLister: statefulsetInformer.Lister(),
 		DeploymentLister:  deploymentInformer.Lister(),
-		TAppLister:        tappInformer.Lister(),
 		Client:            s.client,
 		TAppClient:        s.tappClient,
 		PodHasSynced:      podInformer.Informer().HasSynced,
-		TAppHasSynced:     tappInformer.Informer().HasSynced,
 		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
 		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 		PoolLister:        poolInformer.Lister(),
 		PoolSynced:        poolInformer.Informer().HasSynced,
 		CrdClient:         s.crdClient,
 		ExtClient:         s.extensionClient,
+	}
+	if s.tappClient != nil {
+		s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)
+		tappInformer := s.tappInformerFactory.Tappcontroller().V1().TApps()
+		pluginArgs.TAppLister = tappInformer.Lister()
+		pluginArgs.TAppHasSynced = tappInformer.Informer().HasSynced
 	}
 	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
 	if err != nil {
@@ -142,7 +144,9 @@ func (s *Server) Start() error {
 func (s *Server) Run() error {
 	go s.informerFactory.Start(s.stopChan)
 	go s.crdInformerFactory.Start(s.stopChan)
-	go s.tappInformerFactory.Start(s.stopChan)
+	if s.tappInformerFactory != nil {
+		go s.tappInformerFactory.Start(s.stopChan)
+	}
 	if err := crd.EnsureCRDCreated(s.extensionClient); err != nil {
 		return err
 	}
@@ -177,9 +181,12 @@ func (s *Server) initk8sClient() {
 	if err != nil {
 		glog.Fatalf("Error building float ip clientset: %v", err)
 	}
-	s.tappClient, err = tappVersioned.NewForConfig(cfg)
-	if err != nil {
-		glog.Fatalf("Error building tapp clientset: %v", err)
+	if _, err := s.extensionClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("tapps.tke.cloud.tencent.com",
+		v1.GetOptions{}); err == nil {
+		s.tappClient, err = tappVersioned.NewForConfig(cfg)
+		if err != nil {
+			glog.Fatalf("Error building tapp clientset: %v", err)
+		}
 	}
 	glog.Infof("connected to apiserver %v", cfg)
 

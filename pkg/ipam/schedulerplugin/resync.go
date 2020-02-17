@@ -47,13 +47,9 @@ func (p *FloatingIPPlugin) storeReady() bool {
 		glog.V(3).Infof("the deployment store has not been synced yet")
 		return false
 	}
-	if _, err := p.ExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("tapps.tke.cloud.tencent.com",
-		v1.GetOptions{}); err == nil {
-		//If TApp CRD created, waits for tapp
-		if !p.TAppHasSynced() {
-			glog.V(3).Infof("the tapp store has not been synced yet")
-			return false
-		}
+	if p.TAppHasSynced != nil && !p.TAppHasSynced() {
+		glog.V(3).Infof("the tapp store has not been synced yet")
+		return false
 	}
 	if !p.PoolSynced() {
 		glog.V(3).Infof("the pool store has not been synced yet")
