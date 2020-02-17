@@ -61,7 +61,7 @@ var (
 	neverAnnotation     = map[string]string{constant.ReleasePolicyAnnotation: constant.Never}
 
 	pod         = CreateStatefulSetPod("pod1-0", "ns1", immutableAnnotation)
-	podKey      = schedulerplugin_util.FormatKey(pod)
+	podKey, _   = schedulerplugin_util.FormatKey(pod)
 	node3Subnet = &net.IPNet{IP: net.ParseIP("10.49.27.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
 )
 
@@ -201,7 +201,8 @@ func TestFilterForDeployment(t *testing.T) {
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, deadPod, dp)
 	defer func() { stopChan <- struct{}{} }()
 	// pre-allocate ip in filter for deployment pod
-	podKey, deadPodKey := schedulerplugin_util.FormatKey(pod), schedulerplugin_util.FormatKey(deadPod)
+	podKey, _ := schedulerplugin_util.FormatKey(pod)
+	deadPodKey, _ := schedulerplugin_util.FormatKey(deadPod)
 	fip, err := fipPlugin.allocateIP(fipPlugin.ipam, deadPodKey.KeyInDB, node3, deadPod)
 	if err != nil {
 		t.Fatal(err)
@@ -328,7 +329,8 @@ func checkFilterCase(fipPlugin *FloatingIPPlugin, testCase filterCase, nodes []c
 func TestFilterForDeploymentIPPool(t *testing.T) {
 	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
 	pod2 := CreateDeploymentPod("dp2-abc-def", "ns2", poolAnnotation("pool1"))
-	podKey, pod2Key := schedulerplugin_util.FormatKey(pod), schedulerplugin_util.FormatKey(pod2)
+	podKey, _ := schedulerplugin_util.FormatKey(pod)
+	pod2Key, _ := schedulerplugin_util.FormatKey(pod2)
 	dp1, dp2 := createDeployment("dp", "ns1", pod.ObjectMeta, 1), createDeployment("dp2", "ns2", pod2.ObjectMeta, 1)
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2, dp1, dp2)
 	defer func() { stopChan <- struct{}{} }()
@@ -658,7 +660,7 @@ func (f *fakeCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssign
 // #lizard forgives
 func TestUnBind(t *testing.T) {
 	pod1 := CreateStatefulSetPod("pod1-1", "demo", map[string]string{})
-	keyObj := schedulerplugin_util.FormatKey(pod1)
+	keyObj, _ := schedulerplugin_util.FormatKey(pod1)
 	fipPlugin, stopChan, _ := createPluginTestNodes(t, pod1)
 	defer func() { stopChan <- struct{}{} }()
 	fipPlugin.cloudProvider = &fakeCloudProvider{}
@@ -715,7 +717,7 @@ func drainNode(fipPlugin *FloatingIPPlugin, subnet *net.IPNet, except net.IP) er
 
 func TestUnBindImmutablePod(t *testing.T) {
 	pod = CreateStatefulSetPodWithLabels("sts1-0", "ns1", map[string]string{"app": "sts1"}, immutableAnnotation)
-	podKey = schedulerplugin_util.FormatKey(pod)
+	podKey, _ = schedulerplugin_util.FormatKey(pod)
 	fipPlugin, stopChan, _ := createPluginTestNodes(t, pod, CreateStatefulSet(pod.ObjectMeta, 1))
 	defer func() { stopChan <- struct{}{} }()
 	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyImmutable, ""); err != nil {
@@ -736,7 +738,7 @@ func TestAllocateRecentIPs(t *testing.T) {
 	dp := createDeployment("dp", "ns1", pod.ObjectMeta, 1)
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, dp)
 	defer func() { stopChan <- struct{}{} }()
-	podKey := schedulerplugin_util.FormatKey(pod)
+	podKey, _ := schedulerplugin_util.FormatKey(pod)
 	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.PoolPrefix(), net.ParseIP("10.49.27.205"), constant.ReleasePolicyPodDelete, ""); err != nil {
 		t.Fatal(err)
 	}

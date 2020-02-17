@@ -206,7 +206,10 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 
 // #lizard forgives
 func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
-	keyObj := util.FormatKey(pod)
+	keyObj, err := util.FormatKey(pod)
+	if err != nil {
+		return nil, err
+	}
 	// first check if exists an already allocated ip for this pod
 	subnets, err := p.ipam.QueryRoutableSubnetByKey(keyObj.KeyInDB)
 	if err != nil {
@@ -361,7 +364,10 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 		// see https://github.com/kubernetes/kubernetes/pull/60332
 		return fmt.Errorf("pod which doesn't want floatingip have been sent to plugin")
 	}
-	keyObj := util.FormatKey(pod)
+	keyObj, err := util.FormatKey(pod)
+	if err != nil {
+		return err
+	}
 	ipInfo, err := p.allocateIP(p.ipam, keyObj.KeyInDB, args.Node, pod)
 	if err != nil {
 		return err
@@ -423,7 +429,10 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	p.resyncLock.RLock()
 	defer p.resyncLock.RUnlock()
 	glog.V(3).Infof("handle unbind pod %s", pod.Name)
-	keyObj := util.FormatKey(pod)
+	keyObj, err := util.FormatKey(pod)
+	if err != nil {
+		return err
+	}
 	key := keyObj.KeyInDB
 	if p.cloudProvider != nil {
 		ipInfo, err := p.ipam.First(key)
@@ -445,7 +454,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)
 	if keyObj.Deployment() {
-		return p.unbindDpPod(pod, keyObj, policy)
+		return p.unbindDpPod(pod, keyObj, policy, "during unbinding pod")
 	}
 	return p.unbindStsOrTappPod(pod, keyObj, policy)
 }
@@ -507,6 +516,9 @@ func (p *FloatingIPPlugin) enabledSecondIP(pod *corev1.Pod) bool {
 }
 
 func wantSecondIP(pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
 	labelMap := pod.GetLabels()
 	if labelMap == nil {
 		return false
