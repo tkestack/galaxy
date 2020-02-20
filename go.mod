@@ -6,39 +6,34 @@ require (
 	github.com/containernetworking/cni v0.6.0
 	github.com/containernetworking/plugins v0.6.0
 	github.com/coreos/go-iptables v0.4.3 // indirect
-	github.com/d2g/dhcp4client v1.0.0 // indirect
 	github.com/dbdd4us/qcloudapi-sdk-go v0.0.0-20190530123522-c8d9381de48c
 	github.com/docker/engine-api v0.4.0
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/emicklei/go-restful v2.10.0+incompatible
 	github.com/emicklei/go-restful-swagger12 v0.0.0-20170926063155-7524189396c6
 	github.com/godbus/dbus v4.1.0+incompatible
-	github.com/golang/groupcache v0.0.0-20191002201903-404acd9df4cc // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/google/uuid v1.1.1
-	github.com/j-keck/arping v1.0.0 // indirect
-	github.com/jinzhu/gorm v1.9.11 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
-	github.com/mattn/go-shellwords v1.0.5 // indirect
-	github.com/onsi/ginkgo v1.10.2
-	github.com/onsi/gomega v1.7.0
+	github.com/onsi/ginkgo v1.10.3
+	github.com/onsi/gomega v1.7.1
 	github.com/spf13/pflag v1.0.5
 	github.com/vishvananda/netlink v1.0.0
 	github.com/vishvananda/netns v0.0.0-20190625233234-7109fa855b0f
-	golang.org/x/crypto v0.0.0-20190510104115-cbcb75029529 // indirect
 	golang.org/x/net v0.0.0-20191011234655-491137f69257
 	golang.org/x/sys v0.0.0-20191010194322-b09406accb47
+	google.golang.org/genproto v0.0.0-20190404172233-64821d5d2107 // indirect
 	google.golang.org/grpc v1.24.0
+	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apiextensions-apiserver v0.0.0
 	k8s.io/apimachinery v0.0.0
-	k8s.io/client-go v11.0.0+incompatible
+	k8s.io/client-go v11.0.1-0.20191029005444-8e4128053008+incompatible
 	k8s.io/component-base v0.0.0
-	k8s.io/klog v0.3.1
-	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d // indirect
+	k8s.io/klog v1.0.0
 	k8s.io/kubernetes v1.16.0-alpha.0
-	k8s.io/utils v0.0.0-20191010214722-8d271d903fe4
-	tkestack.io/tapp v0.0.0-20191112021625-dbdaf5a5314c
+	k8s.io/utils v0.0.0-20191114200735-6ca3b61696b6
+	tkestack.io/tapp v1.0.0
 )
 
 replace (
