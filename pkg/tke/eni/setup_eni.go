@@ -111,7 +111,14 @@ func ensureENIsNetwrok(eniMetaMap map[string]*eniMeta) error {
 				return fmt.Errorf("failed to get eni %s index: %v", ifName, err)
 			}
 			ip := net.IPNet{IP: net.ParseIP(eniMeta.PrimaryIp), Mask: ips.ParseIPv4Mask(eniMeta.Mask)}
-			err = ensureENINetwork(ifName, devIndex, ip)
+			routeTable := devIndex
+			if routeTable == 0 {
+				// if eni is eth0, route table 0 is the primary route table consists of all routes
+				// we should never use route table 0
+				routeTable = 1
+			}
+			// TODO what if routeTable is currently used?
+			err = ensureENINetwork(ifName, routeTable, ip)
 			if err != nil {
 				return fmt.Errorf("failed to setup eni %s network: %v", ifName, err)
 			}
