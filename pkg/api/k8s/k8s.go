@@ -97,16 +97,18 @@ func GetPodFullName(podName, namespace string) string {
 var flagHostnameOverride = flag.String("hostname-override", "", "kubelet hostname override, if set, galaxy use this"+
 	" as node name to get node from apiserver")
 
-// copied from kubelet
-// GetHostname returns OS's hostname if 'hostnameOverride' is empty; otherwise, return 'hostnameOverride'.
+// GetHostname returns OS's hostname if 'hostnameOverride' is empty and environment 'MY_NODE_NAME'; otherwise, return 'hostnameOverride'.
 func GetHostname() string {
 	hostname := *flagHostnameOverride
 	if hostname == "" {
-		nodename, err := os.Hostname()
-		if err != nil {
-			glog.Fatalf("Couldn't determine hostname: %v", err)
+		hostname = os.Getenv("MY_NODE_NAME")
+		if hostname == "" {
+			nodename, err := os.Hostname()
+			if err != nil {
+				glog.Fatalf("Couldn't determine hostname: %v", err)
+			}
+			hostname = nodename
 		}
-		hostname = nodename
 	}
 	return strings.ToLower(strings.TrimSpace(hostname))
 }
