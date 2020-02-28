@@ -170,7 +170,7 @@ func parsePorts(pod *corev1.Pod, portMappingOn bool) []k8s.Port {
 					ContainerPort: port.ContainerPort,
 					Protocol:      string(port.Protocol),
 					PodName:       pod.Name,
-					HostIP:        pod.Status.HostIP,
+					HostIP:        port.HostIP,
 					PodIP:         pod.Status.PodIP,
 				}
 				ports = append(ports, tmp)
