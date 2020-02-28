@@ -157,7 +157,8 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 	return
 }
 
-func parsePorts(pod *corev1.Pod, portMappingOn bool) []k8s.Port {
+func parsePorts(pod *corev1.Pod) []k8s.Port {
+	_, portMappingOn := pod.Annotations[k8s.PortMappingPortsAnnotation]
 	var ports []k8s.Port
 	for _, container := range pod.Spec.Containers {
 		for _, port := range container.Ports {
@@ -258,14 +259,15 @@ func (g *Galaxy) setupIPtables() error {
 		if pod.Status.Phase != corev1.PodRunning {
 			continue
 		}
-		if pod.Annotations == nil || pod.Annotations[k8s.PortMappingPortsAnnotation] == "" {
-			continue
-		}
 		var ports []k8s.Port
-		if err := json.Unmarshal([]byte(pod.Annotations[k8s.PortMappingPortsAnnotation]), &ports); err != nil {
-			glog.Warningf("failed to unmarshal %s_%s annotation %s: %v", pod.Name, pod.Namespace,
-				k8s.PortMappingPortsAnnotation, err)
-			continue
+		if pod.Annotations != nil && pod.Annotations[k8s.PortMappingPortsAnnotation] != "" {
+			if err := json.Unmarshal([]byte(pod.Annotations[k8s.PortMappingPortsAnnotation]), &ports); err != nil {
+				glog.Warningf("failed to unmarshal %s_%s annotation %s: %v", pod.Name, pod.Namespace,
+					k8s.PortMappingPortsAnnotation, err)
+				continue
+			}
+		} else {
+			ports = parsePorts(pod)
 		}
 		// open ports on start
 		if err := g.pmhandler.OpenHostports(k8s.GetPodFullName(pod.Name, pod.Namespace), false, ports); err != nil {
@@ -292,7 +294,7 @@ func (g *Galaxy) setupIPtables() error {
 func (g *Galaxy) setupPortMapping(req *galaxyapi.PodRequest, containerID string, result *t020.Result,
 	pod *corev1.Pod) error {
 	_, portMappingOn := pod.Annotations[k8s.PortMappingPortsAnnotation]
-	req.Ports = parsePorts(pod, portMappingOn)
+	req.Ports = parsePorts(pod)
 	if len(req.Ports) == 0 {
 		return nil
 	}
