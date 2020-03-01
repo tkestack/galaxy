@@ -76,6 +76,8 @@ go.cni.%:
 
 .PHONY: go.local.build.%
 go.local.build.%: go.build.verify $(addprefix go.entry.build., $(addprefix %., $(BINS)))
+	@mkdir -p $(ROOT_DIR)/bin
+	@cp -R $(OUTPUT_DIR)/bin-$(ARCH)/* $(ROOT_DIR)/bin/
 	@echo "===========> End of building binaries"
 
 .PHONY: go.entry.build.%
