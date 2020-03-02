@@ -1,5 +1,9 @@
 #!/bin/bash
 
+set -o errexit
+set -o nounset
+set -o pipefail
+
 REGISTRY_PREFIX=${REGISTRY_PREFIX:-"tkestack"}
 PLATFORMS=${PLATFORMS:-"linux_amd64 linux_arm64"}
 

@@ -31,7 +31,7 @@ _DOCKER_BUILD_EXTRA_ARGS += --build-arg http_proxy=${HTTP_PROXY}
 endif
 ifdef HTTPS_PROXY
 _DOCKER_BUILD_EXTRA_ARGS += --build-arg https_proxy=${HTTPS_PROXY}
-else
+else ifdef HTTP_PROXY
 _DOCKER_BUILD_EXTRA_ARGS += --build-arg https_proxy=${HTTP_PROXY}
 endif
 
@@ -48,26 +48,18 @@ image.verify:
 	fi
 
 .PHONY: image.daemon.verify
-image.daemon.verify:
+image.daemon.verify: image.verify
 	$(eval PASS := $(shell $(DOCKER) version | grep -q -E 'Experimental: {5}true' && echo 0 || echo 1))
 	@if [ $(PASS) -ne 0 ]; then \
 		echo "Experimental features of Docker daemon is not enabled. Please add \"experimental\": true in '/etc/docker/daemon.json' and then restart Docker daemon."; \
 		exit 1; \
 	fi
 
-.PHONY: image.client.verify
-image.client.verify:
-	$(eval PASS := $(shell $(DOCKER) version | grep -q -E 'Experimental: {6}true' && echo 0 || echo 1))
-	@if [ $(PASS) -ne 0 ]; then \
-		echo "Experimental features of Docker client is not enabled. Please add \"experimental\": \"enabled\" in '$$HOME/.docker/config.json'"; \
-		exit 1; \
-	fi
-
 .PHONY: image.build
-image.build: image.verify image.daemon.verify go.build $(addprefix image.build., $(addprefix $(PLATFORM)., $(BINS)))
+image.build: image.verify go.build $(addprefix image.build., $(addprefix $(PLATFORM)., $(BINS)))
 
 .PHONY: image.build.multiarch
-image.build.multiarch: image.verify image.daemon.verify go.build.multiarch \
+image.build.multiarch: image.verify  go.build.multiarch \
 $(foreach p,$(PLATFORMS),$(addprefix image.build., $(addprefix $(p)., $(BINS))))
 
 .PHONY: image.build.%
@@ -82,15 +74,20 @@ image.build.%:
 	@cat $(ROOT_DIR)/build/docker/$(IMAGE)/Dockerfile\
 		| sed "s#BASE_IMAGE#$(BASE_IMAGE)#g" >$(TMP_DIR)/$(IMAGE)/Dockerfile
 	@cp -R $(OUTPUT_DIR)/bin-$(ARCH)/* $(TMP_DIR)/$(IMAGE)/
-	$(DOCKER) build --platform $(IMAGE_PLAT) $(_DOCKER_BUILD_EXTRA_ARGS) --pull \
-	-t $(REGISTRY_PREFIX)/$(IMAGE)-$(ARCH):$(VERSION) $(TMP_DIR)/$(IMAGE)
+	$(eval BUILD_SUFFIX := $(_DOCKER_BUILD_EXTRA_ARGS) --pull -t $(REGISTRY_PREFIX)/$(IMAGE)-$(ARCH):$(VERSION) $(TMP_DIR)/$(IMAGE))
+	@if [ $(shell $(GO) env GOARCH) != $(ARCH) ] ; then \
+		$(MAKE) image.daemon.verify ;\
+		$(DOCKER) build --platform $(IMAGE_PLAT) $(BUILD_SUFFIX) ; \
+	else \
+		$(DOCKER) build $(BUILD_SUFFIX) ; \
+	fi
 	@rm -rf $(TMP_DIR)/$(IMAGE)
 
 .PHONY: image.push
-image.push: image.verify image.daemon.verify go.build $(addprefix image.push., $(addprefix $(PLATFORM)., $(BINS)))
+image.push: image.verify go.build $(addprefix image.push., $(addprefix $(PLATFORM)., $(BINS)))
 
 .PHONY: image.push.multiarch
-image.push.multiarch: image.verify image.daemon.verify go.build.multiarch \
+image.push.multiarch: image.verify go.build.multiarch \
 $(foreach p,$(PLATFORMS),$(addprefix image.push., $(addprefix $(p)., $(BINS))))
 
 .PHONY: image.push.%
@@ -99,7 +96,8 @@ image.push.%: image.build.%
 	$(DOCKER) push $(REGISTRY_PREFIX)/$(IMAGE)-$(ARCH):$(VERSION)
 
 .PHONY: image.manifest.push
-image.manifest.push: image.verify image.daemon.verify image.client.verify go.build \
+image.manifest.push: export DOCKER_CLI_EXPERIMENTAL := enabled
+image.manifest.push: image.verify go.build \
 $(addprefix image.manifest.push., $(addprefix $(PLATFORM)., $(BINS)))
 
 .PHONY: image.manifest.push.%
@@ -121,9 +119,10 @@ image.manifest.remove.%:
 	@rm -rf ${HOME}/.docker/manifests/docker.io_$(REGISTRY_PREFIX)_$(IMAGE)-$(VERSION)
 
 .PHONY: image.manifest.push.multiarch
-image.manifest.push.multiarch: image.client.verify image.push.multiarch $(addprefix image.manifest.push.multiarch., $(BINS))
+image.manifest.push.multiarch: image.push.multiarch $(addprefix image.manifest.push.multiarch., $(BINS))
 
 .PHONY: image.manifest.push.multiarch.%
 image.manifest.push.multiarch.%:
 	@echo "===========> Pushing manifest $* $(VERSION) to $(REGISTRY_PREFIX) and then remove the local manifest list"
-	REGISTRY_PREFIX=$(REGISTRY_PREFIX) PLATFROMS="$(PLATFORMS)" IMAGE=$* VERSION=$(VERSION) $(ROOT_DIR)/build/lib/create-manifest.sh 
+	REGISTRY_PREFIX=$(REGISTRY_PREFIX) PLATFROMS="$(PLATFORMS)" IMAGE=$* VERSION=$(VERSION) DOCKER_CLI_EXPERIMENTAL=enabled \
+	$(ROOT_DIR)/build/lib/create-manifest.sh 
