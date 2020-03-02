@@ -4,33 +4,30 @@
 go get -d tkestack.io/galaxy
 cd $GOPATH/src/tkestack.io/galaxy
 
-# On mac
-hack/dockerbuild.sh
+# building all binaries
+make
+# OR
+make BINS="galxy galxy-ipam"
 
-# on linux
-hack/build.sh && hack/build-ipam.sh
+# building galxy-ipam
+make BINS="galxy-ipam"
 ```
 
 # Build Docker Image
 
 ```
-# building Galaxy and all CNI plugins
-hack/build-image-galaxy.sh
+# building all images
+make image
 
 # builing Galxy-ipam
-hack/build-image-ipam.sh
+make image BINS="galxy-ipam"
 ```
 
-# Build RPM
+# Build Docker Image for specified arch
 
 ```
-hack/build-rpm.sh
-```
-
-# Build a single binary
-
-```
-BINARY=cmd/galaxy hack/build-single.sh
+# building all images for linux_arm64
+make image.multiarch PLATFORMS="linux_arm64"
 ```
 
 # FAQ
