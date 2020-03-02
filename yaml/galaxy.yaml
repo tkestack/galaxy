@@ -33,6 +33,10 @@ rules:
   - customresourcedefinitions
   verbs:
   - "*"
+- apiGroups: ["networking.k8s.io"]
+  resources:
+  - networkpolicies
+  verbs: ["get", "list", "watch"]
 ---
 apiVersion: v1
 kind: ServiceAccount

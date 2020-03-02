@@ -1006,6 +1006,10 @@ func (p *PolicyManager) deletePodRuleByKeyword(pod *corev1.Pod, chain utiliptabl
 			glog.Warningf("unexpected pod %s_%s keyword %s rule line in %s: %s", pod.Name, pod.Namespace, keyword,
 				string(chain), podLine)
 		} else {
+			for i := range parts {
+				// trim comment double quotes
+				parts[i] = strings.Trim(parts[i], `"`)
+			}
 			if err := p.iptableHandle.DeleteRule(utiliptables.TableFilter, chain, parts[2:]...); err != nil {
 				glog.Warningf("failed to delete pod %s_%s keyword %s rule line in %s: %v", pod.Name, pod.Namespace,
 					keyword, string(chain), err)
