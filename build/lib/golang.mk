@@ -32,7 +32,7 @@ _DOCKER_RUN_EXTRA_ARGS += --env HTTP_PROXY=${HTTP_PROXY}
 endif
 ifdef HTTPS_PROXY
 _DOCKER_RUN_EXTRA_ARGS += --env HTTPS_PROXY=${HTTPS_PROXY}
-else
+else ifdef HTTP_PROXY
 _DOCKER_RUN_EXTRA_ARGS += --env HTTPS_PROXY=${HTTP_PROXY}
 endif
 
@@ -96,7 +96,7 @@ go.docker.build.%: image.daemon.verify
 	-v $(ROOT_DIR):/go/src/$(ROOT_PACKAGE) \
 	-v $(GOPATH)/pkg:/go/pkg -w /go/src/$(ROOT_PACKAGE) \
 	$(GO_IMAGE) /bin/sh -c 'PLATFORM=$* VERSION=$(VERSION) BINS="$(BINS)" make build'
-	@## Docker has a bug here. So client may remove image first and tag image
+	@## Docker has a bug here. So client may remove image first
 	@$(DOCKER) tag $(GO_IMAGE) $(GO_IMAGE)-$*
 	@$(DOCKER) rmi $(GO_IMAGE)
 
