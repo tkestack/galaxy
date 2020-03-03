@@ -18,7 +18,7 @@
 # Makefile helper functions for docker image
 
 DOCKER := docker
-DOCKER_SUPPORTED_VERSIONS ?= 18|19
+DOCKER_SUPPORTED_API_VERSION ?= 1.32
 
 REGISTRY_PREFIX ?= tkestack
 BASE_IMAGE = centos:7
@@ -41,9 +41,11 @@ endif
 
 .PHONY: image.verify
 image.verify:
-	$(eval PASS := $(shell $(DOCKER) -v | grep -q -E '\bversion ($(DOCKER_SUPPORTED_VERSIONS))\b' && echo 0 || echo 1))
-	@if [ $(PASS) -ne 0 ]; then \
-		echo "Unsupported docker version. Please make install one of the following supported version: '$(DOCKER_SUPPORTED_VERSIONS)'"; \
+	$(eval API_VERSION := $(shell $(DOCKER) version | grep -E 'API version: {6}[0-9]' | awk '{print $$3} END { if (NR==0) print 0}' ))
+	$(eval GREATER := $(shell echo "$(API_VERSION) > $(DOCKER_SUPPORTED_API_VERSION)" | bc))
+	@if [ $(GREATER) -ne 1 ]; then \
+		$(DOCKER) -v ;\
+		echo "Unsupported docker version. Docker API version should be greater than $(DOCKER_SUPPORTED_API_VERSION)"; \
 		exit 1; \
 	fi
 
