@@ -4,6 +4,9 @@ on:
   create:
     tags:
       - v*
+  push:
+    branches:
+      - branch-*
 
 jobs:
   release:
