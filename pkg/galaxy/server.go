@@ -137,6 +137,7 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 				}
 				err = g.setupPortMapping(req, req.ContainerID, result020, pod)
 				if err != nil {
+					g.cleanupPortMapping(req)
 					return
 				}
 				pod.Status.PodIP = result020.IP4.IP.IP.String()
@@ -396,7 +397,12 @@ func (g *Galaxy) cleanIPtables(containerID string) error {
 		return fmt.Errorf("failed to read ports %v", err)
 	}
 	if len(ports) != 0 {
-		g.pmhandler.CleanPortMapping(ports)
+		if err := g.pmhandler.CleanPortMapping(ports); err != nil {
+			return err
+		}
+		if err := k8s.RemovePortFile(containerID); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("delete port file for %s: %v", containerID, err)
+		}
 	}
 	return nil
 }
