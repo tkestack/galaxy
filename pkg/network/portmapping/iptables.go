@@ -76,17 +76,8 @@ func (h *PortMappingHandler) SetupPortMapping(ports []k8s.Port) error {
 		// can't know exactly all the mapped ports at any given time cause we
 		// don't hold a lock before executing iptables-restore. So we have to
 		// execute add or delete rules of KUBE-HOSTPORTS chain separately
-		args := []string{
-			"-m", "comment", "--comment",
-			fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
-			"-m", protocol, "-p", protocol,
-			"--dport", fmt.Sprintf("%d", containerPort.HostPort),
-		}
-		if containerPort.HostIP != "" {
-			args = append(args, "-d", containerPort.HostIP)
-		}
-		args = append(args, "-j", string(hostportChain))
-		kubeHostportsChainRules = append(kubeHostportsChainRules, args)
+		kubeHostportsChainRules = append(kubeHostportsChainRules,
+			hostPortChainRules(&containerPort, protocol, hostportChain, false))
 
 		containerPortChainRules(&containerPort, protocol, hostportChain, natRules)
 	}
@@ -105,6 +96,30 @@ func (h *PortMappingHandler) SetupPortMapping(ports []k8s.Port) error {
 		}
 	}
 	return nil
+}
+
+// hostPortChainRules returns KUBE-HOSTPORTS chain rules which redirects host port traffic to KUBE-HP-RFXFJMOOGLRQFWRB chain
+// -A KUBE-HOSTPORTS -p tcp -m comment --comment "hostport-74597bd87c-vpqh8 hostport 8080" -m tcp --dport 8080 -j KUBE-HP-RFXFJMOOGLRQFWRB
+func hostPortChainRules(containerPort *k8s.Port, protocol string, hostportChain utiliptables.Chain,
+	iptablesRestore bool) []string {
+	var args []string
+	if iptablesRestore {
+		args = []string{
+			"-A", string(kubeHostportsChain),
+			"-m", "comment", "--comment",
+			fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort)}
+	} else {
+		// if using iptables instead of iptables-restore to add rules, we should not add double quotas to comment.
+		args = []string{
+			"-m", "comment", "--comment",
+			fmt.Sprintf(`%s hostport %d`, containerPort.PodName, containerPort.HostPort)}
+	}
+	args = append(args, "-m", protocol, "-p", protocol, "--dport", fmt.Sprintf("%d", containerPort.HostPort))
+	if containerPort.HostIP != "" {
+		args = append(args, "-d", containerPort.HostIP)
+	}
+	args = append(args, "-j", string(hostportChain))
+	return args
 }
 
 func containerPortChainRules(containerPort *k8s.Port, protocol string, hostportChain utiliptables.Chain,
@@ -141,14 +156,8 @@ func (h *PortMappingHandler) CleanPortMapping(ports []k8s.Port) error {
 		// write chain name
 		writeLine(natChains, utiliptables.MakeChainLine(hostportChain))
 		writeLine(natRules, "-X", string(hostportChain))
-		args := []string{
-			"-m", "comment", "--comment",
-			fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
-			"-m", protocol, "-p", protocol,
-			"--dport", fmt.Sprintf("%d", containerPort.HostPort),
-			"-j", string(hostportChain),
-		}
-		kubeHostportsChainRules = append(kubeHostportsChainRules, args)
+		kubeHostportsChainRules = append(kubeHostportsChainRules,
+			hostPortChainRules(&containerPort, protocol, hostportChain, false))
 	}
 
 	writeLine(natRules, "COMMIT")
@@ -231,15 +240,7 @@ func (h *PortMappingHandler) SetupPortMappingForAllPods(ports []k8s.Port) error 
 		activeNATChains[hostportChain] = true
 
 		// Redirect to hostport chain
-		args := []string{
-			"-A", string(kubeHostportsChain),
-			"-m", "comment", "--comment",
-			fmt.Sprintf(`"%s hostport %d"`, containerPort.PodName, containerPort.HostPort),
-			"-m", protocol, "-p", protocol,
-			"--dport", fmt.Sprintf("%d", containerPort.HostPort),
-			"-j", string(hostportChain),
-		}
-		writeLine(natRules, args...)
+		writeLine(natRules, hostPortChainRules(&containerPort, protocol, hostportChain, true)...)
 
 		containerPortChainRules(&containerPort, protocol, hostportChain, natRules)
 	}
