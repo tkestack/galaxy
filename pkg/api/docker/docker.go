@@ -29,7 +29,6 @@ import (
 var (
 	// defaultTimeout is the default timeout of short running docker operations.
 	defaultTimeout = 2 * time.Minute
-	unixSocket     = "unix:///var/run/docker.sock"
 )
 
 type DockerInterface struct {
@@ -39,7 +38,7 @@ type DockerInterface struct {
 
 // NewDockerInterface creates an DockerInterface
 func NewDockerInterface() (*DockerInterface, error) {
-	dockerCli, err := getDockerClient(unixSocket)
+	dockerCli, err := getDockerClient("")
 	if err != nil {
 		return nil, err
 	}
