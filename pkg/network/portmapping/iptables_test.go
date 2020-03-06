@@ -125,9 +125,11 @@ COMMIT
 		t.Errorf("expect %s, real %s", expectTxt, buf.String())
 	}
 
-	h.CleanPortMapping([]k8s.Port{
+	if err := h.CleanPortMapping([]k8s.Port{
 		{PodName: "testrdma-2", HostPort: 57119, Protocol: "TCP", ContainerPort: 30008, PodIP: "192.168.0.1"},
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	buf = bytes.NewBuffer(nil)
 	fakeCli.SaveInto(utiliptables.TableNAT, buf)
 	expectTxt = `*nat

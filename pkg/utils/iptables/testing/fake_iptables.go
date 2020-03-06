@@ -225,20 +225,14 @@ func normalizeRule(rule string) (string, error) {
 }
 
 func (f *fakeIPTables) EnsureRule(position utiliptables.RulePosition, tableName utiliptables.Table, chainName utiliptables.Chain, args ...string) (bool, error) {
-	ruleArgs := make([]string, 0)
-	for _, arg := range args {
-		// quote args with internal spaces (like comments)
-		if strings.Index(arg, " ") >= 0 && !strings.HasPrefix(arg, `"`) {
-			arg = fmt.Sprintf("\"%s\"", arg)
-		}
-		ruleArgs = append(ruleArgs, arg)
-	}
-	return f.ensureRule(position, tableName, chainName, strings.Join(ruleArgs, " "))
+	normalizeArgs(args)
+	return f.ensureRule(position, tableName, chainName, strings.Join(args, " "))
 }
 
 func (f *fakeIPTables) DeleteRule(tableName utiliptables.Table, chainName utiliptables.Chain, args ...string) error {
 	_, chain, err := f.getChain(tableName, chainName)
 	if err == nil {
+		normalizeArgs(args)
 		rule := strings.Join(args, " ")
 		rule, err = normalizeRule(rule)
 		if err != nil {
@@ -401,4 +395,13 @@ func (f *fakeIPTables) ListRule(table utiliptables.Table, chain utiliptables.Cha
 
 func (f *fakeIPTables) EnsurePolicy(table utiliptables.Table, chain utiliptables.Chain, policy string) error {
 	return nil
+}
+
+func normalizeArgs(args []string) {
+	for i := range args {
+		// quote args with internal spaces (like comments)
+		if strings.Index(args[i], " ") >= 0 && !strings.HasPrefix(args[i], `"`) {
+			args[i] = fmt.Sprintf("\"%s\"", args[i])
+		}
+	}
 }
