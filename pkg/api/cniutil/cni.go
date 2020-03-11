@@ -318,7 +318,8 @@ func GetNetworkConfig(networkName, confdir string) ([]byte, error) {
 		if strings.HasSuffix(confFile, ".conflist") {
 			confList, err = libcni.ConfListFromFile(confFile)
 			if err != nil {
-				return nil, fmt.Errorf("Error loading CNI conflist file %s: %v", confFile, err)
+				glog.Warningf("Error loading CNI conflist file %s: %v", confFile, err)
+				continue
 			}
 
 			if confList.Name == networkName || networkName == "" {
@@ -328,7 +329,8 @@ func GetNetworkConfig(networkName, confdir string) ([]byte, error) {
 		} else {
 			conf, err := libcni.ConfFromFile(confFile)
 			if err != nil {
-				return nil, fmt.Errorf("Error loading CNI config file %s: %v", confFile, err)
+				glog.Warningf("Error loading CNI config file %s: %v", confFile, err)
+				continue
 			}
 
 			if conf.Network.Name == networkName || networkName == "" {
