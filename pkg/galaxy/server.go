@@ -239,7 +239,7 @@ func (g *Galaxy) getNetworkConf(networkName string) map[string]interface{} {
 	// “name” key matches this Network object’s name.
 	data, err := cniutil.GetNetworkConfig(networkName, g.NetworkConfDir)
 	if err != nil {
-		glog.Warningf("can't load network config %s from confdir %s", networkName, g.NetworkConfDir)
+		glog.Warningf("failed to load network config %s from confdir %s with error %v", networkName, g.NetworkConfDir, err)
 		return nil
 	}
 	var m map[string]interface{}

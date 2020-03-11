@@ -126,9 +126,6 @@ spec:
       - name: flannel-run
         hostPath:
           path: /run/flannel
-      - name: cni-bin-dir
-        hostPath:
-          path: /opt/cni/bin
       - name: galaxy-log
         emptyDir: {}
       - configMap:
