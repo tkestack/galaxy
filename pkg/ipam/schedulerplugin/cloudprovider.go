@@ -93,8 +93,8 @@ func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, meta *re
 			glog.Warningf("failed to unassign ip %s to %s: %v", obj.fip.IP.String(), key, err)
 			continue
 		}
-		// for tapp and sts pod, we need to clean its node attr
-		if err := ipam.ReserveIP(key, key, getAttr("")); err != nil {
+		// for tapp and sts pod, we need to clean its node attr and uid
+		if err := ipam.ReserveIP(key, key, getAttr("", "")); err != nil {
 			glog.Errorf("failed to reserve %s ip: %v", key, err)
 		}
 	}

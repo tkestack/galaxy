@@ -253,7 +253,7 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		reserveSubnet := subnetSet.List()[0]
 		subnetSet = sets.NewString(reserveSubnet)
 		if err := p.allocateDuringFilter(keyObj, p.enabledSecondIP(pod), reserve, isPoolSizeDefined, reserveSubnet,
-			policy); err != nil {
+			policy, string(pod.UID)); err != nil {
 			return nil, err
 		}
 	}
@@ -261,9 +261,9 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 }
 
 func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, enabledSecondIP, reserve, isPoolSizeDefined bool,
-	reserveSubnet string, policy constant.ReleasePolicy) error {
+	reserveSubnet string, policy constant.ReleasePolicy, uid string) error {
 	// we can't get nodename during filter, update attr on bind
-	attr := getAttr("")
+	attr := getAttr("", uid)
 	if reserve {
 		if err := allocateInSubnetWithKey(p.ipam, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr,
 			"filter"); err != nil {
@@ -312,9 +312,20 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 	}
 	started := time.Now()
 	policy := parseReleasePolicy(&pod.ObjectMeta)
-	attr := getAttr(nodeName)
+	attr := getAttr(nodeName, string(pod.UID))
 	if ipInfo != nil {
 		how = "reused"
+		// check if uid missmatch, if we delete a statfulset/tapp and creates a same name statfulset/tapp immediately,
+		// galaxy-ipam may receive bind event for new pod early than deleting event for old pod
+		var oldAttr Attr
+		if ipInfo.FIP.Attr != "" {
+			if err := json.Unmarshal([]byte(ipInfo.FIP.Attr), &oldAttr); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal attr %s", ipInfo.FIP.Attr)
+			}
+			if oldAttr.Uid != "" && oldAttr.Uid != string(pod.UID) {
+				return nil, fmt.Errorf("waiting for delete event of %s before reuse this ip", key)
+			}
+		}
 	} else {
 		subnet, err := p.queryNodeSubnet(nodeName)
 		if err != nil {
@@ -540,11 +551,15 @@ func parseReleasePolicy(meta *v1.ObjectMeta) constant.ReleasePolicy {
 
 // Attr stores attrs about this pod
 type Attr struct {
-	NodeName string // need this attr to send unassign request to cloud provider on resync
+	// NodeName is needed to send unassign request to cloud provider on resync
+	NodeName string
+	// uid is used to differentiate a deleting pod and a newly created pod with the same name such as statefulsets
+	// or tapp pod
+	Uid string
 }
 
-func getAttr(nodeName string) string {
-	obj := Attr{NodeName: nodeName}
+func getAttr(nodeName, uid string) string {
+	obj := Attr{NodeName: nodeName, Uid: uid}
 	attr, err := json.Marshal(obj)
 	if err != nil {
 		glog.Warningf("failed to marshal attr %+v: %v", obj, err)

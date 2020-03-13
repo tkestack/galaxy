@@ -314,7 +314,7 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, p
 		}
 	} else {
 		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta),
-			getAttr(pod.Spec.NodeName)); err != nil {
+			getAttr(pod.Spec.NodeName, string(pod.UID))); err != nil {
 			return err
 		}
 		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)
