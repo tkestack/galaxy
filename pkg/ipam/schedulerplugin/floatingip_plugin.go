@@ -152,15 +152,27 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 		return false, fmt.Errorf("configmap %s_%s doesn't have a key floatingips", p.conf.ConfigMapName,
 			p.conf.ConfigMapNamespace)
 	}
-	if err := ensureIPAMConf(p.ipam, &p.lastIPConf, val); err != nil {
+	var updated bool
+	if updated, err = ensureIPAMConf(p.ipam, &p.lastIPConf, val); err != nil {
 		return false, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
+	defer func() {
+		if !updated {
+			return
+		}
+		// If floatingip configuration changes, node's subnet may change either
+		p.nodeSubnetLock.Lock()
+		defer p.nodeSubnetLock.Unlock()
+		p.nodeSubnet = map[string]*net.IPNet{}
+	}()
 	secondVal, ok := cm.Data[p.conf.SecondFloatingIPKey]
 	if !ok {
 		return true, nil
 	}
-	if err = ensureIPAMConf(p.secondIPAM, &p.lastSecondIPConf, secondVal); err != nil {
+	if updated2, err := ensureIPAMConf(p.secondIPAM, &p.lastSecondIPConf, secondVal); err != nil {
 		return false, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
+	} else if updated2 {
+		updated = true
 	}
 	p.hasSecondIPConf.Store(p.lastSecondIPConf != "")
 	return true, nil

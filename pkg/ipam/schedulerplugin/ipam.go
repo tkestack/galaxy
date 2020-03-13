@@ -31,21 +31,21 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
-func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) error {
+func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) (bool, error) {
 	if newConf == *lastConf {
 		glog.V(4).Infof("[%s] floatingip configmap unchanged", ipam.Name())
-		return nil
+		return false, nil
 	}
 	var conf []*floatingip.FloatingIPPool
 	if err := json.Unmarshal([]byte(newConf), &conf); err != nil {
-		return fmt.Errorf("failed to unmarshal configmap val %s to floatingip config", newConf)
+		return false, fmt.Errorf("failed to unmarshal configmap val %s to floatingip config", newConf)
+	}
+	if err := ipam.ConfigurePool(conf); err != nil {
+		return false, fmt.Errorf("failed to configure pool: %v", err)
 	}
 	glog.Infof("[%s] updated floatingip conf from (%s) to (%s)", ipam.Name(), *lastConf, newConf)
 	*lastConf = newConf
-	if err := ipam.ConfigurePool(conf); err != nil {
-		return fmt.Errorf("failed to configure pool: %v", err)
-	}
-	return nil
+	return true, nil
 }
 
 func allocateInSubnet(ipam floatingip.IPAM, key string, subnet *net.IPNet, policy constant.ReleasePolicy, attr,
