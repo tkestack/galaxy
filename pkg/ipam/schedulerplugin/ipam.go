@@ -168,7 +168,7 @@ func (p *FloatingIPPlugin) reserveIP(old, new, reason string, enabledSecondIP bo
 }
 
 func reserveIP(key, prefixKey string, ipam floatingip.IPAM, reason string) error {
-	if err := ipam.ReserveIP(key, prefixKey, getAttr("")); err != nil {
+	if err := ipam.ReserveIP(key, prefixKey, getAttr("", "")); err != nil {
 		return fmt.Errorf("[%s] failed to reserve ip from pod %s to %s: %v", ipam.Name(), key, prefixKey, err)
 	}
 	glog.Infof("[%s] reserved ip from pod %s to %s, because %s", ipam.Name(), key, prefixKey, reason)
