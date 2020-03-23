@@ -87,18 +87,7 @@ func NewCrdIPAM(fipClient crd_clientset.Interface, ipType Type) IPAM {
 
 // ConfigurePool init floatingIP pool.
 func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
-	sort.Sort(FloatingIPSlice(floatIPs))
-	glog.V(3).Infof("floating ip config %v", floatIPs)
-	ci.FloatingIPs = floatIPs
-	floatingIPMap := make(map[string]*FloatingIPPool)
-	for _, fip := range ci.FloatingIPs {
-		if _, exist := floatingIPMap[fip.Key()]; exist {
-			glog.Warningf("Exists floating ip conf %v", fip)
-			continue
-		}
-		floatingIPMap[fip.Key()] = fip
-	}
-	if err := ci.freshCache(floatingIPMap); err != nil {
+	if err := ci.freshCache(floatIPs); err != nil {
 		return err
 	}
 	return nil
@@ -400,12 +389,22 @@ func (ci *crdIpam) Name() string {
 }
 
 // #lizard forgives
-func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIPPool) error {
+func (ci *crdIpam) freshCache(floatIPs []*FloatingIPPool) error {
 	glog.V(3).Infof("begin to fresh cache")
+	sort.Sort(FloatingIPSlice(floatIPs))
 	ips, err := ci.listFloatingIPs()
 	if err != nil {
 		glog.Errorf("fail to list floatIP %v", err)
 		return err
+	}
+	glog.V(3).Infof("floating ip config %v", floatIPs)
+	fipMap := make(map[string]*FloatingIPPool)
+	for _, fip := range floatIPs {
+		if _, exist := fipMap[fip.Key()]; exist {
+			glog.Warningf("Exists floating ip conf %v", fip)
+			continue
+		}
+		fipMap[fip.Key()] = fip
 	}
 	var deletingIPs []string
 	tmpCacheAllocated := make(map[string]*FloatingIPObj)
@@ -436,6 +435,7 @@ func (ci *crdIpam) freshCache(fipMap map[string]*FloatingIPPool) error {
 	}
 	ci.caches.cacheLock.Lock()
 	defer ci.caches.cacheLock.Unlock()
+	ci.FloatingIPs = floatIPs
 	ci.caches.allocatedFIPs = tmpCacheAllocated
 	if len(deletingIPs) > 0 {
 		for _, ip := range deletingIPs {
