@@ -147,18 +147,20 @@ func (c *PoolController) preAllocateIP(req *restful.Request, resp *restful.Respo
 		httputil.InternalError(resp, err)
 		return
 	}
-	subnets, err := c.IPAM.QueryRoutableSubnetByKey("")
+	subnetSet, err := c.IPAM.NodeSubnetsByKey("")
 	if err != nil {
 		httputil.InternalError(resp, err)
 		return
 	}
-	if len(subnets) == 0 {
+	if subnetSet.Len() == 0 {
 		resp.WriteHeaderAndEntity(http.StatusAccepted, UpdatePoolResp{
 			Resp: httputil.NewResp(http.StatusAccepted, "No enough IPs"), RealPoolSize: len(fips)})
 		return
 	}
 	j := 0
-	_, subnetIPNet, _ := net.ParseCIDR(subnets[j])
+	subnets := subnetSet.UnsortedList()
+	// TODO allocate in multiple subnets with distribution strategy?
+	_, subnetIPNet, _ := net.ParseCIDR(subnets[0])
 	if pool.Size <= len(fips) {
 		resp.WriteEntity(UpdatePoolResp{Resp: httputil.NewResp(http.StatusOK, ""), RealPoolSize: len(fips)})
 		return

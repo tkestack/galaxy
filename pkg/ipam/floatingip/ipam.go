@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"net"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 )
 
 var (
 	// ErrNoEnoughIP is error when there is no available floatingIPs
-	ErrNoEnoughIP     = fmt.Errorf("no enough available ips left")
-	ErrNoFIPForSubnet = fmt.Errorf("no fip configured for subnet")
+	ErrNoEnoughIP = fmt.Errorf("no enough available ips left")
 )
 
 // IPAM interface which implemented by kubernetes CRD
@@ -57,10 +57,10 @@ type IPAM interface {
 	ByPrefix(string) ([]FloatingIP, error)
 	// ByKeyword returns floatingIP set by a given keyword.
 	ByKeyword(string) ([]FloatingIP, error)
-	// RoutableSubnet returns node's net subnet.
-	RoutableSubnet(net.IP) *net.IPNet
-	// RoutableSubnet returns node's net subnet.
-	QueryRoutableSubnetByKey(key string) ([]string, error)
+	// NodeSubnets returns node's subnet.
+	NodeSubnet(net.IP) *net.IPNet
+	// NodeSubnetsByKey returns keys corresponding node subnets which has `key` as a prefix.
+	NodeSubnetsByKey(key string) (sets.String, error)
 	// Shutdown shutdowns IPAM.
 	Shutdown()
 	// Name returns IPAM's name.

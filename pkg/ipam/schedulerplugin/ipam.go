@@ -73,7 +73,7 @@ func allocateInSubnetWithKey(ipam floatingip.IPAM, oldK, newK, subnet string, po
 
 // #lizard forgives
 func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy constant.ReleasePolicy, replicas int,
-	isPoolSizeDefined bool) (subnets []string, reserve bool, err error) {
+	isPoolSizeDefined bool) (subnets sets.String, reserve bool, err error) {
 	if keyObj.Deployment() && policy != constant.ReleasePolicyPodDelete {
 		var ips []floatingip.FloatingIP
 		poolPrefix := keyObj.PoolPrefix()
@@ -96,7 +96,7 @@ func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy consta
 					}
 				}
 			} else {
-				unusedSubnetSet.Insert(ip.Subnet)
+				unusedSubnetSet.Insert(ip.Subnets.UnsortedList()...)
 			}
 		}
 		glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d, isPoolSizeDefined %v", keyObj,
@@ -110,10 +110,10 @@ func getAvailableSubnet(ipam floatingip.IPAM, keyObj *util.KeyObj, policy consta
 				keyObj.AppName, usedCount, replicas)
 		}
 		if unusedSubnetSet.Len() > 0 {
-			return unusedSubnetSet.List(), true, nil
+			return unusedSubnetSet, true, nil
 		}
 	}
-	if subnets, err = ipam.QueryRoutableSubnetByKey(""); err != nil {
+	if subnets, err = ipam.NodeSubnetsByKey(""); err != nil {
 		err = fmt.Errorf("failed to query allocatable subnet: %v", err)
 		return
 	}
@@ -181,7 +181,7 @@ func (p *FloatingIPPlugin) getNodeSubnetfromIPAM(node *corev1.Node) (*net.IPNet,
 	if nodeIP == nil {
 		return nil, errors.New("FloatingIPPlugin:UnknowNode")
 	}
-	if ipNet := p.ipam.RoutableSubnet(nodeIP); ipNet != nil {
+	if ipNet := p.ipam.NodeSubnet(nodeIP); ipNet != nil {
 		glog.V(4).Infof("node %s %s %s", node.Name, nodeIP.String(), ipNet.String())
 		p.nodeSubnet[node.Name] = ipNet
 		return ipNet, nil
