@@ -30,29 +30,11 @@ var (
 	ip    = net.IPv4(10, 173, 14, 1)
 )
 
-// TestMarshalFloatingIPPoolConf test FloatingIPPoolConf Marshal function.
-func TestMarshalFloatingIPPoolConf(t *testing.T) {
-	subnet := nets.NetsIPNet(ipNet)
-	conf := FloatingIPPoolConf{
-		RoutableSubnet: subnet,
-		IPs: []string{
-			"10.173.14.205",
-			"10.173.14.206~10.173.14.208",
-		},
-		Subnet:  subnet,
-		Gateway: ip,
-		Vlan:    2,
-	}
-	if _, err := json.Marshal(conf); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // TestMarshalFloatingIPPool test FloatingIPPool Marshal function.
 func TestMarshalFloatingIPPool(t *testing.T) {
 	ipr := nets.ParseIPRange("10.173.14.206~10.173.14.208")
 	fip := FloatingIPPool{
-		RoutableSubnet: ipNet,
+		NodeSubnets: []*net.IPNet{ipNet},
 		SparseSubnet: nets.SparseSubnet{
 			IPRanges: []nets.IPRange{nets.IPtoIPRange(net.ParseIP("10.173.14.205")), *ipr},
 			Gateway:  net.ParseIP("10.173.14.1"),
@@ -60,8 +42,11 @@ func TestMarshalFloatingIPPool(t *testing.T) {
 			Vlan:     2,
 		},
 	}
-	if _, err := json.Marshal(&fip); err != nil {
+	if data, err := json.Marshal(&fip); err != nil {
 		t.Fatal(err)
+	} else if string(data) != `{"nodeSubnets":["10.173.14.0/24"],"ips":["10.173.14.205","10.173.14.206~10.173.14.208"]`+
+		`,"subnet":"10.173.14.0/24","gateway":"10.173.14.1","vlan":2}` {
+		t.Fatal(string(data))
 	}
 }
 
@@ -76,7 +61,10 @@ func TestUnmarshalFloatingIPPool(t *testing.T) {
 	if err := json.Unmarshal([]byte(confStr), &fip); err != nil {
 		t.Fatal(err)
 	}
-	if fip.RoutableSubnet.String() != ipNet.String() {
+	if len(fip.NodeSubnets) != 1 {
+		t.Fatal()
+	}
+	if fip.NodeSubnets[0].String() != ipNet.String() {
 		t.Fatal()
 	}
 	if fip.IPNet().String() != ipNet.String() {
@@ -103,8 +91,9 @@ func TestUnmarshalFloatingIPPool(t *testing.T) {
 	if fip.IPRanges[1].Last.String() != "10.173.14.208" {
 		t.Fatal()
 	}
-	if err := json.Unmarshal([]byte(confStr), &fip); err == nil {
-		t.Fatal(wrongStr)
+	if err := json.Unmarshal([]byte(wrongStr), &fip); err == nil ||
+		err.Error() != "ip range 10.173.14.205 and 10.173.14.206~10.173.14.208 can be merge to one or has wrong order" {
+		t.Fatal(err)
 	}
 }
 

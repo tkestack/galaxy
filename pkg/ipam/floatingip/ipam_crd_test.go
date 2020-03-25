@@ -34,6 +34,22 @@ import (
 const (
 	pod1CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod1","attribute":"212","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`
 	pod2CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.216","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod2","attribute":"333","policy":1,"subnet":"10.49.27.0/24","updateTime":null}}`
+
+	policy = constant.ReleasePolicyPodDelete
+)
+
+var (
+	mask24         = net.IPv4Mask(255, 255, 255, 0)
+	mask32         = net.IPv4Mask(255, 255, 255, 255)
+	node2IPNet     = &net.IPNet{IP: net.ParseIP("10.173.13.0"), Mask: mask24}
+	node2FIPSubnet = node2IPNet
+	node3IPNet     = &net.IPNet{IP: net.ParseIP("10.180.1.2"), Mask: mask32}
+	node3FIPSubnet = &net.IPNet{IP: net.ParseIP("10.180.154.0"), Mask: mask24}
+	node4IPNet     = &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: mask32}
+	node4FIPSubnet = node3FIPSubnet
+	node5IPNet1    = &net.IPNet{IP: net.ParseIP("10.0.1.0"), Mask: mask24}
+	node5IPNet2    = &net.IPNet{IP: net.ParseIP("10.0.2.0"), Mask: mask24}
+	node5FIPSubnet = &net.IPNet{IP: net.ParseIP("10.0.70.0"), Mask: mask24}
 )
 
 func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
@@ -54,10 +70,10 @@ func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
 func TestConfigurePool(t *testing.T) {
 	now := time.Now()
 	ipam := createTestCrdIPAM(t)
-	if len(ipam.FloatingIPs) != 4 {
+	if len(ipam.FloatingIPs) != 5 {
 		t.Fatal(len(ipam.FloatingIPs))
 	}
-	if len(ipam.caches.unallocatedFIPs) != 14 {
+	if len(ipam.caches.unallocatedFIPs) != 33 {
 		t.Fatal(len(ipam.caches.unallocatedFIPs))
 	}
 	if len(ipam.caches.allocatedFIPs) != 0 {
@@ -89,8 +105,9 @@ func TestCRDAllocateSpecificIP(t *testing.T) {
 		t.Fatal(allocated.updateTime)
 	}
 	allocated.updateTime = time.Time{}
-	if `&{key:pod1 att:212 policy:2 subnet:10.49.27.0/24 updateTime:{wall:0 ext:0 loc:<nil>}}` != fmt.Sprintf("%+v", allocated) {
-		t.Fatal(allocated)
+	if `&{key:pod1 att:212 policy:2 subnetSet:map[10.49.27.0/24:{}] updateTime:{wall:0 ext:0 loc:<nil>}}` !=
+		fmt.Sprintf("%+v", allocated) {
+		t.Fatal(fmt.Sprintf("%+v", allocated))
 	}
 	if err := checkFIP(ipam, pod1CRD); err != nil {
 		t.Fatal(err)
@@ -295,4 +312,86 @@ func checkByIP(ipam IPAM, checkIP, expectKey string, expectAttr *string) error {
 		}
 	}
 	return nil
+}
+
+func TestAllocateInSubnet(t *testing.T) {
+	ipam := createTestCrdIPAM(t)
+	testCases := []struct {
+		nodeIPNet       *net.IPNet
+		expectFIPSubnet *net.IPNet
+	}{
+		{nodeIPNet: node2IPNet, expectFIPSubnet: node2FIPSubnet},
+		{nodeIPNet: node3IPNet, expectFIPSubnet: node3FIPSubnet},
+		{nodeIPNet: node4IPNet, expectFIPSubnet: node4FIPSubnet},
+		{nodeIPNet: node5IPNet1, expectFIPSubnet: node5FIPSubnet},
+		{nodeIPNet: node5IPNet2, expectFIPSubnet: node5FIPSubnet},
+	}
+	for i := range testCases {
+		testCase := testCases[i]
+		allocatedIP, err := ipam.AllocateInSubnet("pod1", testCase.nodeIPNet, policy, "")
+		if err != nil {
+			t.Fatalf("test case %d: %v", i, err)
+		}
+		if !testCase.expectFIPSubnet.Contains(allocatedIP) {
+			t.Fatalf("test case %d, expect %s contains allocatedIP %s", i, testCase.expectFIPSubnet, allocatedIP)
+		}
+	}
+	// test can't find available ip
+	_, noConfigNode, _ := net.ParseCIDR("10.173.14.0/24")
+	if _, err := ipam.AllocateInSubnet("pod1-1", noConfigNode, policy, ""); err == nil || err != ErrNoEnoughIP {
+		t.Fatalf("should fail because of ErrNoEnoughIP: %v", err)
+	}
+}
+
+func TestAllocateInSubnetWithKey(t *testing.T) {
+	ipam := createTestCrdIPAM(t)
+	allocatedIP, err := ipam.AllocateInSubnet("pod2", node2IPNet, policy, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ipam.AllocateInSubnetWithKey("pod2", "pod3", node2IPNet.String(), policy, ""); err != nil {
+		t.Fatal(err)
+	}
+	ipInfo, err := ipam.First("pod2")
+	if err != nil || ipInfo != nil {
+		t.Errorf("err %v ipInfo %v", err, ipInfo)
+	}
+
+	ipInfo, err = ipam.First("pod3")
+	if err != nil || ipInfo.IPInfo.IP == nil || ipInfo.IPInfo.IP.IP.String() != allocatedIP.String() {
+		t.Errorf("err %v ipInfo %v", err, ipInfo)
+	}
+}
+
+func TestNodeSubnet(t *testing.T) {
+	ipam := createTestCrdIPAM(t)
+	testCases := []struct {
+		nodeIP string
+		expect *net.IPNet
+	}{
+		{nodeIP: "10.173.13.1", expect: node2IPNet},
+		{nodeIP: "10.180.1.2", expect: node3IPNet},
+		{nodeIP: "10.180.1.3", expect: node4IPNet},
+		{nodeIP: "10.180.1.4", expect: nil},
+		{nodeIP: "10.0.1.0", expect: node5IPNet1},
+		{nodeIP: "10.0.2.4", expect: node5IPNet2},
+		{nodeIP: "", expect: nil},
+	}
+	for i := range testCases {
+		testCase := testCases[i]
+		subnet := ipam.NodeSubnet(net.ParseIP(testCase.nodeIP))
+		var fail bool
+		if subnet == nil {
+			if testCase.expect != nil {
+				fail = true
+			}
+		} else {
+			if testCase.expect == nil || testCase.expect.String() != subnet.String() {
+				fail = true
+			}
+		}
+		if fail {
+			t.Fatalf("test case %d, expect %v got %v", i, testCase.expect, subnet)
+		}
+	}
 }

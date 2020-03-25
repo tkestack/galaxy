@@ -23,13 +23,14 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 // FloatingIP defines a floating ip
 type FloatingIP struct {
 	Key       string
-	Subnet    string // node subnet, not container ip's subnet
+	Subnets   sets.String // node subnet, not container ip's subnet
 	Attr      string
 	IP        net.IP
 	Policy    uint16
@@ -38,14 +39,16 @@ type FloatingIP struct {
 
 // FloatingIPPool is FloatingIPPool structure.
 type FloatingIPPool struct {
-	RoutableSubnet *net.IPNet // the node subnet
+	NodeSubnets []*net.IPNet // the node subnets
 	nets.SparseSubnet
 	sync.RWMutex
 }
 
 // FloatingIPPoolConf is FloatingIP config structure.
 type FloatingIPPoolConf struct {
-	RoutableSubnet *nets.IPNet `json:"routableSubnet"` // the node subnet
+	NodeSubnets []*nets.IPNet `json:"nodeSubnets"` // the node subnets
+	// Deprecated, use NodeSubnets instead
+	RoutableSubnet *nets.IPNet `json:"routableSubnet,omitempty"` // the node subnet
 	IPs            []string    `json:"ips"`
 	Subnet         *nets.IPNet `json:"subnet"` // the vip subnet
 	Gateway        net.IP      `json:"gateway"`
@@ -55,7 +58,9 @@ type FloatingIPPoolConf struct {
 // MarshalJSON can marshal FloatingIPPoolConf to byte slice.
 func (fip *FloatingIPPool) MarshalJSON() ([]byte, error) {
 	conf := FloatingIPPoolConf{}
-	conf.RoutableSubnet = nets.NetsIPNet(fip.RoutableSubnet)
+	for i := range fip.NodeSubnets {
+		conf.NodeSubnets = append(conf.NodeSubnets, nets.NetsIPNet(fip.NodeSubnets[i]))
+	}
 	conf.Subnet = nets.NetsIPNet(fip.IPNet())
 	conf.Gateway = fip.Gateway
 	conf.Vlan = fip.Vlan
@@ -72,11 +77,23 @@ func (fip *FloatingIPPool) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &conf); err != nil {
 		return err
 	}
+	if conf.RoutableSubnet == nil && len(conf.NodeSubnets) == 0 {
+		return fmt.Errorf("node subnet is empty")
+	}
+	fip.NodeSubnets = []*net.IPNet{}
 	if conf.RoutableSubnet != nil {
 		ipNet := conf.RoutableSubnet.ToIPNet()
-		fip.RoutableSubnet = &net.IPNet{IP: ipNet.IP.Mask(ipNet.Mask), Mask: ipNet.Mask}
+		fip.NodeSubnets = append(fip.NodeSubnets, &net.IPNet{IP: ipNet.IP.Mask(ipNet.Mask), Mask: ipNet.Mask})
 	} else {
-		return fmt.Errorf("routable subnet is empty")
+		m := map[string]string{}
+		for i := range conf.NodeSubnets {
+			ipNet := conf.NodeSubnets[i].ToIPNet()
+			ipNet.IP = ipNet.IP.Mask(ipNet.Mask)
+			if _, ok := m[ipNet.String()]; !ok {
+				fip.NodeSubnets = append(fip.NodeSubnets, ipNet)
+				m[ipNet.String()] = ""
+			}
+		}
 	}
 	if conf.Gateway != nil {
 		fip.Gateway = conf.Gateway
@@ -89,6 +106,7 @@ func (fip *FloatingIPPool) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("subnet is empty")
 	}
 	fip.Vlan = conf.Vlan
+	fip.IPRanges = []nets.IPRange{}
 	for _, str := range conf.IPs {
 		ipr := nets.ParseIPRange(str)
 		if ipr != nil {
@@ -123,11 +141,6 @@ func (fip *FloatingIPPool) String() string {
 		return "<nil>"
 	}
 	return string(data)
-}
-
-// Key transform floatingIP's subnet to string.
-func (fip *FloatingIPPool) Key() string {
-	return fip.RoutableSubnet.String()
 }
 
 // Contains judge whether FloatingIP struct contains a given ip.
@@ -247,7 +260,5 @@ func (s FloatingIPSlice) Swap(i, j int) {
 
 // Less compares two given ip.
 func (s FloatingIPSlice) Less(i, j int) bool {
-	i1, _ := nets.FirstAndLastIP(s[i].RoutableSubnet)
-	j1, _ := nets.FirstAndLastIP(s[j].RoutableSubnet)
-	return i1 < j1
+	return nets.IPToInt(s[i].Gateway) < nets.IPToInt(s[j].Gateway)
 }

@@ -48,10 +48,9 @@ const (
 
 // IPInfo is the container ip info
 type IPInfo struct {
-	IP             *nets.IPNet `json:"ip"`
-	Vlan           uint16      `json:"vlan"`
-	Gateway        net.IP      `json:"gateway"`
-	RoutableSubnet *nets.IPNet `json:"routable_subnet"` //the node subnet
+	IP      *nets.IPNet `json:"ip"`
+	Vlan    uint16      `json:"vlan"`
+	Gateway net.IP      `json:"gateway"`
 }
 
 // FormatIPInfo formats ipInfos as extended CNI Args annotation value

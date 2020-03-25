@@ -223,14 +223,14 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		return nil, err
 	}
 	// first check if exists an already allocated ip for this pod
-	subnets, err := p.ipam.QueryRoutableSubnetByKey(keyObj.KeyInDB)
+	subnets, err := p.ipam.NodeSubnetsByKey(keyObj.KeyInDB)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query by key %s: %v", keyObj.KeyInDB, err)
 	}
 	if len(subnets) > 0 {
 		// assure second IPAM gets the same subnets
 		glog.V(3).Infof("%s already have an allocated ip in subnets %v", keyObj.KeyInDB, subnets)
-		return sets.NewString(subnets...), nil
+		return subnets, nil
 	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)
 	var replicas int
@@ -245,17 +245,16 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		p.dpLockPool.RawLock(lockIndex)
 		defer p.dpLockPool.RawUnlock(lockIndex)
 	}
-	subnets, reserve, err := getAvailableSubnet(p.ipam, keyObj, policy, replicas, isPoolSizeDefined)
+	subnetSet, reserve, err := getAvailableSubnet(p.ipam, keyObj, policy, replicas, isPoolSizeDefined)
 	if err != nil {
 		return nil, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
 	}
-	subnetSet := sets.NewString(subnets...)
 	if p.enabledSecondIP(pod) {
 		secondSubnets, reserve2, err := getAvailableSubnet(p.secondIPAM, keyObj, policy, replicas, isPoolSizeDefined)
 		if err != nil {
 			return nil, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
 		}
-		subnetSet = subnetSet.Intersection(sets.NewString(secondSubnets...))
+		subnetSet = subnetSet.Intersection(secondSubnets)
 		reserve = reserve || reserve2
 	}
 	if (reserve || isPoolSizeDefined) && subnetSet.Len() > 0 {
