@@ -145,10 +145,10 @@ spec:
           defaultMode: 420
           name: cni-etc
         name: cni-etc
-       - name: docker-sock
-         # in case of docker restart, /run/docker.sock may change, we have to mount the /run directory
-         hostPath:
-           path: /run/
+      - name: docker-sock
+        # in case of docker restart, /run/docker.sock may change, we have to mount the /run directory
+        hostPath:
+          path: /run/
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -161,10 +161,10 @@ data:
   galaxy.json: |
     {
       "NetworkConf":[
-        {"type":"tke-route-eni","eni":"eth1","routeTable":1},
-        {"type":"galaxy-flannel", "delegate":{"type":"galaxy-veth"},"subnetFile":"/run/flannel/subnet.env"},
-        {"type":"galaxy-k8s-vlan", "device":"eth1", "default_bridge_name": "br0"},
-        {"type": "galaxy-k8s-sriov", "device": "eth1", "vf_num": 10}
+        {"name":"tke-route-eni","type":"tke-route-eni","eni":"eth1","routeTable":1},
+        {"name":"galaxy-flannel","type":"galaxy-flannel", "delegate":{"type":"galaxy-veth"},"subnetFile":"/run/flannel/subnet.env"},
+        {"name":"galaxy-k8s-vlan","type":"galaxy-k8s-vlan", "device":"eth1", "default_bridge_name": "br0"},
+        {"name":"galaxy-k8s-sriov","type": "galaxy-k8s-sriov", "device": "eth1", "vf_num": 10}
       ],
       "DefaultNetworks": ["galaxy-flannel"]
     }
