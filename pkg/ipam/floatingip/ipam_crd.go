@@ -360,27 +360,33 @@ func (ci *crdIpam) freshCache(floatIPs []*FloatingIPPool) error {
 		return err
 	}
 	glog.V(3).Infof("floating ip config %v", floatIPs)
+	nodeSubnets := make([]sets.String, len(floatIPs))
+	for i, fipConf := range floatIPs {
+		subnetSet := sets.NewString()
+		for i := range fipConf.NodeSubnets {
+			subnetSet.Insert(fipConf.NodeSubnets[i].String())
+		}
+		nodeSubnets[i] = subnetSet
+	}
 	var deletingIPs []string
 	tmpCacheAllocated := make(map[string]*FloatingIPObj)
 	//delete no longer available floating ips stored in etcd first
 	for _, ip := range ips.Items {
 		netIP := net.ParseIP(ip.Name)
 		found := false
-		for _, fipConf := range floatIPs {
-			if fipConf.IPNet().Contains(netIP) {
-				if fipConf.Contains(netIP) {
-					found = true
-					//ip in config, insert it into cache
-					tmpFip := &FloatingIPObj{
-						key:        ip.Spec.Key,
-						att:        ip.Spec.Attribute,
-						policy:     ip.Spec.Policy,
-						subnetSet:  sets.NewString(strings.Split(ip.Spec.Subnet, ",")...),
-						updateTime: ip.Spec.UpdateTime.Time,
-					}
-					tmpCacheAllocated[ip.Name] = tmpFip
-					break
+		for i, fipConf := range floatIPs {
+			if fipConf.IPNet().Contains(netIP) && fipConf.Contains(netIP) {
+				found = true
+				//ip in config, insert it into cache
+				tmpFip := &FloatingIPObj{
+					key:        ip.Spec.Key,
+					att:        ip.Spec.Attribute,
+					policy:     ip.Spec.Policy,
+					subnetSet:  nodeSubnets[i],
+					updateTime: ip.Spec.UpdateTime.Time,
 				}
+				tmpCacheAllocated[ip.Name] = tmpFip
+				break
 			}
 		}
 		if !found {
@@ -404,11 +410,8 @@ func (ci *crdIpam) freshCache(floatIPs []*FloatingIPPool) error {
 	now := time.Now()
 	// fresh unallocated floatIP
 	tmpCacheUnallocated := make(map[string]*FloatingIPObj)
-	for _, fipConf := range floatIPs {
-		subnetSet := sets.NewString()
-		for i := range fipConf.NodeSubnets {
-			subnetSet.Insert(fipConf.NodeSubnets[i].String())
-		}
+	for i, fipConf := range floatIPs {
+		subnetSet := nodeSubnets[i]
 		for _, ipr := range fipConf.IPRanges {
 			first := nets.IPToInt(ipr.First)
 			last := nets.IPToInt(ipr.Last)
