@@ -38,7 +38,7 @@ endif
 # set the version number. you should not need to do this
 # for the majority of scenarios.
 ifeq ($(origin VERSION), undefined)
-VERSION := $(shell cat VERSION)
+VERSION := $(shell git describe --dirty --always --tags | sed 's/-/./g')
 endif
 GIT_COMMIT:=$(shell git log --first-parent -1 --oneline | awk '{print $$1}')
 
