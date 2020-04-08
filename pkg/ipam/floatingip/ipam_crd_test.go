@@ -41,6 +41,7 @@ const (
 
 var (
 	mask24         = net.IPv4Mask(255, 255, 255, 0)
+	mask26         = net.IPv4Mask(255, 255, 255, 0xC0)
 	mask32         = net.IPv4Mask(255, 255, 255, 255)
 	node1IPNet     = &net.IPNet{IP: net.ParseIP("10.49.27.0"), Mask: mask24}
 	node1FIPSubnet = node1IPNet
@@ -53,9 +54,11 @@ var (
 	node5IPNet1    = &net.IPNet{IP: net.ParseIP("10.0.1.0"), Mask: mask24}
 	node5IPNet2    = &net.IPNet{IP: net.ParseIP("10.0.2.0"), Mask: mask24}
 	node5FIPSubnet = &net.IPNet{IP: net.ParseIP("10.0.70.0"), Mask: mask24}
-	node6IPNet1    = node1IPNet
+	node6IPNet1    = &net.IPNet{IP: net.ParseIP("10.49.28.0"), Mask: mask26}
 	node6IPNet2    = &net.IPNet{IP: net.ParseIP("10.49.29.0"), Mask: mask24}
 	node6FIPSubnet = &net.IPNet{IP: net.ParseIP("10.0.80.0"), Mask: mask24}
+	node7IPNet     = node6IPNet1
+	node7FIPSubnet = &net.IPNet{IP: net.ParseIP("10.0.81.0"), Mask: mask24}
 )
 
 func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
@@ -76,10 +79,10 @@ func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
 func TestConfigurePool(t *testing.T) {
 	now := time.Now()
 	ipam := createTestCrdIPAM(t)
-	if len(ipam.FloatingIPs) != 6 {
+	if len(ipam.FloatingIPs) != 7 {
 		t.Fatal(len(ipam.FloatingIPs))
 	}
-	if len(ipam.caches.unallocatedFIPs) != 36 {
+	if len(ipam.caches.unallocatedFIPs) != 39 {
 		t.Fatal(len(ipam.caches.unallocatedFIPs))
 	}
 	if len(ipam.caches.allocatedFIPs) != 0 {
@@ -376,13 +379,15 @@ func TestNodeSubnet(t *testing.T) {
 		nodeIP string
 		expect *net.IPNet
 	}{
+		{nodeIP: "10.49.27.0", expect: node1IPNet},
 		{nodeIP: "10.173.13.1", expect: node2IPNet},
 		{nodeIP: "10.180.1.2", expect: node3IPNet},
 		{nodeIP: "10.180.1.3", expect: node4IPNet},
 		{nodeIP: "10.180.1.4", expect: nil},
 		{nodeIP: "10.0.1.0", expect: node5IPNet1},
 		{nodeIP: "10.0.2.4", expect: node5IPNet2},
-		{nodeIP: "10.49.27.254", expect: node6IPNet1},
+		{nodeIP: "10.49.28.63", expect: node6IPNet1},
+		{nodeIP: "10.49.28.64", expect: nil},
 		{nodeIP: "10.49.29.3", expect: node6IPNet2},
 		{nodeIP: "", expect: nil},
 	}
@@ -409,23 +414,23 @@ func TestAllocateInMultipleSubnet(t *testing.T) {
 	ipam := createTestCrdIPAM(t)
 	nodeSubnets := sets.NewString()
 	for {
-		allocatedIP, err := ipam.AllocateInSubnet("pod1", node1IPNet, policy, "")
+		allocatedIP, err := ipam.AllocateInSubnet("pod1", node7IPNet, policy, "")
 		if err != nil {
 			if err == ErrNoEnoughIP {
 				break
 			}
 			t.Fatal(err)
 		}
-		if !node1FIPSubnet.Contains(allocatedIP) && !node6FIPSubnet.Contains(allocatedIP) {
-			t.Fatalf("expect %s or %s contains allocatedIP %s", node1FIPSubnet, node6FIPSubnet, allocatedIP)
+		if !node7FIPSubnet.Contains(allocatedIP) && !node6FIPSubnet.Contains(allocatedIP) {
+			t.Fatalf("expect %s or %s contains allocatedIP %s", node7FIPSubnet, node6FIPSubnet, allocatedIP)
 		}
-		if node1FIPSubnet.Contains(allocatedIP) {
-			nodeSubnets.Insert(node1FIPSubnet.String())
+		if node7FIPSubnet.Contains(allocatedIP) {
+			nodeSubnets.Insert(node7FIPSubnet.String())
 		} else {
 			nodeSubnets.Insert(node6FIPSubnet.String())
 		}
 	}
 	if nodeSubnets.Len() != 2 {
-		t.Fatalf("expect allocated ip both from %s and %s", node1FIPSubnet, node6FIPSubnet)
+		t.Fatalf("expect allocated ip both from %s and %s", node7FIPSubnet, node6FIPSubnet)
 	}
 }
