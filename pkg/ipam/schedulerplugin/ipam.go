@@ -38,7 +38,7 @@ func ensureIPAMConf(ipam floatingip.IPAM, lastConf *string, newConf string) (boo
 	}
 	var conf []*floatingip.FloatingIPPool
 	if err := json.Unmarshal([]byte(newConf), &conf); err != nil {
-		return false, fmt.Errorf("failed to unmarshal configmap val %s to floatingip config", newConf)
+		return false, fmt.Errorf("failed to unmarshal configmap val %s to floatingip config: %v", newConf, err)
 	}
 	if err := ipam.ConfigurePool(conf); err != nil {
 		return false, fmt.Errorf("failed to configure pool: %v", err)

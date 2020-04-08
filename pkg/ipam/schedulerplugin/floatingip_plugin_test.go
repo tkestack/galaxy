@@ -68,7 +68,7 @@ var (
 func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}, []corev1.Node) {
 	nodes := []corev1.Node{
 		createNode(drainedNode, nil, "10.180.1.3"), // no floating ip left on this node
-		createNode(nodeHasNoIP, nil, "10.49.28.2"), // no floating ip configured for this node
+		createNode(nodeHasNoIP, nil, "10.48.28.2"), // no floating ip configured for this node
 		createNode(node3, nil, "10.49.27.3"),       // good node
 		createNode(node4, nil, "10.173.13.4"),      // good node
 	}
