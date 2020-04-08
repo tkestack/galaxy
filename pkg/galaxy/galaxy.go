@@ -149,15 +149,17 @@ func (g *Galaxy) Stop() error {
 }
 
 func (g *Galaxy) initk8sClient() {
-	clientConfig, err := rest.InClusterConfig()
-	if err != nil {
-		if g.Master == "" && g.KubeConf == "" {
-			// galaxy currently not support running in pod, so either flagApiServer or flagKubeConf should be specified
-			glog.Fatal("apiserver address unknown")
-		}
+	var clientConfig *rest.Config
+	var err error
+	if g.Master != "" || g.KubeConf != "" {
 		clientConfig, err = clientcmd.BuildConfigFromFlags(g.Master, g.KubeConf)
 		if err != nil {
-			glog.Fatalf("Invalid client config: error(%v)", err)
+			glog.Fatalf("Invalid client config: %v", err)
+		}
+	} else {
+		clientConfig, err = rest.InClusterConfig()
+		if err != nil {
+			glog.Fatalf("Init InClient config failed: %v", err)
 		}
 	}
 	clientConfig.QPS = 1000.0
@@ -168,7 +170,7 @@ func (g *Galaxy) initk8sClient() {
 	if err != nil {
 		glog.Fatalf("Can not generate client from config: error(%v)", err)
 	}
-	glog.Infof("apiserver address %s, kubeconf %s", g.Master, g.KubeConf)
+	glog.Infof("apiserver address %s", clientConfig.Host)
 }
 
 func (g *Galaxy) SetClient(cli kubernetes.Interface) {
