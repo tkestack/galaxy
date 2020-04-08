@@ -4,36 +4,42 @@
 
 You may edit galaxy-etc ConfigMap in galaxy.yaml to update DefaultNetworks and NetworkConf for all supported networks.
 
-Galaxy support multiple default networks and configures them according to the order of the networks of
+Galaxy support multiple default networks and configures them to pods according to the order of the networks of
  `DefaultNetworks`.
 
 ```
 {
   "NetworkConf":[
-    {"type":"tke-route-eni","eni":"eth1","routeTable":1},
+    {"name":"tke-route-eni", "type":"tke-route-eni", "eni":"eth1", "routeTable":1},
     {"name":"galaxy-flannel", "type":"galaxy-flannel", "delegate":{"type":"galaxy-veth"}, "subnetFile":"/run/flannel
 /subnet.env"},
-    {"type":"galaxy-k8s-vlan", "device":"eth1", "default_bridge_name": "br0"},
-    {"type": "galaxy-k8s-sriov", "device": "eth1", "vf_num": 10}
+    {"name":"galaxy-k8s-vlan", "type":"galaxy-k8s-vlan", "device":"eth1", "default_bridge_name": "br0"},
+    {"name": "galaxy-k8s-sriov", "type": "galaxy-k8s-sriov", "device": "eth1", "vf_num": 10}
   ],
-  "DefaultNetworks": ["galaxy-flannel"]
+  "DefaultNetworks": ["galaxy-flannel"],
+  "ENIIPNetwork": "galaxy-k8s-vlan"
 }
 ```
 
 If a network name is empty, Galaxy assumes its name equals its type name. Network name is used when a pod asks for a
  specific network.
 
+Galaxy assumes the default network for pods who want eni ip and has no `k8s.v1.cni.cncf.io/networks` annotation is the value of `ENIIPNetwork` regardless of `DefaultNetworks`.
+Adding `ENIIPNetwork` is to avoid of adding `k8s.v1.cni.cncf.io/networks` annotation for every pod which wants underlay networks.
+
 ### Co-work with other cni plugins
 
-Galaxy works well and peacefully with other cni plugins by loading unknown network configurations, i.e. absent from the
- above json config, from `--network-conf-dir`(default `/etc/cni/net.d/`) **. These configurations will be loaded each
-  time when setting up networks for a pod**.
+Galaxy works well and peacefully with other cni plugins by loading unknown network configurations which are absent from galaxy-etc ConfigMap from `--network-conf-dir`(default `/etc/cni/net.d/`) . These configurations will be loaded each
+ time when setting up networks for a pod.
+
+**But please be careful not to add a configuration file with alphabetical order higher than the Galaxy CNI configuration
+file `00-galaxy.conf`, otherwise Kubelet will call your CNI plugin first than Galaxy CNI plugin.**
 
 ## Configure specific networks for a POD
 
-Galaxy supports to configure specific and multiple networks for a single POD. **It matches a pod's `k8s.v1.cni.cncf.io
-/networks` annotation value with the name of networks, so that you can configure different cni implementations of the
- same network name.**
+Galaxy supports to configure specific and multiple networks for a single POD. It matches a pod's `k8s.v1.cni.cncf.io
+/networks` annotation value with the name of networks, so you can configure different cni implementations of the
+ same network name.
 
 Pod Annotation | Usage | Expain
 ---------------|-------|--------

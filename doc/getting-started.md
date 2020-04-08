@@ -1,6 +1,6 @@
 # Running Galaxy
 
-Please refer to [building](building.md) for building docker image first.
+Please refer to [building](building.md) for building docker image first or using the newest image from [dockerhub](https://hub.docker.com/r/tkestack/galaxy).
 
 Copy all files in yaml directory to you kubectl client machine.
 And then docker push your image to Docker hub or private registry server.
@@ -16,11 +16,11 @@ kubectl create -f galaxy.yaml
 
 Add ```--network-plugin=cni --cni-bin-dir=/opt/cni/bin/``` these args to kubelet and restart it.
 
-## Starting flannel
+## Starting Flannel
 
-Galaxy defaults to use flannel for creating Overlay network for Pods. Please refer to [flannel](https://github.com/coreos/flannel) to install flannel.
+Galaxy uses Flannel by default to create an overlay network for Pods. Please refer to [flannel](https://github.com/coreos/flannel) to install Flannel.
 
-Please refer to [Galaxy configuration](galaxy-config.md) if you don't wand to install flannel and want to change the default network.
+Please refer to [Galaxy configuration](galaxy-config.md) if you don't wand to install Flannel and want to change the default network.
 
 ## Starting an example deployment
 
