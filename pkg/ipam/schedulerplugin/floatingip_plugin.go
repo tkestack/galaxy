@@ -455,9 +455,15 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 			return nil
 		}
 		ipStr := ipInfo.IPInfo.IP.IP.String()
-		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", pod.Spec.NodeName, ipStr, key)
+		var attr Attr
+		if err := json.Unmarshal([]byte(ipInfo.FIP.Attr), &attr); err != nil {
+			glog.Errorf("failed to unmarshal attr %s for pod %s: %v", ipInfo.FIP.Attr, key, err)
+			return err
+		}
+
+		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", attr.NodeName, ipStr, key)
 		if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
-			NodeName:  pod.Spec.NodeName,
+			NodeName:  attr.NodeName,
 			IPAddress: ipStr,
 		}); err != nil {
 			return fmt.Errorf("failed to unassign ip %s from %s: %v", ipStr, key, err)
