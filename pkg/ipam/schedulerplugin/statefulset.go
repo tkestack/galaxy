@@ -36,6 +36,10 @@ func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyO
 	} else if policy == constant.ReleasePolicyNever {
 		return p.reserveIP(key, key, "never policy", p.enabledSecondIP(pod))
 	} else if policy == constant.ReleasePolicyImmutable {
+		if p.TAppLister == nil {
+			// tapp lister is nil, we can't get replicas and it's better to reserve the ip.
+			return p.reserveIP(key, key, "immutable policy", p.enabledSecondIP(pod))
+		}
 		appExist, replicas, err := p.checkAppAndReplicas(pod, keyObj)
 		if err != nil {
 			return err
