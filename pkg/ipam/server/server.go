@@ -51,6 +51,7 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/server/options"
 	"tkestack.io/galaxy/pkg/utils/httputil"
 	pageutil "tkestack.io/galaxy/pkg/utils/page"
+	"tkestack.io/tapp/pkg/apis/tappcontroller"
 	tappVersioned "tkestack.io/tapp/pkg/client/clientset/versioned"
 	tappInformers "tkestack.io/tapp/pkg/client/informers/externalversions"
 )
@@ -181,7 +182,7 @@ func (s *Server) initk8sClient() {
 	if err != nil {
 		glog.Fatalf("Error building float ip clientset: %v", err)
 	}
-	if _, err := s.extensionClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("tapps.tke.cloud.tencent.com",
+	if _, err := s.extensionClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("tapps."+tappcontroller.GroupName,
 		v1.GetOptions{}); err == nil {
 		s.tappClient, err = tappVersioned.NewForConfig(cfg)
 		if err != nil {
