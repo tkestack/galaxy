@@ -302,12 +302,19 @@ func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, brid
 	return nil
 }
 
-func SendGratuitousARP(dev, ip, nns string) error {
+func SendGratuitousARP(dev, ip, nns string, useArpRequest bool) error {
 	arping, err := exec.LookPath("arping")
 	if err != nil {
 		return fmt.Errorf("unable to locate arping")
 	}
-	command := exec.Command(arping, "-c", "2", "-A", "-I", dev, ip)
+
+	var command *exec.Cmd
+	if useArpRequest {
+		command = exec.Command(arping, "-c", "2", "-U", "-I", dev, ip)
+	} else {
+		command = exec.Command(arping, "-c", "2", "-A", "-I", dev, ip)
+	}
+
 	if nns == "" {
 		_, err = command.CombinedOutput()
 		return err

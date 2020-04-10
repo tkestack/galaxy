@@ -19,13 +19,13 @@ package vlan
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/vishvananda/netlink/nl"
 	"net"
 	"strings"
 	"sync"
 
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 	"tkestack.io/galaxy/pkg/network"
 	"tkestack.io/galaxy/pkg/utils"
 )
@@ -61,6 +61,8 @@ type NetConf struct {
 	BridgeNamePrefix string `json:"bridge_name_prefix"`
 
 	VlanNamePrefix string `json:"vlan_name_prefix"`
+
+	GratuitousArpRequest bool `json:"gratuitous_arp_request"`
 }
 
 func (d *VlanDriver) LoadConf(bytes []byte) (*NetConf, error) {
