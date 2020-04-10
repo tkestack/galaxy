@@ -20,7 +20,7 @@
 
 GO_IMAGE := golang:1.13.8
 GO := go
-GO_SUPPORTED_VERSIONS ?= 1.11|1.12|1.13
+GO_SUPPORTED_VERSIONS ?= 1.11|1.12|1.13|1.14
 GO_LDFLAGS += -X $(VERSION_PACKAGE).GIT_COMMIT=$(GIT_COMMIT) \
 	-X $(VERSION_PACKAGE).GO_VERSION=$(shell go version | awk '{print $$3}') \
 	-X $(VERSION_PACKAGE).BUILD_TIME=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ') 
