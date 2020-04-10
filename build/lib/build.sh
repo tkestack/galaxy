@@ -49,10 +49,6 @@ function build::get_basic_cni() {
 
 function build::galaxy() {
   local BIN_PREFIX="galaxy"
-
-  echo "Building tools"
-  echo "   disable-ipv6"
-  go build -o ${BIN_DIR}/disable-ipv6 ${GOBUILD_FLAGS} ${PKG}/cmd/disable-ipv6
   echo "Building plugins"
 
   # build galaxy cni plugins

@@ -79,7 +79,7 @@ func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, meta *re
 			continue
 		}
 		if attr.NodeName == "" {
-			glog.Errorf("empty nodeName for %s in db", key)
+			// this is expected. For tapp and sts pod, nodeName will be updated to empty after unassigning
 			continue
 		}
 		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName,
