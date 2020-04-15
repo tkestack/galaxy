@@ -136,6 +136,7 @@ func (g *Galaxy) Start() error {
 		go wait.Until(g.pm.Run, 3*time.Minute, g.quitChan)
 	}
 	if g.RouteENI {
+		// TODO do all sysctl things via a config
 		kernel.DisableRPFilter(g.quitChan)
 		eni.SetupENIs(g.quitChan)
 	}
