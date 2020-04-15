@@ -46,6 +46,7 @@ func IPForward(quit <-chan struct{}, set bool) {
 func DisableRPFilter(quit <-chan struct{}) {
 	setArg("0", "/proc/sys/net/ipv4/conf/all/rp_filter", quit)
 	setArg("0", "/proc/sys/net/ipv4/conf/eth0/rp_filter", quit)
+	setArg("0", "/proc/sys/net/ipv4/conf/eth1/rp_filter", quit)
 }
 
 func setArg(expect string, file string, quit <-chan struct{}) {
