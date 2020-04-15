@@ -278,7 +278,7 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 	}
 	keyObj, err := util.FormatKey(pod)
 	if err != nil {
-		glog.V(5).Infof("sync pod ip format key: %v", err)
+		glog.V(5).Infof("sync pod %s/%s ip formatKey with error %v", pod.Namespace, pod.Name, err)
 		return nil
 	}
 	ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
