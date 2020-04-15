@@ -42,7 +42,7 @@ VERSION := $(shell git describe --dirty --always --tags | sed 's/-/./g')
 endif
 GIT_COMMIT:=$(shell git log --first-parent -1 --oneline | awk '{print $$1}')
 
-COMMANDS ?= $(filter-out %disable-ipv6, $(wildcard ${ROOT_DIR}/cmd/*))
+COMMANDS ?= $(wildcard ${ROOT_DIR}/cmd/*)
 BINS ?= $(foreach cmd,${COMMANDS},$(notdir ${cmd}))
 
 ifeq (${COMMANDS},)

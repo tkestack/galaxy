@@ -24,7 +24,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -256,9 +255,6 @@ func (g *Galaxy) getNetworkConf(networkName string) map[string]interface{} {
 }
 
 func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Result, error) {
-	if err := disableIPv6(req.Netns); err != nil {
-		glog.Warningf("Error disable ipv6 %v", err)
-	}
 	networkInfos, err := g.resolveNetworks(req, pod)
 	if err != nil {
 		return nil, err
@@ -403,19 +399,6 @@ func (g *Galaxy) cleanIPtables(containerID string) error {
 		if err := k8s.RemovePortFile(containerID); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("delete port file for %s: %v", containerID, err)
 		}
-	}
-	return nil
-}
-
-func disableIPv6(path string) error {
-	cmd := &exec.Cmd{
-		Path:   "/opt/cni/bin/disable-ipv6",
-		Args:   append([]string{"set-ipv6"}, path),
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("reexec to set IPv6 failed: %v", err)
 	}
 	return nil
 }
