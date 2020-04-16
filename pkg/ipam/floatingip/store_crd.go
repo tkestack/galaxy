@@ -19,10 +19,8 @@ package floatingip
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
@@ -43,18 +41,13 @@ func (ci *crdIpam) listFloatingIPs() (*v1alpha1.FloatingIPList, error) {
 	return fips, nil
 }
 
-func (ci *crdIpam) createFloatingIP(name string, key string, policy constant.ReleasePolicy, attr string,
-	subnetSet sets.String, updateTime time.Time) error {
-	glog.V(4).Infof("create floatingIP name %s, key %s, subnet %v, policy %v", name, key, subnetSet, policy)
-	fip := &v1alpha1.FloatingIP{}
-	fip.Kind = constant.ResourceKind
-	fip.APIVersion = constant.ApiVersion
-	fip.Name = name
-	fip.Spec.Key = key
-	fip.Spec.Policy = policy
-	fip.Spec.Attribute = attr
-	fip.Spec.Subnet = strings.Join(subnetSet.List(), ",")
-	fip.Spec.UpdateTime = metav1.NewTime(updateTime)
+func (ci *crdIpam) createFloatingIP(allocated *FloatingIP) error {
+	glog.V(4).Infof("create floatingIP %v", *allocated)
+	fip := &v1alpha1.FloatingIP{
+		TypeMeta:   metav1.TypeMeta{Kind: constant.ResourceKind, APIVersion: constant.ApiVersion},
+		ObjectMeta: metav1.ObjectMeta{Name: allocated.IP.String()},
+	}
+	assign(fip, allocated)
 	ipTypeVal, err := ci.ipType.String()
 	if err != nil {
 		return err
@@ -78,18 +71,21 @@ func (ci *crdIpam) getFloatingIP(name string) error {
 	return err
 }
 
-func (ci *crdIpam) updateFloatingIP(name, key string, subnetSet sets.String, policy constant.ReleasePolicy, attr string,
-	updateTime time.Time) error {
-	glog.V(4).Infof("update floatingIP name %s, key %s, subnet %s, policy %v", name, key, subnetSet, policy)
-	fip, err := ci.client.GalaxyV1alpha1().FloatingIPs().Get(name, metav1.GetOptions{})
+func (ci *crdIpam) updateFloatingIP(toUpdate *FloatingIP) error {
+	glog.V(4).Infof("update floatingIP %v", *toUpdate)
+	fip, err := ci.client.GalaxyV1alpha1().FloatingIPs().Get(toUpdate.IP.String(), metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
-	fip.Spec.Key = key
-	fip.Spec.Policy = policy
-	fip.Spec.Subnet = strings.Join(subnetSet.List(), ",")
-	fip.Spec.Attribute = attr
-	fip.Spec.UpdateTime = metav1.NewTime(updateTime)
+	assign(fip, toUpdate)
 	_, err = ci.client.GalaxyV1alpha1().FloatingIPs().Update(fip)
 	return err
+}
+
+func assign(spec *v1alpha1.FloatingIP, f *FloatingIP) {
+	spec.Spec.Key = f.Key
+	spec.Spec.Policy = constant.ReleasePolicy(f.Policy)
+	spec.Spec.Attribute = f.Attr
+	spec.Spec.Subnet = strings.Join(f.Subnets.List(), ",")
+	spec.Spec.UpdateTime = metav1.NewTime(f.UpdatedAt)
 }

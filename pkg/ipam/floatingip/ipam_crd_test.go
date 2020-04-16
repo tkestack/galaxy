@@ -92,7 +92,7 @@ func TestConfigurePool(t *testing.T) {
 	if !ok {
 		t.Fatal()
 	}
-	if !unallocatedFIP.updateTime.After(now) {
+	if !unallocatedFIP.UpdatedAt.After(now) {
 		t.Fatal(unallocatedFIP)
 	}
 }
@@ -110,11 +110,10 @@ func TestCRDAllocateSpecificIP(t *testing.T) {
 	if !ok {
 		t.Fatal()
 	}
-	if !allocated.updateTime.After(now) {
-		t.Fatal(allocated.updateTime)
+	if !allocated.UpdatedAt.After(now) {
+		t.Fatal(allocated.UpdatedAt)
 	}
-	allocated.updateTime = time.Time{}
-	if `&{key:pod1 att:212 policy:2 subnetSet:map[10.49.27.0/24:{}] updateTime:{wall:0 ext:0 loc:<nil>}}` !=
+	if `FloatingIP{ip:10.49.27.205 key:pod1 attr:212 policy:2 subnets:map[10.49.27.0/24:{}]}` !=
 		fmt.Sprintf("%+v", allocated) {
 		t.Fatal(fmt.Sprintf("%+v", allocated))
 	}

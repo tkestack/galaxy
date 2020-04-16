@@ -45,7 +45,7 @@ type IPAM interface {
 	AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error
 	// ReserveIP can reserve a IP entitled by a terminated pod.
 	ReserveIP(oldK, newK, attr string) error
-	// UpdatePolicy update floatingIP's release policy.
+	// UpdatePolicy update floatingIP's release policy and attr according to ip and key
 	UpdatePolicy(string, net.IP, constant.ReleasePolicy, string) error
 	// Release release a given IP.
 	Release(string, net.IP) error

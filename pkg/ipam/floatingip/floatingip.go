@@ -37,6 +37,26 @@ type FloatingIP struct {
 	UpdatedAt time.Time
 }
 
+func (f FloatingIP) String() string {
+	return fmt.Sprintf("FloatingIP{ip:%s key:%s attr:%s policy:%d subnets:%v}", f.IP.String(), f.Key, f.Attr, f.Policy, f.Subnets)
+}
+
+func (f *FloatingIP) Assign(key, attr string, policy uint16, updateAt time.Time) *FloatingIP {
+	f.Key = key
+	f.Attr = attr
+	f.Policy = policy
+	f.UpdatedAt = updateAt
+	return f
+}
+
+func (f *FloatingIP) CloneWith(key, attr string, policy uint16, updateAt time.Time) *FloatingIP {
+	fip := &FloatingIP{
+		IP:      f.IP,
+		Subnets: f.Subnets,
+	}
+	return fip.Assign(key, attr, policy, updateAt)
+}
+
 // FloatingIPPool is FloatingIPPool structure.
 type FloatingIPPool struct {
 	NodeSubnets []*net.IPNet // the node subnets
