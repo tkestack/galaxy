@@ -467,6 +467,7 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 	galaxyCli := fakeGalaxyCli.NewSimpleClientset()
 	crdInformerFactory := crdInformer.NewSharedInformerFactory(galaxyCli, 0)
 	poolInformer := crdInformerFactory.Galaxy().V1alpha1().Pools()
+	FIPInformer := crdInformerFactory.Galaxy().V1alpha1().FloatingIPs()
 	client := fake.NewSimpleClientset(objs...)
 	informerFactory := informers.NewFilteredSharedInformerFactory(client, time.Minute, v1.NamespaceAll, nil)
 	podInformer := informerFactory.Core().V1().Pods()
@@ -489,8 +490,9 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 		//TAppClient:        tappCli,
 		//TAppHasSynced:     tappInformer.Informer().HasSynced,
 		//TAppLister:        tappInformer.Lister(),
-		ExtClient: extensionClient.NewSimpleClientset(),
-		CrdClient: galaxyCli,
+		ExtClient:   extensionClient.NewSimpleClientset(),
+		CrdClient:   galaxyCli,
+		FIPInformer: FIPInformer,
 	}
 	//tapp.EnsureCRDCreated(pluginArgs.ExtClient)
 	go informerFactory.Start(stopChan)

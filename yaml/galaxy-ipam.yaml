@@ -164,7 +164,6 @@ data:
   galaxy-ipam.json: |
     {
       "schedule_plugin": {
-        "storageDriver": "k8s-crd",
         "cloudProviderGrpcAddr": "127.0.0.2:80"
       }
     }

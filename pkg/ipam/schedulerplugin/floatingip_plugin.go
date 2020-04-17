@@ -69,12 +69,11 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		unreleased:        make(chan *releaseEvent, 1000),
 		dpLockPool:        keylock.NewKeylock(),
 	}
-	if conf.StorageDriver == "k8s-crd" {
-		plugin.ipam = floatingip.NewCrdIPAM(args.CrdClient, floatingip.InternalIp)
-		plugin.secondIPAM = floatingip.NewCrdIPAM(args.CrdClient, floatingip.ExternalIp)
-	} else {
-		return nil, fmt.Errorf("unknown storage driver %s", conf.StorageDriver)
-	}
+	plugin.ipam = floatingip.NewCrdIPAM(args.CrdClient, floatingip.InternalIp, plugin.FIPInformer)
+	// we can't add two event handler for the same informer.
+	// The later registed event handler will replace the former one, So pass nil informer to secondIPAM
+	// TODO remove secondIPAM and let ipam do allocating all ips
+	plugin.secondIPAM = floatingip.NewCrdIPAM(args.CrdClient, floatingip.ExternalIp, nil)
 	plugin.hasSecondIPConf.Store(false)
 	if conf.CloudProviderGRPCAddr != "" {
 		plugin.cloudProvider = cloudprovider.NewGRPCCloudProvider(conf.CloudProviderGRPCAddr)

@@ -61,8 +61,6 @@ type IPAM interface {
 	NodeSubnet(net.IP) *net.IPNet
 	// NodeSubnetsByKey returns keys corresponding node subnets which has `key` as a prefix.
 	NodeSubnetsByKey(key string) (sets.String, error)
-	// Shutdown shutdowns IPAM.
-	Shutdown()
 	// Name returns IPAM's name.
 	Name() string
 }

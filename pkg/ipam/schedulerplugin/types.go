@@ -22,6 +22,7 @@ import (
 	appv1 "k8s.io/client-go/listers/apps/v1"
 	corev1lister "k8s.io/client-go/listers/core/v1"
 	crd_clientset "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned"
+	crdInformer "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions/galaxy/v1alpha1"
 	list "tkestack.io/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/tapp/pkg/client/clientset/versioned"
@@ -43,6 +44,7 @@ type PluginFactoryArgs struct {
 	PoolSynced        func() bool
 	CrdClient         crd_clientset.Interface
 	ExtClient         extensionClient.Interface
+	FIPInformer       crdInformer.FloatingIPInformer
 }
 
 const (
@@ -60,7 +62,6 @@ type Conf struct {
 	FloatingIPKey         string                       `json:"floatingipKey"`       // configmap floatingip data key
 	SecondFloatingIPKey   string                       `json:"secondFloatingipKey"` // configmap second floatingip data key
 	CloudProviderGRPCAddr string                       `json:"cloudProviderGrpcAddr"`
-	StorageDriver         string                       `json:"storageDriver"`
 }
 
 func (conf *Conf) validate() {
@@ -78,8 +79,5 @@ func (conf *Conf) validate() {
 	}
 	if conf.SecondFloatingIPKey == "" {
 		conf.SecondFloatingIPKey = "second_floatingips"
-	}
-	if conf.StorageDriver == "" {
-		conf.StorageDriver = "k8s-crd"
 	}
 }

@@ -25,9 +25,11 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/tools/cache"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	crd_clientset "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned"
+	crdInformer "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions/galaxy/v1alpha1"
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
@@ -51,46 +53,50 @@ func (t *Type) String() (string, error) {
 	return "", fmt.Errorf("unknown ip type %v", *t)
 }
 
-// FIP is cache of floatingIP, key is FloatingIP name (ip typed as uint32)
-// value stores FloatingIPSpec in FloatingIP CRD.
-type FIPCache struct {
-	cacheLock       *sync.RWMutex
-	allocatedFIPs   map[string]*FloatingIP
-	unallocatedFIPs map[string]*FloatingIP
-}
-
 type crdIpam struct {
 	FloatingIPs []*FloatingIPPool `json:"floatingips,omitempty"`
 	client      crd_clientset.Interface
 	ipType      Type
 	//caches for FloatingIP crd, both stores allocated FloatingIPs and unallocated FloatingIPs
-	caches FIPCache
+	cacheLock *sync.RWMutex
+	// key is FloatingIP name (ip typed as uint32)
+	allocatedFIPs   map[string]*FloatingIP
+	unallocatedFIPs map[string]*FloatingIP
 }
 
 // NewCrdIPAM init IPAM struct.
-func NewCrdIPAM(fipClient crd_clientset.Interface, ipType Type) IPAM {
+func NewCrdIPAM(fipClient crd_clientset.Interface, ipType Type, informer crdInformer.FloatingIPInformer) IPAM {
 	ipam := &crdIpam{
-		client: fipClient,
-		ipType: ipType,
+		client:          fipClient,
+		ipType:          ipType,
+		cacheLock:       new(sync.RWMutex),
+		allocatedFIPs:   make(map[string]*FloatingIP),
+		unallocatedFIPs: make(map[string]*FloatingIP),
 	}
-	ipam.caches.cacheLock = new(sync.RWMutex)
+	// manually creating and fip to reserve it
+	if informer != nil {
+		informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				if err := ipam.handleFIPAssign(obj); err != nil {
+					glog.Warningf("handle add fip event: %v", err)
+				}
+			},
+			DeleteFunc: func(obj interface{}) {
+				if err := ipam.handleFIPUnassign(obj); err != nil {
+					glog.Warningf("handle del fip event: %v", err)
+				}
+			},
+		})
+	}
 	return ipam
-}
-
-// ConfigurePool init floatingIP pool.
-func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
-	if err := ci.freshCache(floatIPs); err != nil {
-		return err
-	}
-	return nil
 }
 
 // AllocateSpecificIP allocate pod a specific IP.
 func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
 	ipStr := ip.String()
-	ci.caches.cacheLock.RLock()
-	spec, find := ci.caches.unallocatedFIPs[ipStr]
-	ci.caches.cacheLock.RUnlock()
+	ci.cacheLock.RLock()
+	spec, find := ci.unallocatedFIPs[ipStr]
+	ci.cacheLock.RUnlock()
 	if !find {
 		return fmt.Errorf("failed to find floating ip by %s in cache", ipStr)
 	}
@@ -107,9 +113,9 @@ func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.Rel
 		glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
 		return err
 	}
-	ci.caches.cacheLock.Lock()
+	ci.cacheLock.Lock()
 	ci.syncCacheAfterCreate(allocated)
-	ci.caches.cacheLock.Unlock()
+	ci.cacheLock.Unlock()
 	return nil
 }
 
@@ -121,9 +127,9 @@ func (ci *crdIpam) AllocateInSubnet(key string, nodeSubnet *net.IPNet, policy co
 		return nil, fmt.Errorf("nil nodeSubnet")
 	}
 	var ipStr string
-	ci.caches.cacheLock.Lock()
+	ci.cacheLock.Lock()
 	nodeSubnetStr := nodeSubnet.String()
-	for k, v := range ci.caches.unallocatedFIPs {
+	for k, v := range ci.unallocatedFIPs {
 		//find an unallocated fip, then use it
 		if v.Subnets.Has(nodeSubnetStr) {
 			ipStr = k
@@ -139,7 +145,7 @@ func (ci *crdIpam) AllocateInSubnet(key string, nodeSubnet *net.IPNet, policy co
 			}
 			if err = ci.createFloatingIP(allocatedFIP); err != nil {
 				glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
-				ci.caches.cacheLock.Unlock()
+				ci.cacheLock.Unlock()
 				return
 			}
 			//sync cache when crd create success
@@ -147,12 +153,12 @@ func (ci *crdIpam) AllocateInSubnet(key string, nodeSubnet *net.IPNet, policy co
 			break
 		}
 	}
-	ci.caches.cacheLock.Unlock()
+	ci.cacheLock.Unlock()
 	if ipStr == "" {
 		return nil, ErrNoEnoughIP
 	}
-	ci.caches.cacheLock.RLock()
-	defer ci.caches.cacheLock.RUnlock()
+	ci.cacheLock.RLock()
+	defer ci.cacheLock.RUnlock()
 	if err = ci.getFloatingIP(ipStr); err != nil {
 		return
 	}
@@ -163,14 +169,14 @@ func (ci *crdIpam) AllocateInSubnet(key string, nodeSubnet *net.IPNet, policy co
 // AllocateInSubnetWithKey allocate a floatingIP in given subnet and key.
 func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy,
 	attr string) error {
-	ci.caches.cacheLock.Lock()
-	defer ci.caches.cacheLock.Unlock()
+	ci.cacheLock.Lock()
+	defer ci.cacheLock.Unlock()
 	var (
 		recordTs int64
 		latest   *FloatingIP
 	)
 	//find latest floatingIP by updateTime.
-	for _, v := range ci.caches.allocatedFIPs {
+	for _, v := range ci.allocatedFIPs {
 		if v.Key == oldK && v.Subnets.Has(subnet) {
 			if v.UpdatedAt.UnixNano() > recordTs {
 				latest = v
@@ -193,9 +199,9 @@ func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy con
 
 // ReserveIP can reserve a IP entitled by a terminated pod.
 func (ci *crdIpam) ReserveIP(oldK, newK, attr string) error {
-	ci.caches.cacheLock.Lock()
-	defer ci.caches.cacheLock.Unlock()
-	for k, v := range ci.caches.allocatedFIPs {
+	ci.cacheLock.Lock()
+	defer ci.cacheLock.Unlock()
+	for k, v := range ci.allocatedFIPs {
 		if v.Key == oldK {
 			date := time.Now()
 			if err := ci.updateFloatingIP(v.CloneWith(newK, attr, v.Policy, date)); err != nil {
@@ -212,9 +218,9 @@ func (ci *crdIpam) ReserveIP(oldK, newK, attr string) error {
 // UpdatePolicy update floatingIP's release policy and attr according to ip and key
 func (ci *crdIpam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
 	ipStr := ip.String()
-	ci.caches.cacheLock.Lock()
-	defer ci.caches.cacheLock.Unlock()
-	v, find := ci.caches.allocatedFIPs[ipStr]
+	ci.cacheLock.Lock()
+	defer ci.cacheLock.Unlock()
+	v, find := ci.allocatedFIPs[ipStr]
 	if !find {
 		return fmt.Errorf("failed to find floatIP in cache by IP %s", ipStr)
 	}
@@ -233,9 +239,9 @@ func (ci *crdIpam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePo
 // Release release a given IP.
 func (ci *crdIpam) Release(key string, ip net.IP) error {
 	ipStr := ip.String()
-	ci.caches.cacheLock.Lock()
-	defer ci.caches.cacheLock.Unlock()
-	v, find := ci.caches.allocatedFIPs[ipStr]
+	ci.cacheLock.Lock()
+	defer ci.cacheLock.Unlock()
+	v, find := ci.allocatedFIPs[ipStr]
 	if !find {
 		return fmt.Errorf("failed to find floatIP in cache by IP %s", ipStr)
 	}
@@ -280,11 +286,11 @@ func (ci *crdIpam) First(key string) (*FloatingIPInfo, error) {
 // ByIP transform a given IP to FloatingIP struct.
 func (ci *crdIpam) ByIP(ip net.IP) (FloatingIP, error) {
 	ipStr := ip.String()
-	ci.caches.cacheLock.RLock()
-	defer ci.caches.cacheLock.RUnlock()
-	v, find := ci.caches.allocatedFIPs[ipStr]
+	ci.cacheLock.RLock()
+	defer ci.cacheLock.RUnlock()
+	v, find := ci.allocatedFIPs[ipStr]
 	if !find {
-		v, find = ci.caches.unallocatedFIPs[ipStr]
+		v, find = ci.unallocatedFIPs[ipStr]
 		if !find {
 			return FloatingIP{}, nil
 		}
@@ -295,15 +301,15 @@ func (ci *crdIpam) ByIP(ip net.IP) (FloatingIP, error) {
 // ByPrefix filter floatingIPs by prefix key.
 func (ci *crdIpam) ByPrefix(prefix string) ([]FloatingIP, error) {
 	var fips []FloatingIP
-	ci.caches.cacheLock.RLock()
-	defer ci.caches.cacheLock.RUnlock()
-	for _, spec := range ci.caches.allocatedFIPs {
+	ci.cacheLock.RLock()
+	defer ci.cacheLock.RUnlock()
+	for _, spec := range ci.allocatedFIPs {
 		if strings.HasPrefix(spec.Key, prefix) {
 			fips = append(fips, *spec)
 		}
 	}
 	if prefix == "" {
-		for _, spec := range ci.caches.unallocatedFIPs {
+		for _, spec := range ci.unallocatedFIPs {
 			fips = append(fips, *spec)
 		}
 	}
@@ -342,9 +348,14 @@ func (ci *crdIpam) Name() string {
 	return name
 }
 
+// ConfigurePool init floatingIP pool.
 // #lizard forgives
-func (ci *crdIpam) freshCache(floatIPs []*FloatingIPPool) error {
-	glog.V(3).Infof("begin to fresh cache")
+func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
+	defer func() {
+		glog.Infof("Configure pool done, %d fip pool, %d unallocated, %d allocated", len(ci.FloatingIPs),
+			len(ci.unallocatedFIPs), len(ci.allocatedFIPs))
+	}()
+
 	sort.Sort(FloatingIPSlice(floatIPs))
 	ips, err := ci.listFloatingIPs()
 	if err != nil {
@@ -386,10 +397,10 @@ func (ci *crdIpam) freshCache(floatIPs []*FloatingIPPool) error {
 			deletingIPs = append(deletingIPs, ip.Name)
 		}
 	}
-	ci.caches.cacheLock.Lock()
-	defer ci.caches.cacheLock.Unlock()
+	ci.cacheLock.Lock()
+	defer ci.cacheLock.Unlock()
 	ci.FloatingIPs = floatIPs
-	ci.caches.allocatedFIPs = tmpCacheAllocated
+	ci.allocatedFIPs = tmpCacheAllocated
 	if len(deletingIPs) > 0 {
 		for _, ip := range deletingIPs {
 			if err := ci.deleteFloatingIP(ip); err != nil {
@@ -411,7 +422,7 @@ func (ci *crdIpam) freshCache(floatIPs []*FloatingIPPool) error {
 			for ; first <= last; first++ {
 				ip := nets.IntToIP(first)
 				ipStr := ip.String()
-				if _, contain := ci.caches.allocatedFIPs[ipStr]; !contain {
+				if _, contain := ci.allocatedFIPs[ipStr]; !contain {
 					tmpFip := &FloatingIP{
 						IP:        ip,
 						Key:       "",
@@ -425,7 +436,7 @@ func (ci *crdIpam) freshCache(floatIPs []*FloatingIPPool) error {
 			}
 		}
 	}
-	ci.caches.unallocatedFIPs = tmpCacheUnallocated
+	ci.unallocatedFIPs = tmpCacheUnallocated
 	return nil
 }
 
@@ -433,8 +444,8 @@ func (ci *crdIpam) freshCache(floatIPs []*FloatingIPPool) error {
 // don't use lock inner function, otherwise deadlock will be caused
 func (ci *crdIpam) syncCacheAfterCreate(fip *FloatingIP) {
 	ipStr := fip.IP.String()
-	ci.caches.allocatedFIPs[ipStr] = fip
-	delete(ci.caches.unallocatedFIPs, ipStr)
+	ci.allocatedFIPs[ipStr] = fip
+	delete(ci.unallocatedFIPs, ipStr)
 	return
 }
 
@@ -443,15 +454,15 @@ func (ci *crdIpam) syncCacheAfterCreate(fip *FloatingIP) {
 func (ci *crdIpam) syncCacheAfterDel(released *FloatingIP) {
 	ipStr := released.IP.String()
 	released.Assign("", "", uint16(constant.ReleasePolicyPodDelete), time.Now())
-	delete(ci.caches.allocatedFIPs, ipStr)
-	ci.caches.unallocatedFIPs[ipStr] = released
+	delete(ci.allocatedFIPs, ipStr)
+	ci.unallocatedFIPs[ipStr] = released
 	return
 }
 
 func (ci *crdIpam) findFloatingIPByKey(key string) (*FloatingIP, error) {
-	ci.caches.cacheLock.RLock()
-	defer ci.caches.cacheLock.RUnlock()
-	for _, spec := range ci.caches.allocatedFIPs {
+	ci.cacheLock.RLock()
+	defer ci.cacheLock.RUnlock()
+	for _, spec := range ci.allocatedFIPs {
 		if spec.Key == key {
 			return spec, nil
 		}
@@ -462,9 +473,9 @@ func (ci *crdIpam) findFloatingIPByKey(key string) (*FloatingIP, error) {
 func (ci *crdIpam) filterAllocatedSubnet(key string) sets.String {
 	//key would not be empty
 	subnetSet := sets.NewString()
-	ci.caches.cacheLock.RLock()
-	defer ci.caches.cacheLock.RUnlock()
-	for _, spec := range ci.caches.allocatedFIPs {
+	ci.cacheLock.RLock()
+	defer ci.cacheLock.RUnlock()
+	for _, spec := range ci.allocatedFIPs {
 		if spec.Key == key {
 			subnetSet.Insert(spec.Subnets.UnsortedList()...)
 		}
@@ -476,11 +487,11 @@ func (ci *crdIpam) filterAllocatedSubnet(key string) sets.String {
 // it will filter all subnet in unallocated floatingIP in cache
 func (ci *crdIpam) filterUnallocatedSubnet() sets.String {
 	subnetSet := sets.NewString()
-	ci.caches.cacheLock.RLock()
-	for _, val := range ci.caches.unallocatedFIPs {
+	ci.cacheLock.RLock()
+	for _, val := range ci.unallocatedFIPs {
 		subnetSet.Insert(val.Subnets.UnsortedList()...)
 	}
-	ci.caches.cacheLock.RUnlock()
+	ci.cacheLock.RUnlock()
 	return subnetSet
 }
 
@@ -488,12 +499,12 @@ func (ci *crdIpam) filterUnallocatedSubnet() sets.String {
 func (ci *crdIpam) ByKeyword(keyword string) ([]FloatingIP, error) {
 	//not implement
 	var fips []FloatingIP
-	ci.caches.cacheLock.RLock()
-	defer ci.caches.cacheLock.RUnlock()
-	if ci.caches.allocatedFIPs == nil {
+	ci.cacheLock.RLock()
+	defer ci.cacheLock.RUnlock()
+	if ci.allocatedFIPs == nil {
 		return fips, nil
 	}
-	for _, spec := range ci.caches.allocatedFIPs {
+	for _, spec := range ci.allocatedFIPs {
 		if strings.Contains(spec.Key, keyword) {
 			fips = append(fips, *spec)
 		}
@@ -504,17 +515,17 @@ func (ci *crdIpam) ByKeyword(keyword string) ([]FloatingIP, error) {
 // ReleaseIPs function release a map of ip to key
 func (ci *crdIpam) ReleaseIPs(ipToKey map[string]string) (map[string]string, map[string]string, error) {
 	deleted, undeleted := map[string]string{}, map[string]string{}
-	ci.caches.cacheLock.Lock()
-	defer ci.caches.cacheLock.Unlock()
+	ci.cacheLock.Lock()
+	defer ci.cacheLock.Unlock()
 	for ipStr, key := range ipToKey {
 		undeleted[ipStr] = key
 	}
-	if ci.caches.allocatedFIPs == nil {
+	if ci.allocatedFIPs == nil {
 		//for second ipam, caches may be nil
 		return deleted, undeleted, nil
 	}
 	for ipStr, key := range ipToKey {
-		if v, find := ci.caches.allocatedFIPs[ipStr]; find {
+		if v, find := ci.allocatedFIPs[ipStr]; find {
 			if v.Key == key {
 				if err := ci.deleteFloatingIP(ipStr); err != nil {
 					glog.Errorf("failed to delete %v", ipStr)
@@ -528,7 +539,7 @@ func (ci *crdIpam) ReleaseIPs(ipToKey map[string]string) (map[string]string, map
 				// update key
 				undeleted[ipStr] = v.Key
 			}
-		} else if _, find := ci.caches.unallocatedFIPs[ipStr]; find {
+		} else if _, find := ci.unallocatedFIPs[ipStr]; find {
 			undeleted[ipStr] = ""
 		}
 	}

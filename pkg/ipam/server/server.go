@@ -102,6 +102,7 @@ func (s *Server) init() error {
 	deploymentInformer := s.informerFactory.Apps().V1().Deployments()
 	s.crdInformerFactory = crdInformer.NewSharedInformerFactory(s.crdClient, 0)
 	poolInformer := s.crdInformerFactory.Galaxy().V1alpha1().Pools()
+	fipInformer := s.crdInformerFactory.Galaxy().V1alpha1().FloatingIPs()
 
 	pluginArgs := &schedulerplugin.PluginFactoryArgs{
 		PodLister:         podInformer.Lister(),
@@ -116,6 +117,7 @@ func (s *Server) init() error {
 		PoolSynced:        poolInformer.Informer().HasSynced,
 		CrdClient:         s.crdClient,
 		ExtClient:         s.extensionClient,
+		FIPInformer:       fipInformer,
 	}
 	if s.tappClient != nil {
 		s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)

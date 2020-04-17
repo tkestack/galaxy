@@ -19,6 +19,7 @@ package floatingip
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	glog "k8s.io/klog"
@@ -43,18 +44,8 @@ func (ci *crdIpam) listFloatingIPs() (*v1alpha1.FloatingIPList, error) {
 
 func (ci *crdIpam) createFloatingIP(allocated *FloatingIP) error {
 	glog.V(4).Infof("create floatingIP %v", *allocated)
-	fip := &v1alpha1.FloatingIP{
-		TypeMeta:   metav1.TypeMeta{Kind: constant.ResourceKind, APIVersion: constant.ApiVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: allocated.IP.String()},
-	}
+	fip := ci.newFIPCrd(allocated.IP.String())
 	assign(fip, allocated)
-	ipTypeVal, err := ci.ipType.String()
-	if err != nil {
-		return err
-	}
-	label := make(map[string]string)
-	label[constant.IpType] = ipTypeVal
-	fip.Labels = label
 	if _, err := ci.client.GalaxyV1alpha1().FloatingIPs().Create(fip); err != nil {
 		return err
 	}
@@ -88,4 +79,69 @@ func assign(spec *v1alpha1.FloatingIP, f *FloatingIP) {
 	spec.Spec.Attribute = f.Attr
 	spec.Spec.Subnet = strings.Join(f.Subnets.List(), ",")
 	spec.Spec.UpdateTime = metav1.NewTime(f.UpdatedAt)
+}
+
+// handleFIPAssign handles add event for manually created reserved ips
+func (ci *crdIpam) handleFIPAssign(obj interface{}) error {
+	fip, err := checkForReserved(obj)
+	if err != nil {
+		return err
+	}
+	if fip == nil {
+		return nil
+	}
+	ipStr := fip.Name
+	ci.cacheLock.Lock()
+	defer ci.cacheLock.Unlock()
+	if val, ok := ci.allocatedFIPs[ipStr]; ok {
+		return fmt.Errorf("%s already been allocated to %s", ipStr, val.Key)
+	}
+	unallocated, ok := ci.unallocatedFIPs[ipStr]
+	if !ok {
+		return fmt.Errorf("there is no ip %s in unallocated map", ipStr)
+	}
+	unallocated.Assign(fip.Spec.Key, fip.Spec.Attribute, uint16(fip.Spec.Policy), time.Now())
+	ci.syncCacheAfterCreate(unallocated)
+	glog.Infof("reserved ip %s", ipStr)
+	return nil
+}
+
+// handleFIPUnassign handles delete event for manually created reserved ips
+func (ci *crdIpam) handleFIPUnassign(obj interface{}) error {
+	fip, err := checkForReserved(obj)
+	if err != nil {
+		return err
+	}
+	if fip == nil {
+		return nil
+	}
+	ipStr := fip.Name
+	ci.cacheLock.Lock()
+	defer ci.cacheLock.Unlock()
+	allocated, ok := ci.allocatedFIPs[ipStr]
+	if !ok {
+		return fmt.Errorf("%s already been released", ipStr)
+	}
+	ci.syncCacheAfterDel(allocated)
+	glog.Infof("released reserved ip %s", ipStr)
+	return nil
+}
+
+func checkForReserved(obj interface{}) (*v1alpha1.FloatingIP, error) {
+	fip, ok := obj.(*v1alpha1.FloatingIP)
+	if !ok {
+		return nil, nil
+	}
+	if _, ok := fip.Labels[constant.ReserveFIPLabel]; !ok {
+		return nil, nil
+	}
+	return fip, nil
+}
+
+func (ci *crdIpam) newFIPCrd(name string) *v1alpha1.FloatingIP {
+	ipType, _ := ci.ipType.String()
+	return &v1alpha1.FloatingIP{
+		TypeMeta:   metav1.TypeMeta{Kind: constant.ResourceKind, APIVersion: constant.ApiVersion},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{constant.IpType: ipType}},
+	}
 }

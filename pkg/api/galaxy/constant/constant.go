@@ -31,6 +31,9 @@ const (
 	MultusCNIAnnotation = "k8s.v1.cni.cncf.io/networks"
 
 	CommonCNIArgsKey = "common"
+
+	// For fip crd object which has this label, it's reserved by admin manually. IPAM will not allocate it to pods.
+	ReserveFIPLabel = "reserved"
 )
 
 // ParseExtendedCNIArgs parses extended cni args from pod annotation

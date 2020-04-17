@@ -55,7 +55,6 @@ Galaxy uses CRD to persist allocated IPs.
   galaxy-ipam.json: |
     {
       "schedule_plugin": {
-        "storageDriver": "k8s-crd",
         "cloudProviderGrpcAddr": "127.0.0.2:80"
       }
     }
@@ -80,7 +79,29 @@ data:
 - subnet: the POD IP subnet.
 - vlan: the POD IP vlan id. If POD IPs are not belongs to the same vlan as node IP, please specify the POD IP vlan ids. Leave it empty if not required.
 
-For a more complex configuration, please take a look at [test_helper.go](pkg/ipam/utils/test_helper.go)
+For a more complex configuration, please take a look at [test_helper.go](../pkg/ipam/utils/test_helper.go)
+
+## Reserve IP to prevent allocation
+
+You can either delete it from floatingip-config ConfigMap or creating an floatingip crd object. You can also delete it
+to stop reserving. But please don't delete any floatingip that is not created by youself.
+
+```
+# creating a floatingip crd object to reserve IP
+# please replace name with the IP you want to reserve.
+# don't delete ipType/reserved label or it won't work
+
+apiVersion: galaxy.k8s.io/v1alpha1
+kind: FloatingIP
+metadata:
+  name: 10.0.0.1
+  labels:
+    ipType: internalIP
+    reserved: this-is-not-for-pods
+spec:
+  key: pool__reserved-for-node_
+  policy: 2
+```
 
 ## CNI network configuration
 
