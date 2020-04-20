@@ -40,8 +40,8 @@ const (
 var (
 	flagFlannelGCInterval = flag.Duration("flannel_gc_interval", time.Second*10, "Interval of executing flannel "+
 		"network gc")
-	flagAllocatedIPDir = flag.String("flannel_allocated_ip_dir", "/var/lib/cni/networks", "IP storage directory "+
-		"of flannel cni plugin")
+	flagAllocatedIPDir = flag.String("flannel_allocated_ip_dir", "/var/lib/cni/networks,/var/lib/cni/networks/galaxy-flannel",
+		"IP storage directory of flannel cni plugin")
 	// /var/lib/cni/galaxy/$containerid stores network type, it's like {"galaxy-flannel":{}}
 	// /var/lib/cni/flannel/$containerid stores flannel cni plugin chain,
 	// it's like {"forceAddress":true,"ipMasq":false,"ipam":{"routes":[{"dst":"172.16.0.0/13"}],"subnet":
@@ -54,7 +54,7 @@ var (
 )
 
 type flannelGC struct {
-	allocatedIPDir string
+	allocatedIPDir []string
 	gcDirs         []string
 	dockerCli      *docker.DockerInterface
 	quit           <-chan struct{}
@@ -65,7 +65,7 @@ func NewFlannelGC(dockerCli *docker.DockerInterface, quit <-chan struct{},
 	cleanPortFunc func(containerID string) error) GC {
 	dirs := strings.Split(*flagGCDirs, ",")
 	return &flannelGC{
-		allocatedIPDir: *flagAllocatedIPDir,
+		allocatedIPDir: strings.Split(*flagAllocatedIPDir, ","),
 		gcDirs:         dirs,
 		dockerCli:      dockerCli,
 		quit:           quit,
@@ -99,25 +99,33 @@ func (gc *flannelGC) Run() {
 
 func (gc *flannelGC) cleanupIP() error {
 	glog.V(4).Infof("cleanup ip...")
-	fis, err := ioutil.ReadDir(gc.allocatedIPDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	for _, fi := range fis {
-		if fi.IsDir() || len(net.ParseIP(fi.Name())) == 0 {
+	for _, dir := range gc.allocatedIPDir {
+		fis, err := ioutil.ReadDir(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			glog.Errorf("failed to read dir %s", dir)
 			continue
 		}
-		ipFile := filepath.Join(gc.allocatedIPDir, fi.Name())
-		containerIdData, err := ioutil.ReadFile(ipFile)
-		if err != nil || len(containerIdData) == 0 {
-			continue
-		}
-		containerId := string(containerIdData)
-		if gc.shouldCleanup(containerId) {
-			removeLeakyIPFile(ipFile, containerId)
+		for _, fi := range fis {
+			if fi.IsDir() || len(net.ParseIP(fi.Name())) == 0 {
+				continue
+			}
+			ipFile := filepath.Join(dir, fi.Name())
+			containerIdData, err := ioutil.ReadFile(ipFile)
+			if err != nil || len(containerIdData) == 0 {
+				continue
+			}
+			// host-local plugin stores "containerid\neth0" in ip file, we should get the first line as container id
+			parts := strings.Split(string(containerIdData), "\n")
+			if len(parts) == 0 {
+				continue
+			}
+			containerId := parts[0]
+			if gc.shouldCleanup(containerId) {
+				removeLeakyIPFile(ipFile, containerId)
+			}
 		}
 	}
 	return nil
