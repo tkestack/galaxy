@@ -117,12 +117,9 @@ func (gc *flannelGC) cleanupIP() error {
 			if err != nil || len(containerIdData) == 0 {
 				continue
 			}
-			// host-local plugin stores "containerid\neth0" in ip file, we should get the first line as container id
+			// host-local plugin stores "containerid\neth0" or "containerid\r\neth0" in ip file, we should get the first line as container id
 			parts := strings.Split(string(containerIdData), "\n")
-			if len(parts) == 0 {
-				continue
-			}
-			containerId := parts[0]
+			containerId := strings.TrimSpace(parts[0])
 			if gc.shouldCleanup(containerId) {
 				removeLeakyIPFile(ipFile, containerId)
 			}
