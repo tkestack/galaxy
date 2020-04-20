@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	fakeGalaxyCli "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned/fake"
+	crdInformer "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions"
 	"tkestack.io/galaxy/pkg/ipam/utils"
 )
 
@@ -61,9 +62,11 @@ var (
 	node7FIPSubnet = &net.IPNet{IP: net.ParseIP("10.0.81.0"), Mask: mask24}
 )
 
-func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
+func createIPAM(t *testing.T, objs ...runtime.Object) (*crdIpam, crdInformer.SharedInformerFactory) {
 	galaxyCli := fakeGalaxyCli.NewSimpleClientset(objs...)
-	crdIPAM := NewCrdIPAM(galaxyCli, InternalIp).(*crdIpam)
+	crdInformerFactory := crdInformer.NewSharedInformerFactory(galaxyCli, 0)
+	fipInformer := crdInformerFactory.Galaxy().V1alpha1().FloatingIPs()
+	crdIPAM := NewCrdIPAM(galaxyCli, InternalIp, fipInformer).(*crdIpam)
 	var conf struct {
 		Floatingips []*FloatingIPPool `json:"floatingips"`
 	}
@@ -73,6 +76,11 @@ func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
 	if err := crdIPAM.ConfigurePool(conf.Floatingips); err != nil {
 		t.Fatal(err)
 	}
+	return crdIPAM, crdInformerFactory
+}
+
+func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
+	crdIPAM, _ := createIPAM(t, objs...)
 	return crdIPAM
 }
 
@@ -82,17 +90,17 @@ func TestConfigurePool(t *testing.T) {
 	if len(ipam.FloatingIPs) != 7 {
 		t.Fatal(len(ipam.FloatingIPs))
 	}
-	if len(ipam.caches.unallocatedFIPs) != 39 {
-		t.Fatal(len(ipam.caches.unallocatedFIPs))
+	if len(ipam.unallocatedFIPs) != 39 {
+		t.Fatal(len(ipam.unallocatedFIPs))
 	}
-	if len(ipam.caches.allocatedFIPs) != 0 {
-		t.Fatal(len(ipam.caches.allocatedFIPs))
+	if len(ipam.allocatedFIPs) != 0 {
+		t.Fatal(len(ipam.allocatedFIPs))
 	}
-	unallocatedFIP, ok := ipam.caches.unallocatedFIPs["10.49.27.205"]
+	unallocatedFIP, ok := ipam.unallocatedFIPs["10.49.27.205"]
 	if !ok {
 		t.Fatal()
 	}
-	if !unallocatedFIP.updateTime.After(now) {
+	if !unallocatedFIP.UpdatedAt.After(now) {
 		t.Fatal(unallocatedFIP)
 	}
 }
@@ -103,18 +111,17 @@ func TestCRDAllocateSpecificIP(t *testing.T) {
 	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"), constant.ReleasePolicyNever, "212"); err != nil {
 		t.Fatal(err)
 	}
-	if len(ipam.caches.allocatedFIPs) != 1 {
-		t.Fatal(len(ipam.caches.allocatedFIPs))
+	if len(ipam.allocatedFIPs) != 1 {
+		t.Fatal(len(ipam.allocatedFIPs))
 	}
-	allocated, ok := ipam.caches.allocatedFIPs["10.49.27.205"]
+	allocated, ok := ipam.allocatedFIPs["10.49.27.205"]
 	if !ok {
 		t.Fatal()
 	}
-	if !allocated.updateTime.After(now) {
-		t.Fatal(allocated.updateTime)
+	if !allocated.UpdatedAt.After(now) {
+		t.Fatal(allocated.UpdatedAt)
 	}
-	allocated.updateTime = time.Time{}
-	if `&{key:pod1 att:212 policy:2 subnetSet:map[10.49.27.0/24:{}] updateTime:{wall:0 ext:0 loc:<nil>}}` !=
+	if `FloatingIP{ip:10.49.27.205 key:pod1 attr:212 policy:2 subnets:map[10.49.27.0/24:{}]}` !=
 		fmt.Sprintf("%+v", allocated) {
 		t.Fatal(fmt.Sprintf("%+v", allocated))
 	}
