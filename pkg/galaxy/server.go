@@ -288,7 +288,7 @@ func (g *Galaxy) setupIPtables() error {
 	var allPorts []k8s.Port
 	for i := range pods.Items {
 		pod := &pods.Items[i]
-		if pod.Status.Phase != corev1.PodRunning || pod.Spec.HostNetwork {
+		if len(pod.Status.PodIP) == 0 || pod.Spec.HostNetwork {
 			continue
 		}
 		var ports []k8s.Port
