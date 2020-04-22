@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,6 +103,39 @@ func TestConfigurePool(t *testing.T) {
 	}
 	if !unallocatedFIP.UpdatedAt.After(now) {
 		t.Fatal(unallocatedFIP)
+	}
+}
+
+func TestConfigurePoolWithAllocatedIP(t *testing.T) {
+	expectFip := &FloatingIP{
+		IP:        net.ParseIP("10.49.27.205"),
+		Key:       "pod2",
+		Subnets:   sets.NewString("subnet1"), // assign a bad subnet to test if it can be correct
+		Attr:      "pod2 attr",
+		Policy:    0,
+		UpdatedAt: time.Now(),
+	}
+	fipCrd := newFIPCrd(expectFip.IP.String())
+	fipCrd.Labels[constant.ReserveFIPLabel] = ""
+	internalIP := InternalIp
+	ipType, _ := internalIP.String()
+	fipCrd.Labels[constant.IpType] = ipType
+	assign(fipCrd, expectFip)
+	ipam := createTestCrdIPAM(t, fipCrd)
+	if len(ipam.allocatedFIPs) != 1 {
+		t.Fatal(len(ipam.allocatedFIPs))
+	}
+	fip, err := ipam.ByIP(expectFip.IP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fip.Key != expectFip.Key {
+		t.Fatal()
+	}
+	subnetsStr := strings.Join(fip.Subnets.List(), ",")
+	// test subnets is equal the lastest configure value instead of the stored value in crd
+	if subnetsStr != node1IPNet.String() {
+		t.Fatal(subnetsStr)
 	}
 }
 
