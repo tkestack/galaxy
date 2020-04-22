@@ -382,10 +382,13 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
 				found = true
 				//ip in config, insert it into cache
 				tmpFip := &FloatingIP{
-					IP:        netIP,
-					Key:       ip.Spec.Key,
-					Attr:      ip.Spec.Attribute,
-					Policy:    uint16(ip.Spec.Policy),
+					IP:     netIP,
+					Key:    ip.Spec.Key,
+					Attr:   ip.Spec.Attribute,
+					Policy: uint16(ip.Spec.Policy),
+					// Since subnets may change and for reserved fips crds created by user manually, subnets may not be
+					// correct, assign it to the latest config instead of crd value
+					// TODO we can delete subnets field from crd?
 					Subnets:   nodeSubnets[i],
 					UpdatedAt: ip.Spec.UpdateTime.Time,
 				}
@@ -454,6 +457,7 @@ func (ci *crdIpam) syncCacheAfterCreate(fip *FloatingIP) {
 func (ci *crdIpam) syncCacheAfterDel(released *FloatingIP) {
 	ipStr := released.IP.String()
 	released.Assign("", "", uint16(constant.ReleasePolicyPodDelete), time.Now())
+	released.Labels = nil
 	delete(ci.allocatedFIPs, ipStr)
 	ci.unallocatedFIPs[ipStr] = released
 	return

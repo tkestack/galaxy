@@ -27,6 +27,7 @@ import (
 	"github.com/emicklei/go-restful"
 	"k8s.io/client-go/listers/core/v1"
 	glog "k8s.io/klog"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 	"tkestack.io/galaxy/pkg/utils/httputil"
@@ -50,17 +51,18 @@ func NewController(ipam, secondIpam floatingip.IPAM, lister v1.PodLister) *Contr
 
 // FloatingIP is the floating ip info
 type FloatingIP struct {
-	IP         string    `json:"ip"`
-	Namespace  string    `json:"namespace,omitempty"`
-	AppName    string    `json:"appName,omitempty"`
-	PodName    string    `json:"podName,omitempty"`
-	PoolName   string    `json:"poolName,omitempty"`
-	Policy     uint16    `json:"policy"`
-	AppType    string    `json:"appType,omitempty"`
-	UpdateTime time.Time `json:"updateTime,omitempty"`
-	Status     string    `json:"status,omitempty"`
-	Releasable bool      `json:"releasable,omitempty"`
-	attr       string    `json:"-"`
+	IP         string            `json:"ip"`
+	Namespace  string            `json:"namespace,omitempty"`
+	AppName    string            `json:"appName,omitempty"`
+	PodName    string            `json:"podName,omitempty"`
+	PoolName   string            `json:"poolName,omitempty"`
+	Policy     uint16            `json:"policy"`
+	AppType    string            `json:"appType,omitempty"`
+	UpdateTime time.Time         `json:"updateTime,omitempty"`
+	Status     string            `json:"status,omitempty"`
+	Releasable bool              `json:"releasable,omitempty"`
+	attr       string            `json:"-"`
+	labels     map[string]string `json:"-"`
 }
 
 // SwaggerDoc is to generate Swagger docs
@@ -156,6 +158,12 @@ func toAppType(appTypePrefix string) string {
 // fillReleasableAndStatus fills status and releasable field
 func fillReleasableAndStatus(lister v1.PodLister, ips []FloatingIP) error {
 	for i := range ips {
+		if ips[i].labels != nil {
+			if _, ok := ips[i].labels[constant.ReserveFIPLabel]; ok {
+				ips[i].Releasable = false
+				continue
+			}
+		}
 		ips[i].Releasable = true
 		if ips[i].PodName == "" {
 			continue
@@ -356,6 +364,7 @@ func transform(fips []floatingip.FloatingIP) []FloatingIP {
 			AppType:    toAppType(keyObj.AppTypePrefix),
 			Policy:     fips[i].Policy,
 			UpdateTime: fips[i].UpdatedAt,
+			labels:     fips[i].Labels,
 			attr:       fips[i].Attr})
 	}
 	return res

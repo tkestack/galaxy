@@ -19,6 +19,7 @@ package floatingip
 import (
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,7 +48,7 @@ func TestAddFloatingIPEventByUser(t *testing.T) {
 	if _, err := ipam.client.GalaxyV1alpha1().FloatingIPs().Create(fipCrd); err != nil {
 		t.Fatal(err)
 	}
-	if err := waitFor(ipam, fip.IP, fip.Key); err != nil {
+	if err := waitFor(ipam, fip.IP, fip.Key, true, node1IPNet.String()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -60,7 +61,7 @@ func TestAddFloatingIPEventByUser(t *testing.T) {
 	}
 }
 
-func waitFor(ipam *crdIpam, ip net.IP, key string) error {
+func waitFor(ipam *crdIpam, ip net.IP, key string, expectReserveLabel bool, expectSubnetStr string) error {
 	return wait.PollImmediate(time.Millisecond*100, time.Minute, func() (done bool, err error) {
 		searched, err := ipam.ByIP(ip)
 		if err != nil {
@@ -68,6 +69,17 @@ func waitFor(ipam *crdIpam, ip net.IP, key string) error {
 		}
 		if searched.Key != key {
 			return false, nil
+		}
+		var hasReserveLabel bool
+		if searched.Labels != nil {
+			_, hasReserveLabel = searched.Labels[constant.ReserveFIPLabel]
+		}
+		if hasReserveLabel != expectReserveLabel {
+			return false, fmt.Errorf("expect has reserve label %v, got %v", expectReserveLabel, hasReserveLabel)
+		}
+		subnetStr := strings.Join(searched.Subnets.List(), ",")
+		if subnetStr != expectSubnetStr {
+			return false, fmt.Errorf("expect subnet %v, got %v", expectSubnetStr, subnetStr)
 		}
 		return true, nil
 	})
@@ -99,7 +111,7 @@ func TestDeleteFloatingIPEvent(t *testing.T) {
 	if _, err := ipam.client.GalaxyV1alpha1().FloatingIPs().Create(fipCrd); err != nil {
 		t.Fatal(err)
 	}
-	if err := waitFor(ipam, ip, fipCrd.Spec.Key); err != nil {
+	if err := waitFor(ipam, ip, fipCrd.Spec.Key, true, node1IPNet.String()); err != nil {
 		t.Fatal(err)
 	}
 	// test if an event is created by ipam, deleteFloatingIPEvent should ignore it
@@ -116,7 +128,7 @@ func TestDeleteFloatingIPEvent(t *testing.T) {
 	if err := ipam.client.GalaxyV1alpha1().FloatingIPs().Delete(fipCrd.Name, &v1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := waitFor(ipam, ip, ""); err != nil {
+	if err := waitFor(ipam, ip, "", false, node1IPNet.String()); err != nil {
 		t.Fatal(err)
 	}
 }

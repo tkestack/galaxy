@@ -29,12 +29,14 @@ import (
 
 // FloatingIP defines a floating ip
 type FloatingIP struct {
-	Key       string
-	Subnets   sets.String // node subnet, not container ip's subnet
+	Key     string
+	Subnets sets.String // node subnet, not container ip's subnet
+	// TODO Replace attr with labels
 	Attr      string
 	IP        net.IP
 	Policy    uint16
 	UpdatedAt time.Time
+	Labels    map[string]string
 }
 
 func (f FloatingIP) String() string {

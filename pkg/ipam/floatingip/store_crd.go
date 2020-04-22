@@ -101,6 +101,7 @@ func (ci *crdIpam) handleFIPAssign(obj interface{}) error {
 		return fmt.Errorf("there is no ip %s in unallocated map", ipStr)
 	}
 	unallocated.Assign(fip.Spec.Key, fip.Spec.Attribute, uint16(fip.Spec.Policy), time.Now())
+	unallocated.Labels = map[string]string{constant.ReserveFIPLabel: ""}
 	ci.syncCacheAfterCreate(unallocated)
 	glog.Infof("reserved ip %s", ipStr)
 	return nil
@@ -140,8 +141,14 @@ func checkForReserved(obj interface{}) (*v1alpha1.FloatingIP, error) {
 
 func (ci *crdIpam) newFIPCrd(name string) *v1alpha1.FloatingIP {
 	ipType, _ := ci.ipType.String()
+	crd := newFIPCrd(name)
+	crd.Labels[constant.IpType] = ipType
+	return crd
+}
+
+func newFIPCrd(name string) *v1alpha1.FloatingIP {
 	return &v1alpha1.FloatingIP{
 		TypeMeta:   metav1.TypeMeta{Kind: constant.ResourceKind, APIVersion: constant.ApiVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{constant.IpType: ipType}},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{}},
 	}
 }
