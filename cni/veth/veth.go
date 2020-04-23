@@ -60,30 +60,7 @@ func addHostRoute(containerIP *net.IPNet, vethHostName string, src string) error
 		return err
 	}
 	s := net.ParseIP(src)
-	if err = netlink.RouteAdd(&netlink.Route{
-		LinkIndex: vethHost.Attrs().Index,
-		Scope:     netlink.SCOPE_LINK,
-		Dst:       containerIP,
-		Gw:        nil,
-		Src:       s,
-	}); err != nil {
-		if s != nil {
-			// compatible change for old kernel which does not support src option
-			if err1 := netlink.RouteAdd(&netlink.Route{
-				LinkIndex: vethHost.Attrs().Index,
-				Scope:     netlink.SCOPE_LINK,
-				Dst:       containerIP,
-				Gw:        nil,
-			}); err1 != nil {
-				return fmt.Errorf("failed to add route '%v dev %v for old linux kernel': %v. With src option err: %v",
-					containerIP, vethHostName, err1, err)
-			} else {
-				return nil
-			}
-		}
-		return fmt.Errorf("failed to add route '%v dev %v src %v': %v", containerIP, vethHostName, s.String(), err)
-	}
-	return nil
+	return utils.AddHostRoute(containerIP, vethHost, s)
 }
 
 // #lizard forgives

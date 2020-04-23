@@ -52,7 +52,7 @@ function build::galaxy() {
   echo "Building plugins"
 
   # build galaxy cni plugins
-  PLUGINS="${PKG}/cni/k8s-vlan ${PKG}/cni/sdn ${PKG}/cni/veth ${PKG}/cni/k8s-sriov"
+  PLUGINS="${PKG}/cni/k8s-vlan ${PKG}/cni/sdn ${PKG}/cni/veth ${PKG}/cni/k8s-sriov ${PKG}/cni/k8s-pure"
   for d in ${PLUGINS}; do
     plugin=$(basename $d)
     echo "  " ${plugin}

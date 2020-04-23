@@ -137,6 +137,9 @@ func CmdAdd(cmdArgs *skel.CmdArgs, networkInfos []*NetworkInfo) (types.Result, e
 	for idx, networkInfo := range networkInfos {
 		//append additional args from network info
 		cmdArgs.Args = strings.TrimRight(fmt.Sprintf("%s;%s", cmdArgs.Args, BuildCNIArgs(networkInfo.Args)), ";")
+		if result != nil {
+			networkInfo.Conf["prevResult"] = result
+		}
 		result, err = DelegateAdd(networkInfo.Conf, cmdArgs, networkInfo.IfName)
 		if err != nil {
 			//fail to add cni, then delete all established CNIs recursively

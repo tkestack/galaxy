@@ -29,7 +29,6 @@ import (
 
 	"github.com/containernetworking/cni/pkg/skel"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
-	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
 	"tkestack.io/galaxy/pkg/api/cniutil"
@@ -255,15 +254,40 @@ func CreateVeth(containerID string, mtu int, suffix string) (netlink.Link, netli
 	return host, sbox, nil
 }
 
+func AddHostRoute(containerIP *net.IPNet, host netlink.Link, src net.IP) error {
+	if err := netlink.RouteAdd(&netlink.Route{
+		LinkIndex: host.Attrs().Index,
+		Scope:     netlink.SCOPE_LINK,
+		Dst:       containerIP,
+		Gw:        nil,
+		Src:       src,
+	}); err != nil {
+		if src != nil {
+			// compatible change for old kernel which does not support src option such as tlinux 0041 0042
+			if err1 := netlink.RouteAdd(&netlink.Route{
+				LinkIndex: host.Attrs().Index,
+				Scope:     netlink.SCOPE_LINK,
+				Dst:       containerIP,
+				Gw:        nil,
+			}); err1 != nil {
+				return fmt.Errorf("failed to add route '%v dev %v for old linux kernel': %v. With src option err: %v", containerIP, host.Attrs().Name, err1, err)
+			} else {
+				return nil
+			}
+		}
+		return fmt.Errorf("failed to add route '%v dev %v src %v': %v", containerIP, host.Attrs().Name, src.String(), err)
+	}
+	return nil
+}
+
 // #lizard forgives
 // VethConnectsHostWithContainer creates veth device pairs and connects container with host
 // If bridgeName specified, it attaches host side veth device to the bridge
-func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, bridgeName string, suffix string) error {
+func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, bridgeName string, suffix string, src net.IP) error {
 	host, sbox, err := CreateVeth(args.ContainerID, 1500, suffix)
 	if err != nil {
 		return err
 	}
-	// nolint: errcheck
 	defer func() {
 		if err != nil {
 			if host != nil {
@@ -292,7 +316,7 @@ func VethConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, brid
 	if bridgeName == "" {
 		desIP := result.IP4.IP.IP
 		ipn := net.IPNet{IP: desIP, Mask: net.CIDRMask(32, 32)}
-		if err = ip.AddRoute(&ipn, nil, host); err != nil {
+		if err = AddHostRoute(&ipn, host, src); err != nil {
 			return err
 		}
 	}
@@ -403,6 +427,12 @@ func configSboxDevice(result *t020.Result, args *skel.CmdArgs, sbox netlink.Link
 		if err := netlink.LinkSetName(sbox, args.IfName); err != nil {
 			return fmt.Errorf("failed to rename sbox device %q to %q: %v", sbox.Attrs().Name, args.IfName, err)
 		}
+		// disable rp_filter is needed when there're multi network device in container and host,
+		// the arp request from host will pick source ip un-determined,
+		// so device in container should disable rp_filter to answer this request
+		if err := DisableRpFilter(args.IfName); err != nil {
+			return fmt.Errorf("failed disable rp_filter to dev %s: %v", args.IfName, err)
+		}
 		// Add IP and routes to sbox, including default route
 		return cniutil.ConfigureIface(args.IfName, result)
 	})
@@ -411,6 +441,11 @@ func configSboxDevice(result *t020.Result, args *skel.CmdArgs, sbox netlink.Link
 func SetProxyArp(dev string) error {
 	file := fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/proxy_arp", dev)
 	return ioutil.WriteFile(file, []byte("1\n"), 0644)
+}
+
+func DisableRpFilter(dev string) error {
+	file := fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/rp_filter", dev)
+	return ioutil.WriteFile(file, []byte("0\n"), 0644)
 }
 
 func UnSetArpIgnore(dev string) error {

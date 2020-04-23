@@ -24,7 +24,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/docker"
@@ -150,19 +149,11 @@ func (g *Galaxy) Stop() error {
 }
 
 func (g *Galaxy) initk8sClient() {
-	var clientConfig *rest.Config
-	var err error
-	if g.Master != "" || g.KubeConf != "" {
-		clientConfig, err = clientcmd.BuildConfigFromFlags(g.Master, g.KubeConf)
-		if err != nil {
-			glog.Fatalf("Invalid client config: %v", err)
-		}
-	} else {
-		clientConfig, err = rest.InClusterConfig()
-		if err != nil {
-			glog.Fatalf("Init InClient config failed: %v", err)
-		}
+	clientConfig, err := clientcmd.BuildConfigFromFlags(g.Master, g.KubeConf)
+	if err != nil {
+		glog.Fatalf("Invalid client config: %v", err)
 	}
+
 	clientConfig.QPS = 1000.0
 	clientConfig.Burst = 2000
 	glog.Infof("QPS: %e, Burst: %d", clientConfig.QPS, clientConfig.Burst)
