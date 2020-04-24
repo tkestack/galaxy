@@ -55,7 +55,7 @@ rules:
   - customresourcedefinitions
   verbs:
   - "*"
-- apiGroups: ["tke.cloud.tencent.com"]
+- apiGroups: ["apps.tkestack.io"]
   resources:
   - tapps
   verbs: ["list", "watch"]
