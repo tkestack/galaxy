@@ -21,5 +21,5 @@ LABEL description="This Dockerfile is written for galaxy"
 WORKDIR /root/
 RUN yum install -y iproute iptables ipset
 COPY host-local loopback /opt/cni/galaxy/bin/
-COPY galaxy-k8s-sriov galaxy-k8s-vlan galaxy-k8s-pure galaxy-bridge galaxy-flannel galaxy-veth galaxy-sdn tke-route-eni /opt/cni/galaxy/bin/
+COPY galaxy-k8s-sriov galaxy-k8s-vlan galaxy-underlay-veth galaxy-bridge galaxy-flannel galaxy-veth galaxy-sdn tke-route-eni /opt/cni/galaxy/bin/
 COPY galaxy /usr/bin/

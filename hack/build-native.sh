@@ -13,10 +13,11 @@ cd $ROOT
 PKG=tkestack.io/galaxy
 BIN_PREFIX="galaxy"
 # build galaxy cni plugins
-PLUGINS="$GOPATH/src/${PKG}/cni/k8s-vlan $GOPATH/src/${PKG}/cni/sdn $GOPATH/src/${PKG}/cni/veth $GOPATH/src/${PKG}/cni/k8s-sriov $GOPATH/src/${PKG}/cni/k8s-pure"
+PLUGINS="$GOPATH/src/${PKG}/cni/k8s-vlan $GOPATH/src/${PKG}/cni/sdn $GOPATH/src/${PKG}/cni/veth $GOPATH/src/${PKG}/cni/k8s-sriov $GOPATH/src/${PKG}/cni/underlay/veth"
 for d in $PLUGINS; do
 	if [ -d $d ]; then
-		plugin=$(basename $d)
+	    plugin_dir=${d#"$GOPATH/src/${PKG}/cni/"}
+		plugin=${plugin_dir//"/"/"-"}
 		echo "  " $plugin
 		go build -o bin/${BIN_PREFIX}-$plugin $flags ${PKG}/cni/$plugin
 	fi
