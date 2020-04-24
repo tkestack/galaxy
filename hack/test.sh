@@ -11,6 +11,6 @@ echo PATH=$PATH
 export GOOS=linux
 go test -coverpkg $PKG/pkg/... -coverprofile=coverage.txt -covermode=atomic -v ./tools/... ./cmd/... ./cni/... ./pkg/...
 # go tool cover -func=coverage.txt
-for i in e2e/k8s-vlan e2e/veth e2e/cni-request; do
+for i in e2e/k8s-vlan e2e/veth e2e/cni-request e2e/underlay/veth; do
   ginkgo -v $i
 done

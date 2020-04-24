@@ -126,6 +126,21 @@ func SetupDummyDev(ifName, cidr string) error {
 	return nil
 }
 
+func SetupVlanDev(ifName, parent, cidr string, vlanID int) error {
+	if out, err := Command("ip", "link", "add", "link",parent, "name", ifName, "type", "vlan", "id", fmt.Sprintf("%d", vlanID)).CombinedOutput(); err != nil {
+		if !strings.HasPrefix(string(out), "RTNETLINK answers: File exists") {
+			return fmt.Errorf("failed to add link %s: %v, %s", ifName, err, string(out))
+		}
+	}
+	if out, err := Command("ip", "address", "add", cidr, "dev", ifName).CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to add address %s to %s: %v, %s", cidr, ifName, err, out)
+	}
+	if out, err := Command("ip", "link", "set", ifName, "up").CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set up %s: %v, %s", ifName, err, out)
+	}
+	return nil
+}
+
 func IPInfo(cidr string, vlan uint16) (string, error) {
 	_, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {
