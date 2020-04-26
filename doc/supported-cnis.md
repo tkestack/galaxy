@@ -62,3 +62,25 @@ TKE route ENI CNI is a [Tencent cloud ENI](https://cloud.tencent.com/product/eni
 and policy routing on host to connect host veth pair with ENI eth device.
 
 TKE route ENI CNI gets POD IPs either from CNI Args `ipinfos=[{"ip":"192.168.0.68/26","vlan":2,"gateway":"192.168.0.65"}]` or ipam CNI plugin.
+
+## underlay-veth CNI
+
+Underlay-veth CNI is a underlay network plugin which creates a veth pair to connect host network namespace with container.
+ 
+Compare with Vlan CNI, underlay-veth cni will not create any bridge device and using host route rules for packet forwarding.
+
+Underlay-veth CNI gets POD IPs either from CNI Args `ipinfos=[{"ip":"192.168.0.68/26","vlan":2,"gateway":"192.168.0.65"}]` or ipam CNI plugin.
+
+Underlay-veth CNI supports configuring vlan for POD IPs, and support multi-vlanId in single node.
+
+Compare with vlan CNI, underlay-veth CNI will not create vlan devices for host. The OS administrator should pre-configure vlan devices(with ip address) if needed.
+
+This is the configuration of underlay-veth CNI.
+
+```golang
+type NetConf struct {
+	types.NetConf
+	// The device which has IDC ip address, eg. eth0
+	Device string `json:"device"`
+}
+```
