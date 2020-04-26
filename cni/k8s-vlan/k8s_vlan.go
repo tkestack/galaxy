@@ -143,7 +143,7 @@ func setupVlanDevice(result020s []*t020.Result, vlanIds []uint16, args *skel.Cmd
 				args.IfName = fmt.Sprintf("eth%d", ifIndex)
 			}
 		}
-		if err := utils.VethConnectsHostWithContainer(result020, args, bridgeName, suffix); err != nil {
+		if err := utils.VethConnectsHostWithContainer(result020, args, bridgeName, suffix, nil); err != nil {
 			return err
 		}
 		_ = utils.SendGratuitousARP(args.IfName, result020s[0].IP4.IP.IP.String(), args.Netns, d.GratuitousArpRequest)

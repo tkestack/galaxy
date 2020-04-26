@@ -52,11 +52,12 @@ function build::galaxy() {
   echo "Building plugins"
 
   # build galaxy cni plugins
-  PLUGINS="${PKG}/cni/k8s-vlan ${PKG}/cni/sdn ${PKG}/cni/veth ${PKG}/cni/k8s-sriov"
+  PLUGINS="${PKG}/cni/k8s-vlan ${PKG}/cni/sdn ${PKG}/cni/veth ${PKG}/cni/k8s-sriov ${PKG}/cni/underlay/veth"
   for d in ${PLUGINS}; do
-    plugin=$(basename $d)
+    plugin_dir=${d#"${PKG}/cni/"}
+    plugin=${plugin_dir//"/"/"-"}
     echo "  " ${plugin}
-    go build -o ${BIN_DIR}/${BIN_PREFIX}-${plugin} ${GOBUILD_FLAGS} ${PKG}/cni/${plugin}
+    go build -o ${BIN_DIR}/${BIN_PREFIX}-${plugin} ${GOBUILD_FLAGS} ${d}
   done
 
   # build cni plugins (no galaxy prefix)
