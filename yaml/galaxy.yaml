@@ -119,6 +119,9 @@ spec:
         - name: docker-sock
           mountPath: /host/run/
       terminationGracePeriodSeconds: 30
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
       volumes:
       - name: galaxy-run
         hostPath:
