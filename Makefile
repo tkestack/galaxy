@@ -29,6 +29,7 @@ VERSION_PACKAGE=$(ROOT_PACKAGE)/pkg/utils/ldflags
 include build/lib/common.mk
 include build/lib/image.mk
 include build/lib/golang.mk
+include build/lib/docker-buildx.mk
 
 # ==============================================================================
 # Usage
@@ -94,7 +95,11 @@ manifest:
 ## manifest.multiarch: Build docker images for multiple platforms and push manifest lists to registry.
 .PHONY: manifest.multiarch
 manifest.multiarch:
-	@$(MAKE) image.manifest.push.multiarch
+	@$(MAKE) docker.push.multiarch
+
+.PHONY: clean.buildx
+clean.buildx:
+	@$(MAKE) buildx.clean
 
 ## test: 
 .PHONY: test
