@@ -1,0 +1,32 @@
+name: release-multiarch
+
+on:
+  create:
+    tags:
+      - v*
+  push:
+    branches:
+      - branch-*
+
+jobs:
+  release-multiarch:
+
+    runs-on: ubuntu-18.04
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - uses: azure/docker-login@v1
+        with:
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: crazy-max/ghaction-docker-buildx@v1
+        with:
+          buildx-version: latest
+          qemu-version: latest
+
+      - run: |
+          make manifest.multiarch

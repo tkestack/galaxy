@@ -18,7 +18,7 @@
 # Makefile helper functions for golang
 #
 
-GO_IMAGE := golang:1.13.8
+GO_IMAGE := golang:1.14.2
 GO := go
 GO_SUPPORTED_VERSIONS ?= 1.11|1.12|1.13|1.14
 GO_LDFLAGS += -X $(VERSION_PACKAGE).GIT_COMMIT=$(GIT_COMMIT) \
@@ -32,8 +32,6 @@ _DOCKER_RUN_EXTRA_ARGS += --env HTTP_PROXY=${HTTP_PROXY}
 endif
 ifdef HTTPS_PROXY
 _DOCKER_RUN_EXTRA_ARGS += --env HTTPS_PROXY=${HTTPS_PROXY}
-else ifdef HTTP_PROXY
-_DOCKER_RUN_EXTRA_ARGS += --env HTTPS_PROXY=${HTTP_PROXY}
 endif
 
 ifeq ($(ROOT_PACKAGE),)
@@ -89,7 +87,7 @@ go.entry.build.%:
 	@ARCH=$(ARCH) GO_LDFLAGS="$(GO_LDFLAGS)" $(ROOT_DIR)/$(BUILD_SCRIPT) "$(COMMAND)"
 
 .PHONY: go.docker.build.%
-go.docker.build.%: image.daemon.verify
+go.docker.build.%:
 	$(eval IMAGE_PLAT := $(subst _,/,$*))
 	@echo "===========> Building binary via $(IMAGE_PLAT) docker container"
 	$(DOCKER) run --rm --platform $(IMAGE_PLAT) $(_DOCKER_RUN_EXTRA_ARGS) \
