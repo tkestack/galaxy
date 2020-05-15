@@ -17,11 +17,11 @@
 # ==============================================================================
 # Makefile helper functions for docker image
 
-DOCKER := docker
-DOCKER_SUPPORTED_API_VERSION ?= 1.32
+DOCKER := DOCKER_CLI_EXPERIMENTAL=enabled docker
+DOCKER_SUPPORTED_API_VERSION ?= 1.40
+DOCKER_VERSION ?= 19.03
 
 REGISTRY_PREFIX ?= tkestack
-BASE_IMAGE = centos:7
 
 EXTRA_ARGS ?=
 _DOCKER_BUILD_EXTRA_ARGS :=
@@ -31,8 +31,6 @@ _DOCKER_BUILD_EXTRA_ARGS += --build-arg http_proxy=${HTTP_PROXY}
 endif
 ifdef HTTPS_PROXY
 _DOCKER_BUILD_EXTRA_ARGS += --build-arg https_proxy=${HTTPS_PROXY}
-else ifdef HTTP_PROXY
-_DOCKER_BUILD_EXTRA_ARGS += --build-arg https_proxy=${HTTP_PROXY}
 endif
 
 ifneq ($(EXTRA_ARGS), )
@@ -41,28 +39,30 @@ endif
 
 .PHONY: image.verify
 image.verify:
-	$(eval API_VERSION := $(shell $(DOCKER) version | grep -E 'API version: {6}[0-9]' | awk '{print $$3} END { if (NR==0) print 0}' ))
-	$(eval GREATER := $(shell echo "$(API_VERSION) > $(DOCKER_SUPPORTED_API_VERSION)" | bc))
-	@if [ $(GREATER) -ne 1 ]; then \
+	$(eval API_VERSION := $(shell $(DOCKER) version | grep -E 'API version: {1,6}[0-9]' | head -n1 | awk '{print $$3} END { if (NR==0) print 0}' ))
+	$(eval PASS := $(shell echo "$(API_VERSION) >= $(DOCKER_SUPPORTED_API_VERSION)" | bc))
+	@if [ $(PASS) -ne 1 ]; then \
 		$(DOCKER) -v ;\
-		echo "Unsupported docker version. Docker API version should be greater than $(DOCKER_SUPPORTED_API_VERSION)"; \
+		echo "Unsupported docker version. Docker API version should be greater than $(DOCKER_SUPPORTED_API_VERSION) (Or docker version: $(DOCKER_VERSION))"; \
 		exit 1; \
 	fi
 
-.PHONY: image.daemon.verify
-image.daemon.verify: image.verify
-	$(eval PASS := $(shell $(DOCKER) version | grep -q -E 'Experimental: {5}true' && echo 0 || echo 1))
-	@if [ $(PASS) -ne 0 ]; then \
-		echo "Experimental features of Docker daemon is not enabled. Please add \"experimental\": true in '/etc/docker/daemon.json' and then restart Docker daemon."; \
-		exit 1; \
+.PHONY: image.buildx.verify
+image.buildx.verify: image.verify
+	$(eval PASS := $(shell $(DOCKER) buildx version > /dev/null && echo 1 || echo 0))
+	@if [ $(PASS) -ne 1 ]; then \
+		$(MAKE) image.buildx.install; \
 	fi
+
+.PHONY: image.buildx.install
+image.buildx.install:
+	@$(ROOT_DIR)/build/lib/install-buildx.sh
 
 .PHONY: image.build
-image.build: image.verify go.build $(addprefix image.build., $(addprefix $(PLATFORM)., $(BINS)))
+image.build: image.buildx.verify $(addprefix image.build., $(addprefix $(PLATFORM)., $(BINS)))
 
 .PHONY: image.build.multiarch
-image.build.multiarch: image.verify  go.build.multiarch \
-$(foreach p,$(PLATFORMS),$(addprefix image.build., $(addprefix $(p)., $(BINS))))
+image.build.multiarch: image.buildx.verify $(foreach p,$(PLATFORMS),$(addprefix image.build., $(addprefix $(p)., $(BINS))))
 
 .PHONY: image.build.%
 image.build.%:
@@ -71,26 +71,16 @@ image.build.%:
 	$(eval OS := $(word 1,$(subst _, ,$(PLATFORM))))
 	$(eval ARCH := $(word 2,$(subst _, ,$(PLATFORM))))
 	$(eval IMAGE_PLAT := $(subst _,/,$(PLATFORM)))
+	$(eval IMAGE_NAME := $(REGISTRY_PREFIX)/$(IMAGE)-$(ARCH):$(VERSION))
 	@echo "===========> Building docker image $(IMAGE) $(VERSION) for $(IMAGE_PLAT)"
-	@mkdir -p $(TMP_DIR)/$(IMAGE)
-	@cat $(ROOT_DIR)/build/docker/$(IMAGE)/Dockerfile\
-		| sed "s#BASE_IMAGE#$(BASE_IMAGE)#g" >$(TMP_DIR)/$(IMAGE)/Dockerfile
-	@cp -R $(OUTPUT_DIR)/bin-$(ARCH)/* $(TMP_DIR)/$(IMAGE)/
-	$(eval BUILD_SUFFIX := $(_DOCKER_BUILD_EXTRA_ARGS) --pull -t $(REGISTRY_PREFIX)/$(IMAGE)-$(ARCH):$(VERSION) $(TMP_DIR)/$(IMAGE))
-	@if [ $(shell $(GO) env GOARCH) != $(ARCH) ] ; then \
-		$(MAKE) image.daemon.verify ;\
-		$(DOCKER) build --platform $(IMAGE_PLAT) $(BUILD_SUFFIX) ; \
-	else \
-		$(DOCKER) build $(BUILD_SUFFIX) ; \
-	fi
-	@rm -rf $(TMP_DIR)/$(IMAGE)
+	$(DOCKER) buildx build --platform $(IMAGE_PLAT) --load -t $(IMAGE_NAME) $(_DOCKER_BUILD_EXTRA_ARGS) \
+	 -f $(ROOT_DIR)/build/docker/$(IMAGE)/Dockerfile $(ROOT_DIR)
 
 .PHONY: image.push
-image.push: image.verify go.build $(addprefix image.push., $(addprefix $(PLATFORM)., $(BINS)))
+image.push: image.buildx.verify $(addprefix image.push., $(addprefix $(PLATFORM)., $(BINS)))
 
 .PHONY: image.push.multiarch
-image.push.multiarch: image.verify go.build.multiarch \
-$(foreach p,$(PLATFORMS),$(addprefix image.push., $(addprefix $(p)., $(BINS))))
+image.push.multiarch: image.buildx.verify $(foreach p,$(PLATFORMS),$(addprefix image.push., $(addprefix $(p)., $(BINS))))
 
 .PHONY: image.push.%
 image.push.%: image.build.%
@@ -99,8 +89,7 @@ image.push.%: image.build.%
 
 .PHONY: image.manifest.push
 image.manifest.push: export DOCKER_CLI_EXPERIMENTAL := enabled
-image.manifest.push: image.verify go.build \
-$(addprefix image.manifest.push., $(addprefix $(PLATFORM)., $(BINS)))
+image.manifest.push: image.buildx.verify $(addprefix image.manifest.push., $(addprefix $(PLATFORM)., $(BINS)))
 
 .PHONY: image.manifest.push.%
 image.manifest.push.%: image.push.% image.manifest.remove.%
