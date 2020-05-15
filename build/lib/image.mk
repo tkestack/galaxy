@@ -49,7 +49,7 @@ image.verify:
 
 .PHONY: image.buildx.verify
 image.buildx.verify: image.verify
-	$(eval PASS := $(shell $(DOCKER) buildx version && echo 1 || echo 0))
+	$(eval PASS := $(shell $(DOCKER) buildx version > /dev/null && echo 1 || echo 0))
 	@if [ $(PASS) -ne 1 ]; then \
 		$(MAKE) image.buildx.install; \
 	fi
