@@ -37,14 +37,16 @@ func CreateStatefulSetPodWithLabels(name, namespace string, labels, annotations 
 func CreateStatefulSetPod(name, namespace string, annotations map[string]string) *corev1.Pod {
 	parts := strings.Split(name, "-")
 	quantity := resource.NewQuantity(1, resource.DecimalSI)
+	appName := strings.Join(parts[:len(parts)-1], "-")
 	return &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
 			Name:        name,
 			Namespace:   namespace,
+			Labels:      map[string]string{"app": appName},
 			Annotations: annotations,
 			OwnerReferences: []v1.OwnerReference{{
 				Kind: "StatefulSet",
-				Name: strings.Join(parts[:len(parts)-1], "-"),
+				Name: appName,
 			}}},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{

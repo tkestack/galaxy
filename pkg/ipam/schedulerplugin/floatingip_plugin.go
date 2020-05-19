@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	glog "k8s.io/klog"
+	"k8s.io/utils/keymutex"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant/utils"
 	"tkestack.io/galaxy/pkg/api/galaxy/private"
@@ -38,7 +39,6 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
-	"tkestack.io/galaxy/pkg/utils/keylock"
 )
 
 // FloatingIPPlugin Allocates Floating IP for deployments
@@ -47,7 +47,6 @@ type FloatingIPPlugin struct {
 	// node name to subnet cache
 	nodeSubnet     map[string]*net.IPNet
 	nodeSubnetLock sync.Mutex
-	resyncLock     sync.RWMutex
 	*PluginFactoryArgs
 	lastIPConf, lastSecondIPConf string
 	conf                         *Conf
@@ -55,7 +54,9 @@ type FloatingIPPlugin struct {
 	hasSecondIPConf              atomic.Value
 	cloudProvider                cloudprovider.CloudProvider
 	// protect unbind immutable deployment pod
-	dpLockPool *keylock.Keylock
+	dpLockPool keymutex.KeyMutex
+	// protect bind/unbind for each pod
+	podLockPool keymutex.KeyMutex
 }
 
 // NewFloatingIPPlugin creates FloatingIPPlugin
@@ -67,7 +68,8 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		PluginFactoryArgs: args,
 		conf:              &conf,
 		unreleased:        make(chan *releaseEvent, 1000),
-		dpLockPool:        keylock.NewKeylock(),
+		dpLockPool:        keymutex.NewHashed(500000),
+		podLockPool:       keymutex.NewHashed(500000),
 	}
 	plugin.ipam = floatingip.NewCrdIPAM(args.CrdClient, floatingip.InternalIp, plugin.FIPInformer)
 	// we can't add two event handler for the same informer.
@@ -181,13 +183,12 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 // If the given pod doesn't want floating IP, none failedNodes returns
 func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev1.Node, schedulerapi.FailedNodesMap,
 	error) {
-	p.resyncLock.RLock()
-	defer p.resyncLock.RUnlock()
 	failedNodesMap := schedulerapi.FailedNodesMap{}
 	if !p.hasResourceName(&pod.Spec) {
 		return nodes, failedNodesMap, nil
 	}
 	filteredNodes := []corev1.Node{}
+	defer p.lockPod(pod.Name, pod.Namespace)()
 	subnetSet, err := p.getSubnet(pod)
 	if err != nil {
 		return filteredNodes, failedNodesMap, err
@@ -243,9 +244,7 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 			return nil, err
 		}
 		// Lock to make checking available subnets and allocating reserved ip atomic
-		lockIndex := p.dpLockPool.GetLockIndex([]byte(keyObj.PoolPrefix()))
-		p.dpLockPool.RawLock(lockIndex)
-		defer p.dpLockPool.RawUnlock(lockIndex)
+		defer p.LockDpPool(keyObj.PoolPrefix())()
 	}
 	subnetSet, reserve, err := getAvailableSubnet(p.ipam, keyObj, policy, replicas, isPoolSizeDefined)
 	if err != nil {
@@ -377,17 +376,16 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 
 // Bind binds a new floatingip or reuse an old one to pod
 func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
-	p.resyncLock.RLock()
-	defer p.resyncLock.RUnlock()
 	pod, err := p.PluginFactoryArgs.PodLister.Pods(args.PodNamespace).Get(args.PodName)
 	if err != nil {
-		return fmt.Errorf("failed to find pod %s: %v", util.Join(args.PodName, args.PodNamespace), err)
+		return fmt.Errorf("failed to find pod %s: %w", util.Join(args.PodName, args.PodNamespace), err)
 	}
 	if !p.hasResourceName(&pod.Spec) {
 		// we will config extender resources which ensures pod which doesn't want floatingip won't be sent to plugin
 		// see https://github.com/kubernetes/kubernetes/pull/60332
 		return fmt.Errorf("pod which doesn't want floatingip have been sent to plugin")
 	}
+	defer p.lockPod(pod.Name, pod.Namespace)()
 	keyObj, err := util.FormatKey(pod)
 	if err != nil {
 		return err
@@ -450,8 +448,7 @@ func isPodNotFoundError(err error) bool {
 
 // unbind release ip from pod
 func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
-	p.resyncLock.RLock()
-	defer p.resyncLock.RUnlock()
+	defer p.lockPod(pod.Name, pod.Namespace)()
 	glog.V(3).Infof("handle unbind pod %s", pod.Name)
 	keyObj, err := util.FormatKey(pod)
 	if err != nil {
@@ -470,8 +467,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 		ipStr := ipInfo.IPInfo.IP.IP.String()
 		var attr Attr
 		if err := json.Unmarshal([]byte(ipInfo.FIP.Attr), &attr); err != nil {
-			glog.Errorf("failed to unmarshal attr %s for pod %s: %v", ipInfo.FIP.Attr, key, err)
-			return err
+			return fmt.Errorf("failed to unmarshal attr %s for pod %s: %v", ipInfo.FIP.Attr, key, err)
 		}
 
 		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", attr.NodeName, ipStr, key)
@@ -586,14 +582,18 @@ func getAttr(nodeName, uid string) string {
 	return string(attr)
 }
 
-func (p *FloatingIPPlugin) GetLockPool() *keylock.Keylock {
-	return p.dpLockPool
-}
-
 func (p *FloatingIPPlugin) GetIpam() floatingip.IPAM {
 	return p.ipam
 }
 
 func (p *FloatingIPPlugin) GetSecondIpam() floatingip.IPAM {
 	return p.secondIPAM
+}
+
+func (p *FloatingIPPlugin) lockPod(name, namespace string) func() {
+	key := fmt.Sprintf("%s_%s", namespace, name)
+	p.podLockPool.LockKey(key)
+	return func() {
+		_ = p.podLockPool.UnlockKey(key)
+	}
 }

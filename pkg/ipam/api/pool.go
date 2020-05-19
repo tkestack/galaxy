@@ -32,13 +32,12 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 	"tkestack.io/galaxy/pkg/utils/httputil"
-	"tkestack.io/galaxy/pkg/utils/keylock"
 )
 
 type PoolController struct {
 	Client           versioned.Interface
 	PoolLister       list.PoolLister
-	LockPool         *keylock.Keylock
+	LockPoolFunc     func(poolName string) func() // returns unlock func
 	IPAM, SecondIPAM floatingip.IPAM
 }
 
@@ -139,9 +138,7 @@ func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Resp
 
 func (c *PoolController) preAllocateIP(req *restful.Request, resp *restful.Response, pool *Pool) {
 	poolPrefix := util.NewKeyObj(util.DeploymentPrefixKey, "", "", "", pool.Name).PoolPrefix()
-	lockIndex := c.LockPool.GetLockIndex([]byte(poolPrefix))
-	c.LockPool.RawLock(lockIndex)
-	defer c.LockPool.RawUnlock(lockIndex)
+	defer c.LockPoolFunc(poolPrefix)()
 	fips, err := c.IPAM.ByPrefix(poolPrefix)
 	if err != nil {
 		httputil.InternalError(resp, err)

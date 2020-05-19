@@ -17,12 +17,10 @@
 package schedulerplugin
 
 import (
-	"encoding/json"
 	"fmt"
 
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
-	"tkestack.io/galaxy/pkg/ipam/floatingip"
 )
 
 // cloudProviderAssignIP send assign ip req to cloud provider
@@ -61,41 +59,4 @@ func (p *FloatingIPPlugin) cloudProviderUnAssignIP(req *rpc.UnAssignIPRequest) e
 	}
 	glog.Infof("UnAssignIP %v success", req)
 	return nil
-}
-
-// resyncCloudProviderIPs resyncs assigned ips with cloud provider
-func (p *FloatingIPPlugin) resyncCloudProviderIPs(ipam floatingip.IPAM, meta *resyncMeta) {
-	for key, obj := range meta.assignedPods {
-		if _, ok := meta.existPods[key]; ok {
-			continue
-		}
-		// check with apiserver to confirm it really not exist
-		if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
-			continue
-		}
-		var attr Attr
-		if err := json.Unmarshal([]byte(obj.fip.Attr), &attr); err != nil {
-			glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.fip.Attr, key, err)
-			continue
-		}
-		if attr.NodeName == "" {
-			// this is expected. For tapp and sts pod, nodeName will be updated to empty after unassigning
-			continue
-		}
-		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName,
-			obj.fip.IP.String(), key)
-		if err := p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
-			NodeName:  attr.NodeName,
-			IPAddress: obj.fip.IP.String(),
-		}); err != nil {
-			// delete this record from allocatedIPs map to have a retry
-			delete(meta.allocatedIPs, key)
-			glog.Warningf("failed to unassign ip %s to %s: %v", obj.fip.IP.String(), key, err)
-			continue
-		}
-		// for tapp and sts pod, we need to clean its node attr and uid
-		if err := ipam.ReserveIP(key, key, getAttr("", "")); err != nil {
-			glog.Errorf("failed to reserve %s ip: %v", key, err)
-		}
-	}
 }

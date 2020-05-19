@@ -18,59 +18,41 @@
 package schedulerplugin
 
 import (
-	"errors"
 	"net"
+	"sync"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	"tkestack.io/galaxy/pkg/api/k8s/schedulerapi"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	schedulerplugin_util "tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
-func TestBindingAfterReceivingDeleteEvent(t *testing.T) {
-	node := createNode("node1", nil, "10.49.27.2")
+func TestConcurrentBindUnbind(t *testing.T) {
 	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
 	podKey, _ := schedulerplugin_util.FormatKey(pod)
-	dp1 := createDeployment("dp", "ns1", pod.ObjectMeta, 1)
-	expectIP := "10.49.27.205"
-	plugin, stopChan := createPlugin(t, pod, dp1, &node)
+	dp1 := createDeployment(pod.ObjectMeta, 1)
+	plugin, stopChan, _ := createPluginTestNodes(t, pod, dp1)
 	defer func() { stopChan <- struct{}{} }()
-	cloudProvider := &fakeCloudProvider1{proceedBind: make(chan struct{})}
+	cloudProvider := &fakeCloudProvider1{m: make(map[string]string)}
 	plugin.cloudProvider = cloudProvider
+	if err := plugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.49.27.216"), constant.ReleasePolicyPodDelete, "{}"); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		// drain ips other than expectIP of this subnet
-		if err := drainNode(plugin, node3Subnet, net.ParseIP(expectIP)); err != nil {
-			t.Fatal(err)
-		}
-		// bind will hang on waiting event
-		_, err := checkBind(plugin, pod, node.Name, podKey.KeyInDB, node3Subnet)
-		if err == nil || !isPodNotFoundError(errors.Unwrap(err)) {
+		defer wg.Done()
+		if err := plugin.unbind(pod); err != nil {
 			t.Fatal(err)
 		}
 	}()
-	<-cloudProvider.proceedBind
-	// Before cloudProvider.AssignIP invoked allocating ip has already done, check ip allocated to pod
-	if err := checkIPKey(plugin.ipam, expectIP, podKey.KeyInDB); err != nil {
+	if err := plugin.Bind(&schedulerapi.ExtenderBindingArgs{
+		PodName:      pod.Name,
+		PodNamespace: pod.Namespace,
+		Node:         node3,
+	}); err != nil {
 		t.Fatal(err)
 	}
-	// before bind is done, we delete this pod
-	if err := plugin.PluginFactoryArgs.Client.CoreV1().Pods(pod.Namespace).Delete(pod.Name, &metav1.DeleteOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := waitForUnbind(plugin); err != nil {
-		t.Fatal(err)
-	}
-	cloudProvider.proceedBind <- struct{}{}
-	if err := waitForUnbind(plugin); err != nil {
-		t.Fatal(err)
-	}
-	// key should be updated to pool prefix
-	if err := checkIPKey(plugin.ipam, expectIP, podKey.PoolPrefix()); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func waitForUnbind(plugin *FloatingIPPlugin) error {
-	deleteEvent := <-plugin.unreleased
-	return plugin.unbind(deleteEvent.pod)
+	wg.Wait()
 }
