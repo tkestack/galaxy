@@ -307,7 +307,7 @@ func (h *PortMappingHandler) EnsureBasicRule() error {
 		"-m", "addrtype", "--dst-type", "LOCAL",
 		"-j", string(kubeHostportsChain)}
 	for _, tc := range tableChainsNeedJumpServices {
-		if _, err := h.Interface.EnsureRule(utiliptables.Prepend, tc.table, tc.chain, args...); err != nil {
+		if _, err := h.Interface.EnsureRule(utiliptables.Append, tc.table, tc.chain, args...); err != nil {
 			return fmt.Errorf("Failed to ensure that %s chain %s jumps to %s: %v", tc.table, tc.chain,
 				kubeHostportsChain, err)
 		}

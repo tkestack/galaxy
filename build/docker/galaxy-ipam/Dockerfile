@@ -31,7 +31,7 @@ RUN make build BINS="galaxy-ipam"
 ARG TARGETARCH
 ARG OUTPUTDIR="_output/bin-${TARGETARCH}"
 RUN mv -f ${OUTPUTDIR}/* /
-
+WORKDIR /
 
 
 
