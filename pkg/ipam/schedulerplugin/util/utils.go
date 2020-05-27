@@ -122,6 +122,9 @@ const (
 	DeploymentPrefixKey  = "dp_"
 	StatefulsetPrefixKey = "sts_"
 	TAppPrefixKey        = "tapp_"
+
+	NoRefAppName       = "NULL"
+	NoRefAppTypePrefix = "NULL_"
 )
 
 func FormatKey(pod *corev1.Pod) (*KeyObj, error) {
@@ -131,22 +134,28 @@ func FormatKey(pod *corev1.Pod) (*KeyObj, error) {
 		PodName:   pod.Name,
 		Namespace: pod.Namespace}
 	if len(pod.OwnerReferences) == 0 {
-		return keyObj, fmt.Errorf("doesn't support pods which does not have parent app")
-	}
-	if pod.OwnerReferences[0].Kind == "StatefulSet" {
-		keyObj.AppName = pod.OwnerReferences[0].Name
-		keyObj.AppTypePrefix = StatefulsetPrefixKey
-	} else if pod.OwnerReferences[0].Kind == "TApp" {
-		keyObj.AppName = pod.OwnerReferences[0].Name
-		keyObj.AppTypePrefix = TAppPrefixKey
+		keyObj.AppName = NoRefAppName
+		keyObj.AppTypePrefix = NoRefAppTypePrefix
 	} else {
-		deploymentName := resolveDeploymentName(pod)
-		if deploymentName == "" {
-			return keyObj, fmt.Errorf("unsupported app type")
+		if pod.OwnerReferences[0].Kind == "StatefulSet" {
+			keyObj.AppName = pod.OwnerReferences[0].Name
+			keyObj.AppTypePrefix = StatefulsetPrefixKey
+		} else if pod.OwnerReferences[0].Kind == "TApp" {
+			keyObj.AppName = pod.OwnerReferences[0].Name
+			keyObj.AppTypePrefix = TAppPrefixKey
+		} else if pod.OwnerReferences[0].Kind != "ReplicaSet" {
+			// some app type galaxy can't recognize
+			keyObj.AppName = pod.OwnerReferences[0].Name
+			keyObj.AppTypePrefix = strings.ToLower(pod.OwnerReferences[0].Kind) + "_"
+		} else {
+			deploymentName := resolveDeploymentName(pod)
+			if deploymentName == "" {
+				return keyObj, fmt.Errorf("unsupported app type")
+			}
+			keyObj.AppName = deploymentName
+			// treat rs like deployment, share the same appPrefixKey
+			keyObj.AppTypePrefix = DeploymentPrefixKey
 		}
-		keyObj.AppName = deploymentName
-		// treat rs like deployment, share the same appPrefixKey
-		keyObj.AppTypePrefix = DeploymentPrefixKey
 	}
 	keyObj.genKey()
 	return keyObj, nil
@@ -166,26 +175,19 @@ func ParseKey(key string) *KeyObj {
 		keyObj.PoolName = parts[0]
 		removedPoolKey = parts[1]
 	}
-	if strings.HasPrefix(removedPoolKey, DeploymentPrefixKey) {
-		keyObj.AppTypePrefix = DeploymentPrefixKey
-	} else if strings.HasPrefix(removedPoolKey, StatefulsetPrefixKey) {
-		keyObj.AppTypePrefix = StatefulsetPrefixKey
-	} else if strings.HasPrefix(removedPoolKey, TAppPrefixKey) {
-		keyObj.AppTypePrefix = TAppPrefixKey
-	}
-	keyObj.AppName, keyObj.PodName, keyObj.Namespace = resolvePodKey(removedPoolKey)
+	keyObj.AppTypePrefix, keyObj.AppName, keyObj.PodName, keyObj.Namespace = resolvePodKey(removedPoolKey)
 	return keyObj
 }
 
 // resolvePodKey returns appname, podName, namespace
-// "sts_kube-system_fip-bj_fip-bj-111": {"fip-bj", "fip-bj-111", "kube-system"}
-func resolvePodKey(key string) (string, string, string) {
+// "sts_kube-system_fip-bj_fip-bj-111": {"sts_", "fip-bj", "fip-bj-111", "kube-system"}
+func resolvePodKey(key string) (string, string, string, string) {
 	// _ is not a valid char in appname
 	parts := strings.Split(key, "_")
 	if len(parts) == 4 {
-		return parts[2], parts[3], parts[1]
+		return parts[0] + "_", parts[2], parts[3], parts[1]
 	}
-	return "", "", ""
+	return "", "", "", ""
 }
 
 func Join(name, namespace string) string {

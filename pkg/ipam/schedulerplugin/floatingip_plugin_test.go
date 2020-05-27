@@ -130,6 +130,21 @@ func TestFilter(t *testing.T) {
 	}
 }
 
+func TestFilterForPodWithoutRef(t *testing.T) {
+	fipPlugin, stopChan, nodes := createPluginTestNodes(t)
+	defer func() { stopChan <- struct{}{} }()
+	filtered, failed, err := fipPlugin.Filter(CreateSimplePod("pod1", "ns1", nil), nodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkFilterResult(filtered, failed, []string{node3, node4}, []string{drainedNode, nodeHasNoIP}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = fipPlugin.Filter(CreateSimplePod("pod1", "ns1", immutableAnnotation), nodes); err == nil {
+		t.Fatalf("expect an error for non sts/deployment/tapp pod with policy immutable")
+	}
+}
+
 func TestAllocateIP(t *testing.T) {
 	fipPlugin, stopChan, _ := createPluginTestNodes(t)
 	defer func() { stopChan <- struct{}{} }()
