@@ -28,20 +28,24 @@ import (
 
 func TestResolvePodKey(t *testing.T) {
 	tests := map[string][]string{
-		"dp_default_dp1_dp1-rs1-pod1":           {"default", "dp1", "dp1-rs1-pod1"},
-		"sts_default_fip_fip-0":                 {"default", "fip", "fip-0"},
-		"sts_kube-system_fip-bj_fip-bj-111":     {"kube-system", "fip-bj", "fip-bj-111"},
-		"tapp_kube-system_tapp-bj_tapp-bj-2091": {"kube-system", "tapp-bj", "tapp-bj-2091"},
+		"dp_default_dp1_dp1-rs1-pod1":           {"dp_", "default", "dp1", "dp1-rs1-pod1"},
+		"sts_default_fip_fip-0":                 {"sts_", "default", "fip", "fip-0"},
+		"sts_kube-system_fip-bj_fip-bj-111":     {"sts_", "kube-system", "fip-bj", "fip-bj-111"},
+		"tapp_kube-system_tapp-bj_tapp-bj-2091": {"tapp_", "kube-system", "tapp-bj", "tapp-bj-2091"},
+		"NULL_default_NULL_pod1":                {"NULL_", "default", "NULL", "pod1"},
 	}
 	for k, v := range tests {
-		appname, podName, namespace := resolvePodKey(k)
-		if namespace != v[0] {
+		apptype, appname, podName, namespace := resolvePodKey(k)
+		if apptype != v[0] {
+			t.Fatal(apptype)
+		}
+		if namespace != v[1] {
 			t.Fatal(namespace)
 		}
-		if appname != v[1] {
+		if appname != v[2] {
 			t.Fatal(appname)
 		}
-		if podName != v[2] {
+		if podName != v[3] {
 			t.Fatal(podName)
 		}
 	}
@@ -78,7 +82,7 @@ func TestFormatKey(t *testing.T) {
 				PoolName:      "pl1",
 			},
 			expectPoolPrefix:    "pool__pl1_",
-			expectPoolAppPrefix: "pool__pl1_sts_ns1_sts",
+			expectPoolAppPrefix: "pool__pl1_sts_ns1_sts_",
 		},
 		{
 			pod: CreateDeploymentPod("dp-xxx-yyy", "ns1", nil),
@@ -130,7 +134,33 @@ func TestFormatKey(t *testing.T) {
 				PoolName:      "pl1",
 			},
 			expectPoolPrefix:    "pool__pl1_",
-			expectPoolAppPrefix: "pool__pl1_tapp_ns1_tapp",
+			expectPoolAppPrefix: "pool__pl1_tapp_ns1_tapp_",
+		},
+		{
+			pod: CreateSimplePod("pod1", "ns1", nil),
+			expect: KeyObj{
+				KeyInDB:       "NULL_ns1_NULL_pod1",
+				AppTypePrefix: "NULL_",
+				AppName:       "NULL",
+				PodName:       "pod1",
+				Namespace:     "ns1",
+				PoolName:      "",
+			},
+			expectPoolPrefix:    "NULL_ns1_NULL_",
+			expectPoolAppPrefix: "NULL_ns1_NULL_",
+		},
+		{
+			pod: CreatePodWithKind("worker-1", "ns1", "spark", nil),
+			expect: KeyObj{
+				KeyInDB:       "spark_ns1_worker_worker-1",
+				AppTypePrefix: "spark_",
+				AppName:       "worker",
+				PodName:       "worker-1",
+				Namespace:     "ns1",
+				PoolName:      "",
+			},
+			expectPoolPrefix:    "spark_ns1_worker_",
+			expectPoolAppPrefix: "spark_ns1_worker_",
 		},
 	}
 	for i := range testCases {
@@ -144,6 +174,9 @@ func TestFormatKey(t *testing.T) {
 		}
 		if testCase.expectPoolPrefix != got.PoolPrefix() {
 			t.Errorf("case %d, expect %+v, got %+v", i, testCase.expectPoolPrefix, got.PoolPrefix())
+		}
+		if testCase.expectPoolAppPrefix != got.PoolAppPrefix() {
+			t.Errorf("case %d, expect %+v, got %+v", i, testCase.expectPoolAppPrefix, got.PoolAppPrefix())
 		}
 	}
 }
@@ -309,6 +342,19 @@ func TestParseKey(t *testing.T) {
 				PoolName:      "",
 			},
 			expectPoolPrefix: "tapp_ns1_demo_",
+		},
+		// unknown app type
+		{
+			keyInDB: "spark_ns1_worker_worker-1",
+			expect: KeyObj{
+				KeyInDB:       "spark_ns1_worker_worker-1",
+				AppTypePrefix: "spark_",
+				AppName:       "worker",
+				PodName:       "worker-1",
+				Namespace:     "ns1",
+				PoolName:      "",
+			},
+			expectPoolPrefix: "spark_ns1_worker_",
 		},
 	}
 	for i := range testCases {

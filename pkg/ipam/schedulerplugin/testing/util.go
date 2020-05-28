@@ -73,3 +73,16 @@ func CreateTAppPod(name, namespace string, annotations map[string]string) *corev
 	pod.OwnerReferences[0].Kind = "TApp"
 	return pod
 }
+
+func CreateSimplePod(name, namespace string, annotations map[string]string) *corev1.Pod {
+	pod := CreateStatefulSetPod(name+"-0", namespace, annotations)
+	pod.Name = name
+	pod.OwnerReferences = nil
+	return pod
+}
+
+func CreatePodWithKind(name, namespace, kind string, annotations map[string]string) *corev1.Pod {
+	pod := CreateStatefulSetPod(name, namespace, annotations)
+	pod.OwnerReferences[0].Kind = kind
+	return pod
+}

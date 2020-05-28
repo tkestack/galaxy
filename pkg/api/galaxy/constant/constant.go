@@ -114,6 +114,10 @@ func ConvertReleasePolicy(policyStr string) ReleasePolicy {
 	}
 }
 
+func PolicyStr(policy ReleasePolicy) string {
+	return [...]string{"", Immutable, Never}[policy]
+}
+
 const (
 	ResourceKind = "FloatingIP"
 	ApiVersion   = "galaxy.k8s.io/v1alpha1"

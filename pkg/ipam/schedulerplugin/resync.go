@@ -185,8 +185,8 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, meta *resync
 					replicas = tapp.Spec.Replicas
 				}
 			} else {
-				glog.Warningf("unknow app type of key %s", obj.keyObj.KeyInDB)
-				continue
+				// release for other apps
+				appExist = false
 			}
 			if should, reason := p.shouldReleaseDuringResync(obj.keyObj, releasePolicy, appExist, replicas); should {
 				if err := releaseIP(ipam, key, fmt.Sprintf("%s during resyncing", reason)); err != nil {
