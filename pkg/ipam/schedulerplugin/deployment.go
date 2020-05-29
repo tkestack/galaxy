@@ -77,9 +77,7 @@ func (p *FloatingIPPlugin) unbindDpPodForIPAM(keyObj *util.KeyObj, ipam floating
 	}
 	// locks the pool name if it is a pool
 	// locks the deployment app name if it isn't a pool
-	lockIndex := p.dpLockPool.GetLockIndex([]byte(prefixKey))
-	p.dpLockPool.RawLock(lockIndex)
-	defer p.dpLockPool.RawUnlock(lockIndex)
+	defer p.LockDpPool(prefixKey)()
 	fips, err := ipam.ByPrefix(prefixKey)
 	if err != nil {
 		return err
@@ -114,4 +112,11 @@ func (p *FloatingIPPlugin) getDpReplicas(keyObj *util.KeyObj) (int, bool, error)
 		return 0, false, fmt.Errorf("get replicas for %s: %w", keyObj.KeyInDB, err)
 	}
 	return replicas, false, nil
+}
+
+func (p *FloatingIPPlugin) LockDpPool(poolName string) func() {
+	p.dpLockPool.LockKey(poolName)
+	return func() {
+		_ = p.dpLockPool.UnlockKey(poolName)
+	}
 }

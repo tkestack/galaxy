@@ -212,7 +212,7 @@ func TestReleaseIP(t *testing.T) {
 func TestFilterForDeployment(t *testing.T) {
 	deadPod := CreateDeploymentPod("dp-aaa-bbb", "ns1", immutableAnnotation)
 	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", immutableAnnotation)
-	dp := createDeployment("dp", "ns1", pod.ObjectMeta, 1)
+	dp := createDeployment(pod.ObjectMeta, 1)
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, deadPod, dp)
 	defer func() { stopChan <- struct{}{} }()
 	// pre-allocate ip in filter for deployment pod
@@ -270,17 +270,22 @@ func poolAnnotation(poolName string) map[string]string {
 	return map[string]string{constant.IPPoolAnnotation: poolName}
 }
 
-func createDeployment(name, namespace string, podMeta v1.ObjectMeta, replicas int32) *appv1.Deployment {
+func createDeployment(podMeta v1.ObjectMeta, replicas int32) *appv1.Deployment {
+	parts := strings.Split(podMeta.OwnerReferences[0].Name, "-")
 	return &appv1.Deployment{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:      strings.Join(parts[:len(parts)-1], "-"),
+			Namespace: podMeta.Namespace,
+			Labels:    podMeta.Labels,
 		},
 		Spec: appv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: podMeta,
 			},
 			Replicas: &replicas,
+			Selector: &v1.LabelSelector{
+				MatchLabels: podMeta.GetLabels(),
+			},
 		},
 	}
 }
@@ -346,7 +351,7 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 	pod2 := CreateDeploymentPod("dp2-abc-def", "ns2", poolAnnotation("pool1"))
 	podKey, _ := schedulerplugin_util.FormatKey(pod)
 	pod2Key, _ := schedulerplugin_util.FormatKey(pod2)
-	dp1, dp2 := createDeployment("dp", "ns1", pod.ObjectMeta, 1), createDeployment("dp2", "ns2", pod2.ObjectMeta, 1)
+	dp1, dp2 := createDeployment(pod.ObjectMeta, 1), createDeployment(pod2.ObjectMeta, 1)
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, pod2, dp1, dp2)
 	defer func() { stopChan <- struct{}{} }()
 	testCases := []filterCase{
@@ -752,7 +757,7 @@ func TestUnBindImmutablePod(t *testing.T) {
 // #lizard forgives
 func TestAllocateRecentIPs(t *testing.T) {
 	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
-	dp := createDeployment("dp", "ns1", pod.ObjectMeta, 1)
+	dp := createDeployment(pod.ObjectMeta, 1)
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, dp)
 	defer func() { stopChan <- struct{}{} }()
 	podKey, _ := schedulerplugin_util.FormatKey(pod)

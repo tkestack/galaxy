@@ -18,19 +18,22 @@
 package schedulerplugin
 
 import (
+	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
 )
 
 type fakeCloudProvider1 struct {
-	proceedBind chan struct{}
+	m map[string]string // race test
 }
 
 func (f *fakeCloudProvider1) AssignIP(in *rpc.AssignIPRequest) (*rpc.AssignIPReply, error) {
-	f.proceedBind <- struct{}{} // notify we are waiting in AssignIP now
-	<-f.proceedBind             // sleep before we receive signal to continue again
+	f.m["1"] = "a"
+	glog.Infof(`f.m["1"] = "a"`)
 	return &rpc.AssignIPReply{Success: true}, nil
 }
 
 func (f *fakeCloudProvider1) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssignIPReply, error) {
+	f.m["2"] = "b"
+	glog.Infof(`f.m["2"] = "b"`)
 	return &rpc.UnAssignIPReply{Success: true}, nil
 }

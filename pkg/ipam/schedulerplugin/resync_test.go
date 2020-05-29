@@ -20,6 +20,7 @@ import (
 	"net"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
@@ -46,5 +47,49 @@ func TestResyncAppNotExist(t *testing.T) {
 	}
 	if err := checkIPKey(fipPlugin.ipam, "10.49.27.216", ""); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestResyncStsPod(t *testing.T) {
+	for i, testCase := range []struct {
+		annotations   map[string]string
+		replicas      int32
+		createPod     bool
+		createApp     bool
+		expectKeyFunc func(obj *util.KeyObj) string
+	}{
+		{annotations: nil, replicas: 1, expectKeyFunc: podNameFunc, createPod: true},                    // pod exist, ip won't be released
+		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc},                                   // pod and app not exist, ip will be released
+		{annotations: immutableAnnotation, replicas: 1, expectKeyFunc: emptyNameFunc, createApp: false}, // app not exist, ip will be released from immutable pod
+		{annotations: immutableAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createApp: true},    // app exist, ip won't be released from immutable pod
+		{annotations: immutableAnnotation, replicas: 0, expectKeyFunc: emptyNameFunc, createApp: true},  // app exist, ip will be released from scaled down immutable pod
+		{annotations: neverAnnotation, replicas: 0, expectKeyFunc: podNameFunc, createApp: true},
+		{annotations: neverAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createApp: true},
+		{annotations: neverAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createApp: false},
+	} {
+		var objs []runtime.Object
+		pod := CreateStatefulSetPod("sts-xxx-0", "ns1", testCase.annotations)
+		keyObj, _ := util.FormatKey(pod)
+		if testCase.createPod {
+			objs = append(objs, pod)
+		}
+		if testCase.createApp {
+			sts := CreateStatefulSet(pod.ObjectMeta, testCase.replicas)
+			sts.Spec.Template.Spec = pod.Spec
+			objs = append(objs, sts)
+		}
+		func() {
+			fipPlugin, stopChan, _ := createPluginTestNodes(t, objs...)
+			defer func() { stopChan <- struct{}{} }()
+			if err := fipPlugin.ipam.AllocateSpecificIP(keyObj.KeyInDB, net.ParseIP("10.49.27.205"), parseReleasePolicy(&pod.ObjectMeta), ""); err != nil {
+				t.Fatalf("case %d, err %v", i, err)
+			}
+			if err := fipPlugin.resyncPod(fipPlugin.ipam); err != nil {
+				t.Fatalf("case %d, err %v", i, err)
+			}
+			if err := checkIPKey(fipPlugin.ipam, "10.49.27.205", testCase.expectKeyFunc(keyObj)); err != nil {
+				t.Fatalf("case %d, err %v", i, err)
+			}
+		}()
 	}
 }

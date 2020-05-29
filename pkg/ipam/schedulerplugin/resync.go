@@ -17,6 +17,7 @@
 package schedulerplugin
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
@@ -29,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
@@ -70,13 +72,10 @@ type resyncObj struct {
 // 4. deleted pods whose parent statefulset/tapp exist but pod index > .spec.replica
 // 5. existing pods but its status is evicted
 func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
-	p.resyncLock.Lock()
-	defer p.resyncLock.Unlock()
 	glog.V(4).Infof("resync pods+")
 	defer glog.V(4).Infof("resync pods-")
 	resyncMeta := &resyncMeta{
 		allocatedIPs: make(map[string]resyncObj),
-		assignedPods: make(map[string]resyncObj),
 	}
 	if err := p.fetchChecklist(ipam, resyncMeta); err != nil {
 		return err
@@ -84,15 +83,11 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	if err := p.fetchAppAndPodMeta(resyncMeta); err != nil {
 		return err
 	}
-	if p.cloudProvider != nil {
-		p.resyncCloudProviderIPs(ipam, resyncMeta)
-	}
 	p.resyncAllocatedIPs(ipam, resyncMeta)
 	return nil
 }
 
 type resyncMeta struct {
-	assignedPods map[string]resyncObj // pods assigned ENI ips from cloudprovider
 	allocatedIPs map[string]resyncObj // allocated ips from galaxy pool
 	existPods    map[string]*corev1.Pod
 	tappMap      map[string]*tappv1.TApp
@@ -115,20 +110,6 @@ func (p *FloatingIPPlugin) fetchChecklist(ipam floatingip.IPAM, meta *resyncMeta
 		}
 		if keyObj.AppName == "" {
 			glog.Warningf("unexpected key: %s", fip.Key)
-			continue
-		}
-		if p.cloudProvider != nil {
-			// we send unassign request to cloud provider for any release policy
-			meta.assignedPods[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
-		}
-		if fip.Policy == uint16(constant.ReleasePolicyNever) {
-			// never release these ips
-			// for deployment, put back to deployment
-			// we do nothing for statefulset or tapp pod, because we preserve ip according to its pod name
-			if keyObj.Deployment() {
-				meta.allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
-			}
-			// skip if it is a statefulset key and is ReleasePolicyNever
 			continue
 		}
 		meta.allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
@@ -156,47 +137,84 @@ func (p *FloatingIPPlugin) fetchAppAndPodMeta(meta *resyncMeta) error {
 // #lizard forgives
 func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, meta *resyncMeta) {
 	for key, obj := range meta.allocatedIPs {
-		if _, ok := meta.existPods[key]; ok {
-			continue
-		}
-		// check with apiserver to confirm it really not exist
-		if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
-			continue
-		}
-		appFullName := util.Join(obj.keyObj.AppName, obj.keyObj.Namespace)
-		releasePolicy := constant.ReleasePolicy(obj.fip.Policy)
-		// we can't get labels of not exist pod, so get them from it's ss or deployment
-		if !obj.keyObj.Deployment() {
-			var appExist bool
-			var replicas int32
-			if obj.keyObj.StatefulSet() {
-				ss, ok := meta.ssMap[appFullName]
-				if ok {
-					appExist = true
-					replicas = 1
-					if ss.Spec.Replicas != nil {
-						replicas = *ss.Spec.Replicas
+		func() {
+			defer p.lockPod(obj.keyObj.PodName, obj.keyObj.Namespace)()
+			if _, ok := meta.existPods[key]; ok {
+				return
+			}
+			// check with apiserver to confirm it really not exist
+			if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
+				return
+			}
+			if p.cloudProvider != nil {
+				var attr Attr
+				if err := json.Unmarshal([]byte(obj.fip.Attr), &attr); err != nil {
+					glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.fip.Attr, key, err)
+					return
+				}
+				// For tapp and sts pod, nodeName will be updated to empty after unassigning
+				if attr.NodeName != "" {
+					glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName,
+						obj.fip.IP.String(), key)
+					if err := p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
+						NodeName:  attr.NodeName,
+						IPAddress: obj.fip.IP.String(),
+					}); err != nil {
+						glog.Warningf("failed to unassign ip %s to %s: %v", obj.fip.IP.String(), key, err)
+						// return to retry unassign ip in the next resync loop
+						return
+					}
+					// for tapp and sts pod, we need to clean its node attr and uid
+					if err := ipam.ReserveIP(key, key, getAttr("", "")); err != nil {
+						glog.Errorf("failed to reserve %s ip: %v", key, err)
 					}
 				}
-			} else if obj.keyObj.TApp() {
-				tapp, ok := meta.tappMap[appFullName]
-				if ok {
-					appExist = true
-					replicas = tapp.Spec.Replicas
-				}
-			} else {
-				// release for other apps
-				appExist = false
 			}
-			if should, reason := p.shouldReleaseDuringResync(obj.keyObj, releasePolicy, appExist, replicas); should {
-				if err := releaseIP(ipam, key, fmt.Sprintf("%s during resyncing", reason)); err != nil {
-					glog.Warningf("[%s] %v", ipam.Name(), err)
-				}
+			releasePolicy := constant.ReleasePolicy(obj.fip.Policy)
+			// we can't get labels of not exist pod, so get them from it's ss or deployment
+			if !obj.keyObj.Deployment() {
+				p.resyncTappOrSts(meta, obj.keyObj, ipam, releasePolicy)
+				return
 			}
-			continue
+			if err := p.unbindDpPodForIPAM(obj.keyObj, ipam, releasePolicy, "during resyncing"); err != nil {
+				glog.Error(err)
+			}
+		}()
+	}
+}
+
+func (p *FloatingIPPlugin) resyncTappOrSts(meta *resyncMeta, keyObj *util.KeyObj, ipam floatingip.IPAM,
+	releasePolicy constant.ReleasePolicy) {
+	if releasePolicy == constant.ReleasePolicyNever {
+		return
+	}
+	var appExist bool
+	var replicas int32
+	appFullName := util.Join(keyObj.AppName, keyObj.Namespace)
+	if keyObj.StatefulSet() {
+		ss, ok := meta.ssMap[appFullName]
+		if ok {
+			appExist = true
+			replicas = 1
+			if ss.Spec.Replicas != nil {
+				replicas = *ss.Spec.Replicas
+			}
 		}
-		if err := p.unbindDpPodForIPAM(obj.keyObj, ipam, releasePolicy, "during resyncing"); err != nil {
-			glog.Error(err)
+	} else if keyObj.TApp() {
+		tapp, ok := meta.tappMap[appFullName]
+		if ok {
+			appExist = true
+			replicas = tapp.Spec.Replicas
+		}
+	} else {
+		// release for other apps
+		appExist = false
+	}
+	if should, reason, err := p.shouldRelease(keyObj, releasePolicy, appExist, replicas); err != nil {
+		glog.Warning(err)
+	} else if should {
+		if err := releaseIP(ipam, keyObj.KeyInDB, fmt.Sprintf("%s during resyncing", reason)); err != nil {
+			glog.Warningf("[%s] %v", ipam.Name(), err)
 		}
 	}
 }

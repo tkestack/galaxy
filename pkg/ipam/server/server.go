@@ -315,7 +315,7 @@ func (s *Server) startAPIServer() {
 		Writes(api.ReleaseIPResp{Resp: httputil.Resp{Code: http.StatusOK}}))
 
 	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient,
-		LockPool: s.plugin.GetLockPool(), IPAM: s.plugin.GetIpam(), SecondIPAM: s.plugin.GetSecondIpam()}
+		LockPoolFunc: s.plugin.LockDpPool, IPAM: s.plugin.GetIpam(), SecondIPAM: s.plugin.GetSecondIpam()}
 	ws.Route(ws.GET("/pool/{name}").To(poolController.Get).
 		Doc("Get pool by name").
 		Param(ws.PathParameter("name", "pool name").DataType("string").Required(true)).

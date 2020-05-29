@@ -36,7 +36,7 @@ func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyO
 	} else if policy == constant.ReleasePolicyNever {
 		return p.reserveIP(key, key, "never policy", p.enabledSecondIP(pod))
 	} else if policy == constant.ReleasePolicyImmutable {
-		if p.TAppLister == nil {
+		if keyObj.TApp() && p.TAppLister == nil {
 			// tapp lister is nil, we can't get replicas and it's better to reserve the ip.
 			return p.reserveIP(key, key, "immutable policy", p.enabledSecondIP(pod))
 		}
@@ -44,11 +44,11 @@ func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyO
 		if err != nil {
 			return err
 		}
-		shouldReserve, reason, err := p.shouldReserve(pod, keyObj, appExist, replicas)
+		shouldRelease, reason, err := p.shouldRelease(keyObj, policy, appExist, replicas)
 		if err != nil {
 			return err
 		}
-		if shouldReserve {
+		if !shouldRelease {
 			return p.reserveIP(key, key, "immutable policy", p.enabledSecondIP(pod))
 		} else {
 			return p.releaseIP(key, reason, pod)
@@ -67,7 +67,6 @@ func (p *FloatingIPPlugin) checkAppAndReplicas(pod *corev1.Pod,
 		retErr = fmt.Errorf("Unknown app")
 		return
 	}
-	return
 }
 
 func (p *FloatingIPPlugin) getStsReplicas(pod *corev1.Pod,
@@ -92,43 +91,26 @@ func (p *FloatingIPPlugin) getStsReplicas(pod *corev1.Pod,
 	return
 }
 
-func (p *FloatingIPPlugin) shouldReserve(pod *corev1.Pod, keyObj *util.KeyObj,
-	appExist bool, replicas int32) (bool, string, error) {
-	if !appExist {
-		return false, deletedAndParentAppNotExistPod, nil
-	}
-	index, err := parsePodIndex(pod.Name)
-	if err != nil {
-		return false, "", fmt.Errorf("invalid pod name %s of key %s: %v", util.PodName(pod), keyObj.KeyInDB, err)
-	}
-	if replicas < int32(index)+1 {
-		return false, deletedAndScaledDownAppPod, nil
-	} else {
-		return true, "", nil
-	}
-}
-
-func (p *FloatingIPPlugin) shouldReleaseDuringResync(keyObj *util.KeyObj, releasePolicy constant.ReleasePolicy,
-	parentAppExist bool, replicas int32) (bool, string) {
+func (p *FloatingIPPlugin) shouldRelease(keyObj *util.KeyObj, releasePolicy constant.ReleasePolicy,
+	parentAppExist bool, replicas int32) (bool, string, error) {
 	if !parentAppExist {
 		if releasePolicy != constant.ReleasePolicyNever {
-			return true, deletedAndParentAppNotExistPod
+			return true, deletedAndParentAppNotExistPod, nil
 		}
-		return false, ""
+		return false, "", nil
 	}
 	if releasePolicy != constant.ReleasePolicyImmutable {
 		// 2. deleted pods whose parent statefulset or tapp exist but is not ip immutable
-		return true, deletedAndIPMutablePod
+		return true, deletedAndIPMutablePod, nil
 	}
 	index, err := parsePodIndex(keyObj.KeyInDB)
 	if err != nil {
-		glog.Errorf("invalid pod name of key %s: %v", keyObj.KeyInDB, err)
-		return false, ""
+		return false, "", fmt.Errorf("invalid pod name of key %s: %v", keyObj.KeyInDB, err)
 	}
 	if replicas < int32(index)+1 {
-		return true, deletedAndScaledDownAppPod
+		return true, deletedAndScaledDownAppPod, nil
 	}
-	return false, ""
+	return false, "", nil
 }
 
 func (p *FloatingIPPlugin) getSSMap() (map[string]*appv1.StatefulSet, error) {
