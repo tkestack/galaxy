@@ -19,7 +19,6 @@ package schedulerplugin
 import (
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	glog "k8s.io/klog"
@@ -50,9 +49,8 @@ func (p *FloatingIPPlugin) getTAppMap() (map[string]*tappv1.TApp, error) {
 	return key2App, nil
 }
 
-func (p *FloatingIPPlugin) getTAppReplicas(pod *corev1.Pod,
-	keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
-	tapp, err := p.TAppLister.TApps(pod.Namespace).Get(keyObj.AppName)
+func (p *FloatingIPPlugin) getTAppReplicas(keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
+	tapp, err := p.TAppLister.TApps(keyObj.Namespace).Get(keyObj.AppName)
 	if err != nil {
 		if !metaErrs.IsNotFound(err) {
 			retErr = err
