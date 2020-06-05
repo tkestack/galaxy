@@ -40,7 +40,7 @@ func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyO
 			// tapp lister is nil, we can't get replicas and it's better to reserve the ip.
 			return p.reserveIP(key, key, "immutable policy", p.enabledSecondIP(pod))
 		}
-		appExist, replicas, err := p.checkAppAndReplicas(pod, keyObj)
+		appExist, replicas, err := p.checkAppAndReplicas(keyObj)
 		if err != nil {
 			return err
 		}
@@ -57,21 +57,19 @@ func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyO
 	return nil
 }
 
-func (p *FloatingIPPlugin) checkAppAndReplicas(pod *corev1.Pod,
-	keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
+func (p *FloatingIPPlugin) checkAppAndReplicas(keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
 	if keyObj.StatefulSet() {
-		return p.getStsReplicas(pod, keyObj)
+		return p.getStsReplicas(keyObj)
 	} else if keyObj.TApp() {
-		return p.getTAppReplicas(pod, keyObj)
+		return p.getTAppReplicas(keyObj)
 	} else {
 		retErr = fmt.Errorf("Unknown app")
 		return
 	}
 }
 
-func (p *FloatingIPPlugin) getStsReplicas(pod *corev1.Pod,
-	keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
-	statefulSet, err := p.StatefulSetLister.GetPodStatefulSets(pod)
+func (p *FloatingIPPlugin) getStsReplicas(keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
+	ss, err := p.StatefulSetLister.StatefulSets(keyObj.Namespace).Get(keyObj.AppName)
 	if err != nil {
 		if !metaErrs.IsNotFound(err) {
 			retErr = err
@@ -79,10 +77,6 @@ func (p *FloatingIPPlugin) getStsReplicas(pod *corev1.Pod,
 		}
 	} else {
 		appExist = true
-		if len(statefulSet) > 1 {
-			glog.Warningf("multiple ss found for pod %s", util.PodName(pod))
-		}
-		ss := statefulSet[0]
 		replicas = 1
 		if ss.Spec.Replicas != nil {
 			replicas = *ss.Spec.Replicas
