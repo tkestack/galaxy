@@ -20,7 +20,6 @@ import (
 	"reflect"
 	"testing"
 
-	"fmt"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 )
 
@@ -55,24 +54,10 @@ func (ipam fakeIPAM) ReleaseIPs(ipToKey map[string]string) (map[string]string, m
 
 func TestBatchReleaseIPs(t *testing.T) {
 	ipToKey := map[string]string{"10.0.0.1": "k1", "10.0.0.2": "k2", "10.0.0.3": "k3", "10.0.0.4": "k4"}
-	ipam1 := fakeIPAM{allocatedIPs: map[string]string{"10.0.0.1": "k1", "10.0.0.2": "k2.1"}, unallocatedIPs: map[string]string{}}
-	ipam2 := fakeIPAM{allocatedIPs: map[string]string{"10.0.0.3": "k3"}, unallocatedIPs: map[string]string{}}
-	released, unreleased, err := batchReleaseIPs(ipToKey, ipam1, ipam2)
+	ipam := fakeIPAM{allocatedIPs: map[string]string{"10.0.0.1": "k1", "10.0.0.2": "k2.1"},
+		unallocatedIPs: map[string]string{}}
+	released, unreleased, err := batchReleaseIPs(ipToKey, ipam)
 	if err != nil {
-		t.Fatal()
-	}
-	if !reflect.DeepEqual(map[string]string{"10.0.0.1": "k1", "10.0.0.3": "k3"}, released) {
-		t.Fatal(released)
-	}
-	if !reflect.DeepEqual(map[string]string{"10.0.0.2": "k2.1", "10.0.0.4": "k4"}, unreleased) {
-		t.Fatal(unreleased)
-	}
-
-	ipToKey = map[string]string{"10.0.0.1": "k1", "10.0.0.2": "k2", "10.0.0.3": "k3", "10.0.0.4": "k4"}
-	ipam1 = fakeIPAM{allocatedIPs: map[string]string{"10.0.0.1": "k1", "10.0.0.2": "k2.1"}, unallocatedIPs: map[string]string{}}
-	ipam2 = fakeIPAM{err: fmt.Errorf("intentionally error")}
-	released, unreleased, err = batchReleaseIPs(ipToKey, ipam1, ipam2)
-	if err == nil {
 		t.Fatal()
 	}
 	if !reflect.DeepEqual(map[string]string{"10.0.0.1": "k1"}, released) {

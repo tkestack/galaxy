@@ -77,13 +77,13 @@ func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
 	resyncMeta := &resyncMeta{
 		allocatedIPs: make(map[string]resyncObj),
 	}
-	if err := p.fetchChecklist(ipam, resyncMeta); err != nil {
+	if err := p.fetchChecklist(resyncMeta); err != nil {
 		return err
 	}
 	if err := p.fetchAppAndPodMeta(resyncMeta); err != nil {
 		return err
 	}
-	p.resyncAllocatedIPs(ipam, resyncMeta)
+	p.resyncAllocatedIPs(resyncMeta)
 	return nil
 }
 
@@ -94,8 +94,8 @@ type resyncMeta struct {
 	ssMap        map[string]*appv1.StatefulSet
 }
 
-func (p *FloatingIPPlugin) fetchChecklist(ipam floatingip.IPAM, meta *resyncMeta) error {
-	all, err := ipam.ByPrefix("")
+func (p *FloatingIPPlugin) fetchChecklist(meta *resyncMeta) error {
+	all, err := p.ipam.ByPrefix("")
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func (p *FloatingIPPlugin) fetchAppAndPodMeta(meta *resyncMeta) error {
 }
 
 // #lizard forgives
-func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, meta *resyncMeta) {
+func (p *FloatingIPPlugin) resyncAllocatedIPs(meta *resyncMeta) {
 	for key, obj := range meta.allocatedIPs {
 		func() {
 			defer p.lockPod(obj.keyObj.PodName, obj.keyObj.Namespace)()
@@ -165,7 +165,7 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, meta *resync
 						return
 					}
 					// for tapp and sts pod, we need to clean its node attr and uid
-					if err := ipam.ReserveIP(key, key, getAttr("", "")); err != nil {
+					if err := p.ipam.ReserveIP(key, key, getAttr("", "")); err != nil {
 						glog.Errorf("failed to reserve %s ip: %v", key, err)
 					}
 				}
@@ -173,18 +173,17 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(ipam floatingip.IPAM, meta *resync
 			releasePolicy := constant.ReleasePolicy(obj.fip.Policy)
 			// we can't get labels of not exist pod, so get them from it's ss or deployment
 			if !obj.keyObj.Deployment() {
-				p.resyncTappOrSts(meta, obj.keyObj, ipam, releasePolicy)
+				p.resyncTappOrSts(meta, obj.keyObj, releasePolicy)
 				return
 			}
-			if err := p.unbindDpPodForIPAM(obj.keyObj, ipam, releasePolicy, "during resyncing"); err != nil {
+			if err := p.unbindDpPod(obj.keyObj, releasePolicy, "during resyncing"); err != nil {
 				glog.Error(err)
 			}
 		}()
 	}
 }
 
-func (p *FloatingIPPlugin) resyncTappOrSts(meta *resyncMeta, keyObj *util.KeyObj, ipam floatingip.IPAM,
-	releasePolicy constant.ReleasePolicy) {
+func (p *FloatingIPPlugin) resyncTappOrSts(meta *resyncMeta, keyObj *util.KeyObj, releasePolicy constant.ReleasePolicy) {
 	if releasePolicy == constant.ReleasePolicyNever {
 		return
 	}
@@ -213,8 +212,8 @@ func (p *FloatingIPPlugin) resyncTappOrSts(meta *resyncMeta, keyObj *util.KeyObj
 	if should, reason, err := p.shouldRelease(keyObj, releasePolicy, appExist, replicas); err != nil {
 		glog.Warning(err)
 	} else if should {
-		if err := releaseIP(ipam, keyObj.KeyInDB, fmt.Sprintf("%s during resyncing", reason)); err != nil {
-			glog.Warningf("[%s] %v", ipam.Name(), err)
+		if err := p.releaseIP(keyObj.KeyInDB, fmt.Sprintf("%s during resyncing", reason)); err != nil {
+			glog.Warning(err)
 		}
 	}
 }
@@ -307,22 +306,11 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 		// should not happen
 		return fmt.Errorf("empty ipinfo for pod %s", keyObj.KeyInDB)
 	}
-	if err := p.syncIP(p.ipam, keyObj.KeyInDB, ipInfos[0].IP.IP, pod); err != nil {
-		return fmt.Errorf("[%s] %v", p.ipam.Name(), err)
-	}
-	if p.enabledSecondIP(pod) {
-		if len(ipInfos) == 1 || ipInfos[1].IP == nil {
-			return fmt.Errorf("none second ipinfo for pod %s", keyObj.KeyInDB)
-		}
-		if err := p.syncIP(p.secondIPAM, keyObj.KeyInDB, ipInfos[1].IP.IP, pod); err != nil {
-			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
-		}
-	}
-	return nil
+	return p.syncIP(keyObj.KeyInDB, ipInfos[0].IP.IP, pod)
 }
 
-func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, pod *corev1.Pod) error {
-	fip, err := ipam.ByIP(ip)
+func (p *FloatingIPPlugin) syncIP(key string, ip net.IP, pod *corev1.Pod) error {
+	fip, err := p.ipam.ByIP(ip)
 	if err != nil {
 		return err
 	}
@@ -332,11 +320,11 @@ func (p *FloatingIPPlugin) syncIP(ipam floatingip.IPAM, key string, ip net.IP, p
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
 		}
 	} else {
-		if err := ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta),
+		if err := p.ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta),
 			getAttr(pod.Spec.NodeName, string(pod.UID))); err != nil {
 			return err
 		}
-		glog.Infof("[%s] updated floatingip %s to key %s", ipam.Name(), ip.String(), key)
+		glog.Infof("updated floatingip %s to key %s", ip.String(), key)
 	}
 	return nil
 }

@@ -278,7 +278,7 @@ func (s *Server) startAPIServer() {
 		Path("/v1").
 		Consumes(restful.MIME_JSON).
 		Produces(restful.MIME_JSON)
-	c := api.NewController(s.plugin.GetIpam(), s.plugin.GetSecondIpam(), s.plugin.PodLister)
+	c := api.NewController(s.plugin.GetIpam(), s.plugin.PodLister)
 	ws.Route(ws.GET("/ip").To(c.ListIPs).
 		Doc("List ips by keyword or params").
 		Param(ws.QueryParameter("keyword", "keyword").DataType("string")).
@@ -315,7 +315,7 @@ func (s *Server) startAPIServer() {
 		Writes(api.ReleaseIPResp{Resp: httputil.Resp{Code: http.StatusOK}}))
 
 	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient,
-		LockPoolFunc: s.plugin.LockDpPool, IPAM: s.plugin.GetIpam(), SecondIPAM: s.plugin.GetSecondIpam()}
+		LockPoolFunc: s.plugin.LockDpPool, IPAM: s.plugin.GetIpam()}
 	ws.Route(ws.GET("/pool/{name}").To(poolController.Get).
 		Doc("Get pool by name").
 		Param(ws.PathParameter("name", "pool name").DataType("string").Required(true)).

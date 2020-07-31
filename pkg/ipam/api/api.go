@@ -36,16 +36,15 @@ import (
 
 // Controller is the API controller
 type Controller struct {
-	ipam, secondIpam floatingip.IPAM
-	podLister        v1.PodLister
+	ipam      floatingip.IPAM
+	podLister v1.PodLister
 }
 
 // NewController construct a controller object
-func NewController(ipam, secondIpam floatingip.IPAM, lister v1.PodLister) *Controller {
+func NewController(ipam floatingip.IPAM, lister v1.PodLister) *Controller {
 	return &Controller{
-		ipam:       ipam,
-		secondIpam: secondIpam,
-		podLister:  lister,
+		ipam:      ipam,
+		podLister: lister,
 	}
 }
 
@@ -111,7 +110,7 @@ func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 		key = util.NewKeyObj(appTypePrefix, namespace, appName, podName, poolName).KeyInDB
 	}
 	glog.V(4).Infof("list ips by %s, fuzzyQuery %v", key, fuzzyQuery)
-	fips, err := listIPs(key, c.ipam, c.secondIpam, fuzzyQuery)
+	fips, err := listIPs(key, c.ipam, fuzzyQuery)
 	if err != nil {
 		httputil.InternalError(resp, err)
 		return
@@ -302,7 +301,7 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 			return
 		}
 	}
-	_, unreleased, err := batchReleaseIPs(expectIPtoKey, c.ipam, c.secondIpam)
+	_, unreleased, err := batchReleaseIPs(expectIPtoKey, c.ipam)
 	var unreleasedIP []string
 	for ip := range unreleased {
 		unreleasedIP = append(unreleasedIP, ip)
@@ -323,7 +322,7 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 }
 
 // listIPs lists ips from ipams
-func listIPs(keyword string, ipam, secondIpam floatingip.IPAM, fuzzyQuery bool) ([]FloatingIP, error) {
+func listIPs(keyword string, ipam floatingip.IPAM, fuzzyQuery bool) ([]FloatingIP, error) {
 	var fips []floatingip.FloatingIP
 	var err error
 	if fuzzyQuery {
@@ -334,21 +333,7 @@ func listIPs(keyword string, ipam, secondIpam floatingip.IPAM, fuzzyQuery bool) 
 	if err != nil {
 		return nil, err
 	}
-	resp := transform(fips)
-	if secondIpam != nil {
-		var secondFips []floatingip.FloatingIP
-		if fuzzyQuery {
-			secondFips, err = secondIpam.ByKeyword(keyword)
-		} else {
-			secondFips, err = secondIpam.ByPrefix(keyword)
-		}
-		if err != nil {
-			return resp, err
-		}
-		resp2 := transform(secondFips)
-		resp = append(resp, resp2...)
-	}
-	return resp, nil
+	return transform(fips), nil
 }
 
 // transform converts `floatingip.FloatingIP` slice to `FloatingIP` slice
@@ -371,29 +356,10 @@ func transform(fips []floatingip.FloatingIP) []FloatingIP {
 }
 
 // batchReleaseIPs release ips from ipams
-func batchReleaseIPs(ipToKey map[string]string,
-	ipam, secondIpam floatingip.IPAM) (map[string]string, map[string]string, error) {
+func batchReleaseIPs(ipToKey map[string]string, ipam floatingip.IPAM) (map[string]string, map[string]string, error) {
 	released, unreleased, err := ipam.ReleaseIPs(ipToKey)
 	if len(released) > 0 {
 		glog.Infof("releaseIPs %v", released)
 	}
-	if err != nil {
-		return released, unreleased, err
-	}
-	if secondIpam != nil {
-		released2, unreleased2, err := secondIpam.ReleaseIPs(unreleased)
-		if len(released2) > 0 {
-			glog.Infof("releaseIPs in second IPAM %v", released2)
-		}
-		for k, v := range released2 {
-			released[k] = v
-		}
-		unreleased = unreleased2
-		if err != nil {
-			if !(strings.Contains(err.Error(), "Table") && strings.Contains(err.Error(), "doesn't exist")) {
-				return released, unreleased, err
-			}
-		}
-	}
-	return released, unreleased, nil
+	return released, unreleased, err
 }

@@ -270,7 +270,7 @@ func testReleaseIPs(t *testing.T, ipam IPAM) {
 }
 
 func testByKeyword(t *testing.T, ipam IPAM) {
-	now := time.Now().Add(-time.Second) // sub one second because db stores unix timestamp without of Nano time
+	now := time.Now()
 	allocateSomeIPs(t, ipam)
 	fips, err := ipam.ByKeyword("od")
 	if err != nil {
