@@ -36,7 +36,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	fakeV1 "k8s.io/client-go/kubernetes/typed/core/v1/fake"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
-	"tkestack.io/galaxy/pkg/api/galaxy/private"
 	"tkestack.io/galaxy/pkg/api/k8s/schedulerapi"
 	fakeGalaxyCli "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned/fake"
 	crdInformer "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions"
@@ -56,7 +55,6 @@ const (
 )
 
 var (
-	secondIPLabel       = map[string]string{private.LabelKeyEnableSecondIP: private.LabelValueEnabled}
 	immutableAnnotation = map[string]string{constant.ReleasePolicyAnnotation: constant.Immutable}
 	neverAnnotation     = map[string]string{constant.ReleasePolicyAnnotation: constant.Never}
 
@@ -154,7 +152,7 @@ func TestAllocateIP(t *testing.T) {
 	}
 	// check update from ReleasePolicyPodDelete to ReleasePolicyImmutable
 	pod.Spec.NodeName = node4
-	ipInfo, err := fipPlugin.allocateIP(fipPlugin.ipam, podKey.KeyInDB, pod.Spec.NodeName, pod)
+	ipInfo, err := fipPlugin.allocateIP(podKey.KeyInDB, pod.Spec.NodeName, pod)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +198,7 @@ func TestReleaseIP(t *testing.T) {
 	if err := checkIPKey(fipPlugin.ipam, "10.173.13.2", podKey.KeyInDB); err != nil {
 		t.Fatal(err)
 	}
-	if err := fipPlugin.releaseIP(podKey.KeyInDB, "", pod); err != nil {
+	if err := fipPlugin.releaseIP(podKey.KeyInDB, ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkIPKey(fipPlugin.ipam, "10.173.13.2", ""); err != nil {
@@ -218,7 +216,7 @@ func TestFilterForDeployment(t *testing.T) {
 	// pre-allocate ip in filter for deployment pod
 	podKey, _ := schedulerplugin_util.FormatKey(pod)
 	deadPodKey, _ := schedulerplugin_util.FormatKey(deadPod)
-	fip, err := fipPlugin.allocateIP(fipPlugin.ipam, deadPodKey.KeyInDB, node3, deadPod)
+	fip, err := fipPlugin.allocateIP(deadPodKey.KeyInDB, node3, deadPod)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -535,8 +533,6 @@ func newPlugin(t *testing.T, conf Conf, objs ...runtime.Object) (*FloatingIPPlug
 }
 
 func TestLoadConfigMap(t *testing.T) {
-	pod1 := CreateStatefulSetPodWithLabels("pod1", "demo", nil, nil)
-	pod2 := CreateStatefulSetPodWithLabels("pod1", "demo", secondIPLabel, nil) // want second ips
 	cm := &corev1.ConfigMap{
 		ObjectMeta: v1.ObjectMeta{Name: "testConf", Namespace: "demo"},
 		Data: map[string]string{
@@ -555,24 +551,6 @@ func TestLoadConfigMap(t *testing.T) {
 	defer func() { stopChan <- struct{}{} }()
 	if fipPlugin.lastIPConf != cm.Data["key"] {
 		t.Errorf(fipPlugin.lastIPConf)
-	}
-	if fipPlugin.enabledSecondIP(pod1) || fipPlugin.enabledSecondIP(pod2) {
-		t.Error("plugin has no second ip configs")
-	}
-
-	// test secondips
-	cm.Data["secondKey"] = `[{"routableSubnet":"10.173.13.0/24","ips":["10.173.13.15"],"subnet":"10.173.13.0/24","gateway":"10.173.13.1"}]`
-	conf.SecondFloatingIPKey = "secondKey"
-	fipPlugin, stopChan2 := newPlugin(t, conf, cm)
-	defer func() { stopChan2 <- struct{}{} }()
-	if fipPlugin.lastIPConf != cm.Data["key"] {
-		t.Errorf(fipPlugin.lastIPConf)
-	}
-	if fipPlugin.lastSecondIPConf != cm.Data["secondKey"] {
-		t.Errorf(fipPlugin.lastIPConf)
-	}
-	if fipPlugin.enabledSecondIP(pod1) || !fipPlugin.enabledSecondIP(pod2) {
-		t.Error("pod1 doesn't want second ip, but pod2 does")
 	}
 }
 

@@ -524,8 +524,7 @@ func (ci *crdIpam) ReleaseIPs(ipToKey map[string]string) (map[string]string, map
 	for ipStr, key := range ipToKey {
 		undeleted[ipStr] = key
 	}
-	if ci.allocatedFIPs == nil {
-		//for second ipam, caches may be nil
+	if len(ci.allocatedFIPs) == 0 {
 		return deleted, undeleted, nil
 	}
 	for ipStr, key := range ipToKey {

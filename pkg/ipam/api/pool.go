@@ -35,10 +35,10 @@ import (
 )
 
 type PoolController struct {
-	Client           versioned.Interface
-	PoolLister       list.PoolLister
-	LockPoolFunc     func(poolName string) func() // returns unlock func
-	IPAM, SecondIPAM floatingip.IPAM
+	Client       versioned.Interface
+	PoolLister   list.PoolLister
+	LockPoolFunc func(poolName string) func() // returns unlock func
+	IPAM         floatingip.IPAM
 }
 
 type Pool struct {

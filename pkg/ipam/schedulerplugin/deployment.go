@@ -19,11 +19,9 @@ package schedulerplugin
 import (
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
-	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
@@ -41,26 +39,13 @@ func (p *FloatingIPPlugin) getReplicasOfDeployment(keyObj *util.KeyObj) (int, er
 }
 
 // unbindDpPod unbind deployment pod
-func (p *FloatingIPPlugin) unbindDpPod(pod *corev1.Pod, keyObj *util.KeyObj, policy constant.ReleasePolicy, when string) error {
-	// if ipam or secondIPAM failed, we can depend on resync to release ip
-	if err := p.unbindDpPodForIPAM(keyObj, p.ipam, policy, when); err != nil {
-		return err
-	}
-	if p.enabledSecondIP(pod) {
-		return p.unbindDpPodForIPAM(keyObj, p.secondIPAM, policy, when)
-	}
-	return nil
-}
-
-// unbindDpPod unbind deployment pod
-func (p *FloatingIPPlugin) unbindDpPodForIPAM(keyObj *util.KeyObj, ipam floatingip.IPAM, policy constant.ReleasePolicy,
-	when string) error {
+func (p *FloatingIPPlugin) unbindDpPod(keyObj *util.KeyObj, policy constant.ReleasePolicy, when string) error {
 	key, prefixKey := keyObj.KeyInDB, keyObj.PoolPrefix()
 	if policy == constant.ReleasePolicyPodDelete {
-		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
+		return p.releaseIP(key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
 	} else if policy == constant.ReleasePolicyNever {
 		if key != prefixKey {
-			return reserveIP(key, prefixKey, ipam, fmt.Sprintf("never release policy %s", when))
+			return p.reserveIP(key, prefixKey, fmt.Sprintf("never release policy %s", when))
 		}
 		return nil
 	}
@@ -73,21 +58,21 @@ func (p *FloatingIPPlugin) unbindDpPodForIPAM(keyObj *util.KeyObj, ipam floating
 		}
 	}
 	if replicas == 0 {
-		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
+		return p.releaseIP(key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
 	}
 	// locks the pool name if it is a pool
 	// locks the deployment app name if it isn't a pool
 	defer p.LockDpPool(prefixKey)()
-	fips, err := ipam.ByPrefix(prefixKey)
+	fips, err := p.ipam.ByPrefix(prefixKey)
 	if err != nil {
 		return err
 	}
 	// if num of fips is large than replicas, release exceeded part
 	if len(fips) > replicas {
-		return releaseIP(ipam, key, fmt.Sprintf("%s %s", deletedAndScaledDownDpPod, when))
+		return p.releaseIP(key, fmt.Sprintf("%s %s", deletedAndScaledDownDpPod, when))
 	} else {
 		if key != prefixKey {
-			return reserveIP(key, prefixKey, ipam, fmt.Sprintf("allocated %d <= replicas %d %s", len(fips), replicas, when))
+			return p.reserveIP(key, prefixKey, fmt.Sprintf("allocated %d <= replicas %d %s", len(fips), replicas, when))
 		}
 	}
 	return nil

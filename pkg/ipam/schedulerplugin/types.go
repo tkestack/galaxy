@@ -59,8 +59,7 @@ type Conf struct {
 	ResyncInterval        uint                         `json:"resyncInterval"`
 	ConfigMapName         string                       `json:"configMapName"`
 	ConfigMapNamespace    string                       `json:"configMapNamespace"`
-	FloatingIPKey         string                       `json:"floatingipKey"`       // configmap floatingip data key
-	SecondFloatingIPKey   string                       `json:"secondFloatingipKey"` // configmap second floatingip data key
+	FloatingIPKey         string                       `json:"floatingipKey"` // configmap floatingip data key
 	CloudProviderGRPCAddr string                       `json:"cloudProviderGrpcAddr"`
 }
 
@@ -76,8 +75,5 @@ func (conf *Conf) validate() {
 	}
 	if conf.FloatingIPKey == "" {
 		conf.FloatingIPKey = "floatingips"
-	}
-	if conf.SecondFloatingIPKey == "" {
-		conf.SecondFloatingIPKey = "second_floatingips"
 	}
 }

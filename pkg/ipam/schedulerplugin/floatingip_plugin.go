@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -33,7 +32,6 @@ import (
 	"k8s.io/utils/keymutex"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant/utils"
-	"tkestack.io/galaxy/pkg/api/galaxy/private"
 	"tkestack.io/galaxy/pkg/api/k8s/schedulerapi"
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider"
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
@@ -43,7 +41,7 @@ import (
 
 // FloatingIPPlugin Allocates Floating IP for deployments
 type FloatingIPPlugin struct {
-	ipam, secondIPAM floatingip.IPAM
+	ipam floatingip.IPAM
 	// node name to subnet cache
 	nodeSubnet     map[string]*net.IPNet
 	nodeSubnetLock sync.Mutex
@@ -51,7 +49,6 @@ type FloatingIPPlugin struct {
 	lastIPConf, lastSecondIPConf string
 	conf                         *Conf
 	unreleased                   chan *releaseEvent
-	hasSecondIPConf              atomic.Value
 	cloudProvider                cloudprovider.CloudProvider
 	// protect unbind immutable deployment pod
 	dpLockPool keymutex.KeyMutex
@@ -72,11 +69,6 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		podLockPool:       keymutex.NewHashed(500000),
 	}
 	plugin.ipam = floatingip.NewCrdIPAM(args.CrdClient, floatingip.InternalIp, plugin.FIPInformer)
-	// we can't add two event handler for the same informer.
-	// The later registed event handler will replace the former one, So pass nil informer to secondIPAM
-	// TODO remove secondIPAM and let ipam do allocating all ips
-	plugin.secondIPAM = floatingip.NewCrdIPAM(args.CrdClient, floatingip.ExternalIp, nil)
-	plugin.hasSecondIPConf.Store(false)
 	if conf.CloudProviderGRPCAddr != "" {
 		plugin.cloudProvider = cloudprovider.NewGRPCCloudProvider(conf.CloudProviderGRPCAddr)
 	}
@@ -128,11 +120,6 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 		if err := p.resyncPod(p.ipam); err != nil {
 			glog.Warningf("[%s] %v", p.ipam.Name(), err)
 		}
-		if p.hasSecondIPConf.Load().(bool) {
-			if err := p.resyncPod(p.secondIPAM); err != nil {
-				glog.Warningf("[%s] %v", p.secondIPAM.Name(), err)
-			}
-		}
 		p.syncPodIPsIntoDB()
 	}, time.Duration(p.conf.ResyncInterval)*time.Minute, stop)
 	for i := 0; i < 5; i++ {
@@ -154,8 +141,8 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 			p.conf.ConfigMapNamespace)
 	}
 	var updated bool
-	if updated, err = ensureIPAMConf(p.ipam, &p.lastIPConf, val); err != nil {
-		return false, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
+	if updated, err = p.ensureIPAMConf(&p.lastIPConf, val); err != nil {
+		return false, err
 	}
 	defer func() {
 		if !updated {
@@ -166,16 +153,6 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 		defer p.nodeSubnetLock.Unlock()
 		p.nodeSubnet = map[string]*net.IPNet{}
 	}()
-	secondVal, ok := cm.Data[p.conf.SecondFloatingIPKey]
-	if !ok {
-		return true, nil
-	}
-	if updated2, err := ensureIPAMConf(p.secondIPAM, &p.lastSecondIPConf, secondVal); err != nil {
-		return false, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
-	} else if updated2 {
-		updated = true
-	}
-	p.hasSecondIPConf.Store(p.lastSecondIPConf != "")
 	return true, nil
 }
 
@@ -228,7 +205,6 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		return nil, fmt.Errorf("failed to query by key %s: %v", keyObj.KeyInDB, err)
 	}
 	if len(subnets) > 0 {
-		// assure second IPAM gets the same subnets
 		glog.V(3).Infof("%s already have an allocated ip in subnets %v", keyObj.KeyInDB, subnets)
 		return subnets, nil
 	}
@@ -246,17 +222,9 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		// Lock to make checking available subnets and allocating reserved ip atomic
 		defer p.LockDpPool(keyObj.PoolPrefix())()
 	}
-	subnetSet, reserve, err := getAvailableSubnet(p.ipam, keyObj, policy, replicas, isPoolSizeDefined)
+	subnetSet, reserve, err := p.getAvailableSubnet(keyObj, policy, replicas, isPoolSizeDefined)
 	if err != nil {
-		return nil, fmt.Errorf("[%s] %v", p.ipam.Name(), err)
-	}
-	if p.enabledSecondIP(pod) {
-		secondSubnets, reserve2, err := getAvailableSubnet(p.secondIPAM, keyObj, policy, replicas, isPoolSizeDefined)
-		if err != nil {
-			return nil, fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
-		}
-		subnetSet = subnetSet.Intersection(secondSubnets)
-		reserve = reserve || reserve2
+		return nil, err
 	}
 	if (reserve || isPoolSizeDefined) && subnetSet.Len() > 0 {
 		// Since bind is in a different goroutine than filter in scheduler, we can't ensure this pod got binded
@@ -264,28 +232,22 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		// So we'd better do the allocate in filter for reserve situation.
 		reserveSubnet := subnetSet.List()[0]
 		subnetSet = sets.NewString(reserveSubnet)
-		if err := p.allocateDuringFilter(keyObj, p.enabledSecondIP(pod), reserve, isPoolSizeDefined, reserveSubnet,
-			policy, string(pod.UID)); err != nil {
+		if err := p.allocateDuringFilter(keyObj, reserve, isPoolSizeDefined, reserveSubnet, policy,
+			string(pod.UID)); err != nil {
 			return nil, err
 		}
 	}
 	return subnetSet, nil
 }
 
-func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, enabledSecondIP, reserve, isPoolSizeDefined bool,
+func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, reserve, isPoolSizeDefined bool,
 	reserveSubnet string, policy constant.ReleasePolicy, uid string) error {
 	// we can't get nodename during filter, update attr on bind
 	attr := getAttr("", uid)
 	if reserve {
-		if err := allocateInSubnetWithKey(p.ipam, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr,
+		if err := p.allocateInSubnetWithKey(keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr,
 			"filter"); err != nil {
 			return err
-		}
-		if enabledSecondIP {
-			if err := allocateInSubnetWithKey(p.secondIPAM, keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy,
-				attr, "filter"); err != nil {
-				return err
-			}
 		}
 	} else if isPoolSizeDefined {
 		// if pool size defined and we got no reserved IP, we need to allocate IP from empty key
@@ -293,13 +255,8 @@ func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, enabledSeco
 		if err != nil {
 			return err
 		}
-		if err := allocateInSubnet(p.ipam, keyObj.KeyInDB, ipNet, policy, attr, "filter"); err != nil {
+		if err := p.allocateInSubnet(keyObj.KeyInDB, ipNet, policy, attr, "filter"); err != nil {
 			return err
-		}
-		if enabledSecondIP {
-			if err := allocateInSubnet(p.secondIPAM, keyObj.KeyInDB, ipNet, policy, attr, "filter"); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
@@ -315,10 +272,9 @@ func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*sc
 	return list, nil
 }
 
-func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName string,
-	pod *corev1.Pod) (*constant.IPInfo, error) {
+func (p *FloatingIPPlugin) allocateIP(key string, nodeName string, pod *corev1.Pod) (*constant.IPInfo, error) {
 	var how string
-	ipInfo, err := ipam.First(key)
+	ipInfo, err := p.ipam.First(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
 	}
@@ -343,11 +299,11 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 		if err != nil {
 			return nil, err
 		}
-		if err := allocateInSubnet(ipam, key, subnet, policy, attr, "bind"); err != nil {
+		if err := p.allocateInSubnet(key, subnet, policy, attr, "bind"); err != nil {
 			return nil, err
 		}
 		how = "allocated"
-		ipInfo, err = ipam.First(key)
+		ipInfo, err = p.ipam.First(key)
 		if err != nil {
 			return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
 		}
@@ -365,11 +321,11 @@ func (p *FloatingIPPlugin) allocateIP(ipam floatingip.IPAM, key string, nodeName
 	}
 	if how == "reused" {
 		glog.Infof("pod %s reused %s, updating policy to %v attr %s", key, ipInfo.IPInfo.IP.String(), policy, attr)
-		if err := ipam.UpdatePolicy(key, ipInfo.IPInfo.IP.IP, policy, attr); err != nil {
+		if err := p.ipam.UpdatePolicy(key, ipInfo.IPInfo.IP.IP, policy, attr); err != nil {
 			return nil, fmt.Errorf("failed to update floating ip release policy: %v", err)
 		}
 	}
-	glog.Infof("[%s] started at %d %s ip %s, policy %v, attr %s for %s", ipam.Name(), started.UnixNano(), how,
+	glog.Infof("started at %d %s ip %s, policy %v, attr %s for %s", started.UnixNano(), how,
 		ipInfo.IPInfo.IP.String(), policy, attr, key)
 	return &ipInfo.IPInfo, nil
 }
@@ -390,19 +346,11 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	if err != nil {
 		return err
 	}
-	ipInfo, err := p.allocateIP(p.ipam, keyObj.KeyInDB, args.Node, pod)
+	ipInfo, err := p.allocateIP(keyObj.KeyInDB, args.Node, pod)
 	if err != nil {
 		return err
 	}
 	ipInfos := []constant.IPInfo{*ipInfo}
-	if p.enabledSecondIP(pod) {
-		secondIPInfo, err := p.allocateIP(p.secondIPAM, keyObj.KeyInDB, args.Node, pod)
-		// TODO release ip if it's been allocated in this goroutine?
-		if err != nil {
-			return fmt.Errorf("[%s] %v", p.secondIPAM.Name(), err)
-		}
-		ipInfos = append(ipInfos, *secondIPInfo)
-	}
 	bindAnnotation := make(map[string]string)
 	data, err := constant.FormatIPInfo(ipInfos)
 	if err != nil {
@@ -480,7 +428,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)
 	if keyObj.Deployment() {
-		return p.unbindDpPod(pod, keyObj, policy, "during unbinding pod")
+		return p.unbindDpPod(keyObj, policy, "during unbinding pod")
 	}
 	return p.unbindStsOrTappPod(pod, keyObj, policy)
 }
@@ -537,21 +485,6 @@ func (p *FloatingIPPlugin) queryNodeSubnet(nodeName string) (*net.IPNet, error) 
 	}
 }
 
-func (p *FloatingIPPlugin) enabledSecondIP(pod *corev1.Pod) bool {
-	return p.hasSecondIPConf.Load().(bool) && wantSecondIP(pod)
-}
-
-func wantSecondIP(pod *corev1.Pod) bool {
-	if pod == nil {
-		return false
-	}
-	labelMap := pod.GetLabels()
-	if labelMap == nil {
-		return false
-	}
-	return labelMap[private.LabelKeyEnableSecondIP] == private.LabelValueEnabled
-}
-
 func parseReleasePolicy(meta *v1.ObjectMeta) constant.ReleasePolicy {
 	if meta == nil || meta.Annotations == nil {
 		return constant.ReleasePolicyPodDelete
@@ -584,10 +517,6 @@ func getAttr(nodeName, uid string) string {
 
 func (p *FloatingIPPlugin) GetIpam() floatingip.IPAM {
 	return p.ipam
-}
-
-func (p *FloatingIPPlugin) GetSecondIpam() floatingip.IPAM {
-	return p.secondIPAM
 }
 
 func (p *FloatingIPPlugin) lockPod(name, namespace string) func() {
