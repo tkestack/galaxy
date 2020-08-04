@@ -195,14 +195,15 @@ func (p *FloatingIPPlugin) resyncTappOrSts(meta *resyncMeta, keyObj *util.KeyObj
 }
 
 func (p *FloatingIPPlugin) podExist(podName, namespace string) bool {
-	_, err := p.Client.CoreV1().Pods(namespace).Get(podName, v1.GetOptions{})
+	pod, err := p.Client.CoreV1().Pods(namespace).Get(podName, v1.GetOptions{})
 	if err != nil {
 		if metaErrs.IsNotFound(err) {
 			return false
 		}
-		// we cannot figure out whether pod exist or not
+		// we cannot figure out whether pod exist or not, we'd better keep the ip
+		return true
 	}
-	return true
+	return !shouldReleaseIP(pod)
 }
 
 func parsePodIndex(name string) (int, error) {
@@ -231,7 +232,7 @@ func (p *FloatingIPPlugin) listWantedPodsToMap() (map[string]*corev1.Pod, error)
 	}
 	existPods := map[string]*corev1.Pod{}
 	for i := range pods {
-		if evicted(pods[i]) {
+		if shouldReleaseIP(pods[i]) {
 			// for evicted pod, treat as not exist
 			continue
 		}
@@ -260,7 +261,7 @@ func (p *FloatingIPPlugin) syncPodIPsIntoDB() {
 }
 
 // #lizard forgives
-// syncPodIP sync pod ip with db, if the pod has ipinfos annotation and the ip is unallocated in db, allocate the ip
+// syncPodIP sync pod ip with ipam, if the pod has ipinfos annotation and the ip is unallocated in ipam, allocate the ip
 // to the pod
 func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 	if pod.Status.Phase != corev1.PodRunning {

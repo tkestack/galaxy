@@ -437,8 +437,9 @@ func getNodeIP(node *corev1.Node) net.IP {
 	return nil
 }
 
-func evicted(pod *corev1.Pod) bool {
-	return pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted"
+func shouldReleaseIP(pod *corev1.Pod) bool {
+	return (pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted") ||
+		pod.Status.Phase == corev1.PodSucceeded
 }
 
 // getNodeSubnet gets node subnet from ipam

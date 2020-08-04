@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	coreInformer "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -61,6 +62,14 @@ var (
 	pod         = CreateStatefulSetPod("pod1-0", "ns1", immutableAnnotation)
 	podKey, _   = schedulerplugin_util.FormatKey(pod)
 	node3Subnet = &net.IPNet{IP: net.ParseIP("10.49.27.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
+
+	toEvictPod = func(pod *corev1.Pod) {
+		pod.Status.Phase = corev1.PodFailed
+		pod.Status.Reason = "Evicted"
+	}
+	toSuccessPod = func(pod *corev1.Pod) {
+		pod.Status.Phase = corev1.PodSucceeded
+	}
 )
 
 func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}, []corev1.Node) {
@@ -794,4 +803,34 @@ func checkBind(fipPlugin *FloatingIPPlugin, pod *corev1.Pod, nodeName, checkKey 
 			expectSubnet.String())
 	}
 	return fipInfo, nil
+}
+
+func TestReleaseIPOfEvictOrCompletePod(t *testing.T) {
+	for i, testCase := range []struct {
+		updatePodStatus func(pod *corev1.Pod)
+	}{
+		{updatePodStatus: toEvictPod},
+		{updatePodStatus: toSuccessPod},
+	} {
+		pod := CreateStatefulSetPod("pod1-0", "ns1", nil)
+		podKey, _ := schedulerplugin_util.FormatKey(pod)
+		func() {
+			fipPlugin, stopChan, _ := createPluginTestNodes(t, pod)
+			fipPlugin.Run(stopChan)
+			defer func() { stopChan <- struct{}{} }()
+			fipInfo, err := checkBind(fipPlugin, pod, node3, podKey.KeyInDB, node3Subnet)
+			if err != nil {
+				t.Fatalf("case %d: %v", i, err)
+			}
+			testCase.updatePodStatus(pod)
+			if _, err := fipPlugin.Client.CoreV1().Pods(pod.Namespace).UpdateStatus(pod); err != nil {
+				t.Fatalf("case %d: %v", i, err)
+			}
+			if err := wait.Poll(time.Microsecond*10, time.Second*30, func() (done bool, err error) {
+				return checkIPKey(fipPlugin.ipam, fipInfo.FIP.IP.String(), "") == nil, nil
+			}); err != nil {
+				t.Fatalf("case %d: %v", i, err)
+			}
+		}()
+	}
 }

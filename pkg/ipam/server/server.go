@@ -141,8 +141,8 @@ func (s *Server) Start() error {
 
 func (s *Server) Run() error {
 	s.informerFactory.Start(s.stopChan)
-	s.informerFactory.WaitForCacheSync(s.stopChan)
 	s.crdInformerFactory.Start(s.stopChan)
+	s.informerFactory.WaitForCacheSync(s.stopChan)
 	s.crdInformerFactory.WaitForCacheSync(s.stopChan)
 	if s.tappInformerFactory != nil {
 		s.tappInformerFactory.Start(s.stopChan)

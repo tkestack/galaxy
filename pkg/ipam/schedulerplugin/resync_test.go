@@ -20,6 +20,7 @@ import (
 	"net"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
@@ -55,6 +56,7 @@ func TestResyncStsPod(t *testing.T) {
 		annotations   map[string]string
 		replicas      int32
 		createPod     bool
+		updateStatus  func(*corev1.Pod)
 		createApp     bool
 		expectKeyFunc func(obj *util.KeyObj) string
 	}{
@@ -66,9 +68,14 @@ func TestResyncStsPod(t *testing.T) {
 		{annotations: neverAnnotation, replicas: 0, expectKeyFunc: podNameFunc, createApp: true},
 		{annotations: neverAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createApp: true},
 		{annotations: neverAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createApp: false},
+		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc, createPod: true, updateStatus: toEvictPod},   // pod evicted, ip will be released
+		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc, createPod: true, updateStatus: toSuccessPod}, // pod completed, ip will be released
 	} {
 		var objs []runtime.Object
 		pod := CreateStatefulSetPod("sts-xxx-0", "ns1", testCase.annotations)
+		if testCase.updateStatus != nil {
+			testCase.updateStatus(pod)
+		}
 		keyObj, _ := util.FormatKey(pod)
 		if testCase.createPod {
 			objs = append(objs, pod)
