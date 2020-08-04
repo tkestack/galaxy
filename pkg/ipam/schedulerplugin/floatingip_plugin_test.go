@@ -500,11 +500,7 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 		StatefulSetLister: statefulsetInformer.Lister(),
 		DeploymentLister:  deploymentInformer.Lister(),
 		Client:            client,
-		PodHasSynced:      podInformer.Informer().HasSynced,
-		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
-		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 		PoolLister:        poolInformer.Lister(),
-		PoolSynced:        poolInformer.Informer().HasSynced,
 		//TAppClient:        tappCli,
 		//TAppHasSynced:     tappInformer.Informer().HasSynced,
 		//TAppLister:        tappInformer.Lister(),
@@ -513,8 +509,10 @@ func createPluginFactoryArgs(t *testing.T, objs ...runtime.Object) (*PluginFacto
 		FIPInformer: FIPInformer,
 	}
 	//tapp.EnsureCRDCreated(pluginArgs.ExtClient)
-	go informerFactory.Start(stopChan)
-	go crdInformerFactory.Start(stopChan)
+	informerFactory.Start(stopChan)
+	crdInformerFactory.Start(stopChan)
+	informerFactory.WaitForCacheSync(stopChan)
+	crdInformerFactory.WaitForCacheSync(stopChan)
 	//go tappInformerFactory.Start(stopChan)
 	return pluginArgs, podInformer, stopChan
 }

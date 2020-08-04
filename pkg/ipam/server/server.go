@@ -110,11 +110,7 @@ func (s *Server) init() error {
 		DeploymentLister:  deploymentInformer.Lister(),
 		Client:            s.client,
 		TAppClient:        s.tappClient,
-		PodHasSynced:      podInformer.Informer().HasSynced,
-		StatefulSetSynced: statefulsetInformer.Informer().HasSynced,
-		DeploymentSynced:  deploymentInformer.Informer().HasSynced,
 		PoolLister:        poolInformer.Lister(),
-		PoolSynced:        poolInformer.Informer().HasSynced,
 		CrdClient:         s.crdClient,
 		ExtClient:         s.extensionClient,
 		FIPInformer:       fipInformer,
@@ -123,7 +119,6 @@ func (s *Server) init() error {
 		s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)
 		tappInformer := s.tappInformerFactory.Tappcontroller().V1().TApps()
 		pluginArgs.TAppLister = tappInformer.Lister()
-		pluginArgs.TAppHasSynced = tappInformer.Informer().HasSynced
 	}
 	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
 	if err != nil {
@@ -145,10 +140,13 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Run() error {
-	go s.informerFactory.Start(s.stopChan)
-	go s.crdInformerFactory.Start(s.stopChan)
+	s.informerFactory.Start(s.stopChan)
+	s.informerFactory.WaitForCacheSync(s.stopChan)
+	s.crdInformerFactory.Start(s.stopChan)
+	s.crdInformerFactory.WaitForCacheSync(s.stopChan)
 	if s.tappInformerFactory != nil {
-		go s.tappInformerFactory.Start(s.stopChan)
+		s.tappInformerFactory.Start(s.stopChan)
+		s.tappInformerFactory.WaitForCacheSync(s.stopChan)
 	}
 	if err := crd.EnsureCRDCreated(s.extensionClient); err != nil {
 		return err

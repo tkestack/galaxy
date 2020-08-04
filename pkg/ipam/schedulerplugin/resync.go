@@ -36,30 +36,6 @@ import (
 	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
 )
 
-func (p *FloatingIPPlugin) storeReady() bool {
-	if !p.PodHasSynced() {
-		glog.V(3).Infof("the pod store has not been synced yet")
-		return false
-	}
-	if !p.StatefulSetSynced() {
-		glog.V(3).Infof("the statefulset store has not been synced yet")
-		return false
-	}
-	if !p.DeploymentSynced() {
-		glog.V(3).Infof("the deployment store has not been synced yet")
-		return false
-	}
-	if p.TAppHasSynced != nil && !p.TAppHasSynced() {
-		glog.V(3).Infof("the tapp store has not been synced yet")
-		return false
-	}
-	if !p.PoolSynced() {
-		glog.V(3).Infof("the pool store has not been synced yet")
-		return false
-	}
-	return true
-}
-
 type resyncObj struct {
 	keyObj *util.KeyObj
 	fip    floatingip.FloatingIP
@@ -71,7 +47,7 @@ type resyncObj struct {
 // 3. deleted pods whose parent deployment no need so many ips
 // 4. deleted pods whose parent statefulset/tapp exist but pod index > .spec.replica
 // 5. existing pods but its status is evicted
-func (p *FloatingIPPlugin) resyncPod(ipam floatingip.IPAM) error {
+func (p *FloatingIPPlugin) resyncPod() error {
 	glog.V(4).Infof("resync pods+")
 	defer glog.V(4).Infof("resync pods-")
 	resyncMeta := &resyncMeta{
