@@ -40,7 +40,7 @@ func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
 	if !p.hasResourceName(&newPod.Spec) {
 		return nil
 	}
-	if !shouldReleaseIP(oldPod) && shouldReleaseIP(newPod) {
+	if !finished(oldPod) && finished(newPod) {
 		// Deployments will leave evicted pods
 		// If it's a evicted one, release its ip
 		glog.Infof("release ip from %s_%s, phase %s", newPod.Name, newPod.Namespace, string(newPod.Status.Phase))

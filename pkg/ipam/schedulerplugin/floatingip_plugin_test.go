@@ -63,9 +63,8 @@ var (
 	podKey, _   = schedulerplugin_util.FormatKey(pod)
 	node3Subnet = &net.IPNet{IP: net.ParseIP("10.49.27.0"), Mask: net.IPv4Mask(255, 255, 255, 0)}
 
-	toEvictPod = func(pod *corev1.Pod) {
+	toFailedPod = func(pod *corev1.Pod) {
 		pod.Status.Phase = corev1.PodFailed
-		pod.Status.Reason = "Evicted"
 	}
 	toSuccessPod = func(pod *corev1.Pod) {
 		pod.Status.Phase = corev1.PodSucceeded
@@ -805,11 +804,11 @@ func checkBind(fipPlugin *FloatingIPPlugin, pod *corev1.Pod, nodeName, checkKey 
 	return fipInfo, nil
 }
 
-func TestReleaseIPOfEvictOrCompletePod(t *testing.T) {
+func TestReleaseIPOfFinishedPod(t *testing.T) {
 	for i, testCase := range []struct {
 		updatePodStatus func(pod *corev1.Pod)
 	}{
-		{updatePodStatus: toEvictPod},
+		{updatePodStatus: toFailedPod},
 		{updatePodStatus: toSuccessPod},
 	} {
 		pod := CreateStatefulSetPod("pod1-0", "ns1", nil)

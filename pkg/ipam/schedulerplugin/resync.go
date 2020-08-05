@@ -65,7 +65,7 @@ func (p *FloatingIPPlugin) resyncPod() error {
 
 type resyncMeta struct {
 	allocatedIPs map[string]resyncObj // allocated ips from galaxy pool
-	existPods    map[string]*corev1.Pod
+	unfinish     map[string]*corev1.Pod
 	tappMap      map[string]*tappv1.TApp
 	ssMap        map[string]*appv1.StatefulSet
 }
@@ -95,7 +95,7 @@ func (p *FloatingIPPlugin) fetchChecklist(meta *resyncMeta) error {
 
 func (p *FloatingIPPlugin) fetchAppAndPodMeta(meta *resyncMeta) error {
 	var err error
-	meta.existPods, err = p.listWantedPodsToMap()
+	meta.unfinish, err = p.listUnfinishPodsToMap()
 	if err != nil {
 		return err
 	}
@@ -115,11 +115,11 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(meta *resyncMeta) {
 	for key, obj := range meta.allocatedIPs {
 		func() {
 			defer p.lockPod(obj.keyObj.PodName, obj.keyObj.Namespace)()
-			if _, ok := meta.existPods[key]; ok {
+			if _, ok := meta.unfinish[key]; ok {
 				return
 			}
 			// check with apiserver to confirm it really not exist
-			if p.podExist(obj.keyObj.PodName, obj.keyObj.Namespace) {
+			if p.podRunning(obj.keyObj.PodName, obj.keyObj.Namespace) {
 				return
 			}
 			if p.cloudProvider != nil {
@@ -149,7 +149,7 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(meta *resyncMeta) {
 			releasePolicy := constant.ReleasePolicy(obj.fip.Policy)
 			// we can't get labels of not exist pod, so get them from it's ss or deployment
 			if !obj.keyObj.Deployment() {
-				p.resyncTappOrSts(meta, obj.keyObj, releasePolicy)
+				p.resyncNoneDpPod(meta, obj.keyObj, releasePolicy)
 				return
 			}
 			if err := p.unbindDpPod(obj.keyObj, releasePolicy, "during resyncing"); err != nil {
@@ -159,7 +159,7 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(meta *resyncMeta) {
 	}
 }
 
-func (p *FloatingIPPlugin) resyncTappOrSts(meta *resyncMeta, keyObj *util.KeyObj, releasePolicy constant.ReleasePolicy) {
+func (p *FloatingIPPlugin) resyncNoneDpPod(meta *resyncMeta, keyObj *util.KeyObj, releasePolicy constant.ReleasePolicy) {
 	if releasePolicy == constant.ReleasePolicyNever {
 		return
 	}
@@ -194,7 +194,7 @@ func (p *FloatingIPPlugin) resyncTappOrSts(meta *resyncMeta, keyObj *util.KeyObj
 	}
 }
 
-func (p *FloatingIPPlugin) podExist(podName, namespace string) bool {
+func (p *FloatingIPPlugin) podRunning(podName, namespace string) bool {
 	pod, err := p.Client.CoreV1().Pods(namespace).Get(podName, v1.GetOptions{})
 	if err != nil {
 		if metaErrs.IsNotFound(err) {
@@ -203,7 +203,7 @@ func (p *FloatingIPPlugin) podExist(podName, namespace string) bool {
 		// we cannot figure out whether pod exist or not, we'd better keep the ip
 		return true
 	}
-	return !shouldReleaseIP(pod)
+	return !finished(pod)
 }
 
 func parsePodIndex(name string) (int, error) {
@@ -225,24 +225,23 @@ func (p *FloatingIPPlugin) listWantedPods() ([]*corev1.Pod, error) {
 	return filtered, nil
 }
 
-func (p *FloatingIPPlugin) listWantedPodsToMap() (map[string]*corev1.Pod, error) {
+func (p *FloatingIPPlugin) listUnfinishPodsToMap() (map[string]*corev1.Pod, error) {
 	pods, err := p.listWantedPods()
 	if err != nil {
 		return nil, err
 	}
-	existPods := map[string]*corev1.Pod{}
+	unfinish := map[string]*corev1.Pod{}
 	for i := range pods {
-		if shouldReleaseIP(pods[i]) {
-			// for evicted pod, treat as not exist
+		if finished(pods[i]) {
 			continue
 		}
 		keyObj, err := util.FormatKey(pods[i])
 		if err != nil {
 			continue
 		}
-		existPods[keyObj.KeyInDB] = pods[i]
+		unfinish[keyObj.KeyInDB] = pods[i]
 	}
-	return existPods, nil
+	return unfinish, nil
 }
 
 // syncPodIPs sync all pods' ips with db, if a pod has PodIP and its ip is unallocated, allocate the ip to it

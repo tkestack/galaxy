@@ -68,7 +68,7 @@ func TestResyncStsPod(t *testing.T) {
 		{annotations: neverAnnotation, replicas: 0, expectKeyFunc: podNameFunc, createApp: true},
 		{annotations: neverAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createApp: true},
 		{annotations: neverAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createApp: false},
-		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc, createPod: true, updateStatus: toEvictPod},   // pod evicted, ip will be released
+		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc, createPod: true, updateStatus: toFailedPod},  // pod failed, ip will be released
 		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc, createPod: true, updateStatus: toSuccessPod}, // pod completed, ip will be released
 	} {
 		var objs []runtime.Object
