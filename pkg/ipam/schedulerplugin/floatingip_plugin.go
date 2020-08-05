@@ -46,10 +46,10 @@ type FloatingIPPlugin struct {
 	nodeSubnet     map[string]*net.IPNet
 	nodeSubnetLock sync.Mutex
 	*PluginFactoryArgs
-	lastIPConf, lastSecondIPConf string
-	conf                         *Conf
-	unreleased                   chan *releaseEvent
-	cloudProvider                cloudprovider.CloudProvider
+	lastIPConf    string
+	conf          *Conf
+	unreleased    chan *releaseEvent
+	cloudProvider cloudprovider.CloudProvider
 	// protect unbind immutable deployment pod
 	dpLockPool keymutex.KeyMutex
 	// protect bind/unbind for each pod
@@ -93,11 +93,7 @@ func (p *FloatingIPPlugin) Init() error {
 			return fmt.Errorf("failed to get floatingip config from configmap: %v", err)
 		}
 	}
-	wait.PollInfinite(time.Second, func() (done bool, err error) {
-		glog.Infof("waiting store ready")
-		return p.storeReady(), nil
-	})
-	glog.Infof("store is ready, plugin init done")
+	glog.Infof("plugin init done")
 	return nil
 }
 
@@ -110,15 +106,9 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 			}
 		}, time.Minute, stop)
 	}
-	firstTime := true
 	go wait.Until(func() {
-		if firstTime {
-			glog.Infof("start resyncing for the first time")
-			defer glog.Infof("resyncing complete for the first time")
-			firstTime = false
-		}
-		if err := p.resyncPod(p.ipam); err != nil {
-			glog.Warningf("[%s] %v", p.ipam.Name(), err)
+		if err := p.resyncPod(); err != nil {
+			glog.Warningf("resync pod: %v", err)
 		}
 		p.syncPodIPsIntoDB()
 	}, time.Duration(p.conf.ResyncInterval)*time.Minute, stop)
@@ -447,8 +437,9 @@ func getNodeIP(node *corev1.Node) net.IP {
 	return nil
 }
 
-func evicted(pod *corev1.Pod) bool {
-	return pod.Status.Phase == corev1.PodFailed && pod.Status.Reason == "Evicted"
+// finished returns true if pod completes and won't be restarted again
+func finished(pod *corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded
 }
 
 // getNodeSubnet gets node subnet from ipam

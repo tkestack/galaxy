@@ -37,11 +37,6 @@ type PluginFactoryArgs struct {
 	DeploymentLister  appv1.DeploymentLister
 	TAppLister        v1.TAppLister
 	PoolLister        list.PoolLister
-	PodHasSynced      func() bool
-	StatefulSetSynced func() bool
-	DeploymentSynced  func() bool
-	TAppHasSynced     func() bool
-	PoolSynced        func() bool
 	CrdClient         crd_clientset.Interface
 	ExtClient         extensionClient.Interface
 	FIPInformer       crdInformer.FloatingIPInformer
