@@ -69,20 +69,22 @@ func (p *FloatingIPPlugin) loop(stop chan struct{}) {
 		case <-stop:
 			return
 		case event := <-p.unreleased:
-			if err := p.unbind(event.pod); err != nil {
-				event.retryTimes++
-				glog.Warningf("unbind pod %s failed for %d times: %v", util.PodName(event.pod), event.retryTimes, err)
-				if event.retryTimes > 3 {
-					// leave it to resync to protect chan from explosion
-					glog.Errorf("abort unbind for pod %s, retried %d times: %v", util.PodName(event.pod), event.retryTimes, err)
-				} else {
-					go func() {
+			go func(event *releaseEvent) {
+				if err := p.unbind(event.pod); err != nil {
+					event.retryTimes++
+					if event.retryTimes > 3 {
+						// leave it to resync to protect chan from explosion
+						glog.Errorf("abort unbind for pod %s, retried %d times: %v", util.PodName(event.pod),
+							event.retryTimes, err)
+					} else {
+						glog.Warningf("unbind pod %s failed for %d times: %v", util.PodName(event.pod),
+							event.retryTimes, err)
 						// backoff time if required
-						time.Sleep(300 * time.Millisecond * time.Duration(event.retryTimes))
+						time.Sleep(100 * time.Millisecond * time.Duration(event.retryTimes))
 						p.unreleased <- event
-					}()
+					}
 				}
-			}
+			}(event)
 		}
 	}
 }

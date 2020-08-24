@@ -112,9 +112,7 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 		}
 		p.syncPodIPsIntoDB()
 	}, time.Duration(p.conf.ResyncInterval)*time.Minute, stop)
-	for i := 0; i < 5; i++ {
-		go p.loop(stop)
-	}
+	go p.loop(stop)
 }
 
 // updateConfigMap fetches the newest floatingips configmap and syncs in memory/db config,
