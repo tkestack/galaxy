@@ -148,9 +148,6 @@ func (s *Server) Run() error {
 		s.tappInformerFactory.Start(s.stopChan)
 		s.tappInformerFactory.WaitForCacheSync(s.stopChan)
 	}
-	if err := crd.EnsureCRDCreated(s.extensionClient); err != nil {
-		return err
-	}
 	if err := s.plugin.Init(); err != nil {
 		return err
 	}
@@ -190,6 +187,9 @@ func (s *Server) initk8sClient() {
 		}
 	}
 	glog.Infof("connected to apiserver %v", cfg)
+	if err := crd.EnsureCRDCreated(s.extensionClient); err != nil {
+		glog.Fatalf("Ensure crd created: %v", err)
+	}
 
 	// Identity used to distinguish between multiple cloud controller manager instances
 	id, err := os.Hostname()
