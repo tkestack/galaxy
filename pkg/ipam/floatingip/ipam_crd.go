@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	glog "k8s.io/klog"
@@ -59,9 +60,11 @@ type crdIpam struct {
 	ipType      Type
 	//caches for FloatingIP crd, both stores allocated FloatingIPs and unallocated FloatingIPs
 	cacheLock *sync.RWMutex
-	// key is FloatingIP name (ip typed as uint32)
+	// key is ip string
 	allocatedFIPs   map[string]*FloatingIP
 	unallocatedFIPs map[string]*FloatingIP
+
+	ipCounterDesc *prometheus.Desc
 }
 
 // NewCrdIPAM init IPAM struct.
@@ -72,6 +75,8 @@ func NewCrdIPAM(fipClient crd_clientset.Interface, ipType Type, informer crdInfo
 		cacheLock:       new(sync.RWMutex),
 		allocatedFIPs:   make(map[string]*FloatingIP),
 		unallocatedFIPs: make(map[string]*FloatingIP),
+		ipCounterDesc: prometheus.NewDesc("galaxy_ip_counter", "Galaxy floating ip counter",
+			[]string{"type", "subnet", "first_ip"}, nil),
 	}
 	// manually creating and fip to reserve it
 	if informer != nil {
@@ -257,9 +262,13 @@ func (ci *crdIpam) Release(key string, ip net.IP) error {
 
 // First returns the first matched IP by key.
 func (ci *crdIpam) First(key string) (*FloatingIPInfo, error) {
-	fip, err := ci.findFloatingIPByKey(key)
-	if err != nil {
-		return nil, err
+	ci.cacheLock.RLock()
+	defer ci.cacheLock.RUnlock()
+	var fip *FloatingIP
+	for _, spec := range ci.allocatedFIPs {
+		if spec.Key == key {
+			fip = spec
+		}
 	}
 	if fip == nil {
 		return nil, nil
@@ -317,6 +326,8 @@ func (ci *crdIpam) ByPrefix(prefix string) ([]FloatingIP, error) {
 }
 
 func (ci *crdIpam) NodeSubnet(nodeIP net.IP) *net.IPNet {
+	ci.cacheLock.RLock()
+	defer ci.cacheLock.RUnlock()
 	for j := range ci.FloatingIPs {
 		nodeSubnets := ci.FloatingIPs[j].NodeSubnets
 		for k := range nodeSubnets {
@@ -463,17 +474,6 @@ func (ci *crdIpam) syncCacheAfterDel(released *FloatingIP) {
 	return
 }
 
-func (ci *crdIpam) findFloatingIPByKey(key string) (*FloatingIP, error) {
-	ci.cacheLock.RLock()
-	defer ci.cacheLock.RUnlock()
-	for _, spec := range ci.allocatedFIPs {
-		if spec.Key == key {
-			return spec, nil
-		}
-	}
-	return nil, nil
-}
-
 func (ci *crdIpam) filterAllocatedSubnet(key string) sets.String {
 	//key would not be empty
 	subnetSet := sets.NewString()
@@ -547,4 +547,46 @@ func (ci *crdIpam) ReleaseIPs(ipToKey map[string]string) (map[string]string, map
 		}
 	}
 	return deleted, undeleted, nil
+}
+
+// Describe sends metrics description to ch
+func (ci *crdIpam) Describe(ch chan<- *prometheus.Desc) {
+	ch <- ci.ipCounterDesc
+}
+
+// Collect sends metrics to ch
+func (ci *crdIpam) Collect(ch chan<- prometheus.Metric) {
+	allocated, unallocated := map[string]*FloatingIP{}, map[string]*FloatingIP{}
+	ci.cacheLock.RLock()
+	pools := make([]*FloatingIPPool, len(ci.FloatingIPs))
+	for ipStr, fip := range ci.allocatedFIPs {
+		allocated[ipStr] = fip
+	}
+	for ipStr, fip := range ci.unallocatedFIPs {
+		unallocated[ipStr] = fip
+	}
+	for i := range ci.FloatingIPs {
+		pools[i] = ci.FloatingIPs[i]
+	}
+	ci.cacheLock.RUnlock()
+	for _, pool := range pools {
+		subnetStr := pool.IPNet().String()
+		var firstIP string
+		var allocatedNum float64
+		for _, ipr := range pool.IPRanges {
+			firstIP = ipr.First.String()
+			break
+		}
+		for _, fip := range allocated {
+			if !pool.Contains(fip.IP) {
+				continue
+			}
+			allocatedNum += 1
+		}
+		// since subnetStr may be the same for different pools, add a first ip tag
+		ch <- prometheus.MustNewConstMetric(ci.ipCounterDesc, prometheus.GaugeValue, allocatedNum,
+			"allocated", subnetStr, firstIP)
+		ch <- prometheus.MustNewConstMetric(ci.ipCounterDesc, prometheus.GaugeValue, float64(pool.Size()),
+			"total", subnetStr, firstIP)
+	}
 }

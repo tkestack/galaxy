@@ -27,6 +27,8 @@ import (
 
 	"github.com/emicklei/go-restful"
 	"github.com/emicklei/go-restful-swagger12"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	corev1 "k8s.io/api/core/v1"
 	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,6 +49,7 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/client/clientset/versioned"
 	crdInformer "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions"
 	"tkestack.io/galaxy/pkg/ipam/crd"
+	"tkestack.io/galaxy/pkg/ipam/metrics"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin"
 	"tkestack.io/galaxy/pkg/ipam/server/options"
 	"tkestack.io/galaxy/pkg/utils/httputil"
@@ -345,6 +348,10 @@ func (s *Server) startAPIServer() {
 		Writes(httputil.Resp{Code: http.StatusOK}))
 
 	restful.Add(ws)
+	// register prometheus metrics
+	prometheus.MustRegister(s.plugin.GetIpam())
+	metrics.MustRegister()
+	restful.DefaultContainer.Handle("/metrics", promhttp.Handler())
 	addSwaggerUISupport(restful.DefaultContainer)
 	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", s.Bind, s.APIPort), nil); err != nil {
 		glog.Fatalf("unable to listen: %v.", err)

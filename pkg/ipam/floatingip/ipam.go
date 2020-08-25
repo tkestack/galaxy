@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 )
@@ -63,6 +64,8 @@ type IPAM interface {
 	NodeSubnetsByKey(key string) (sets.String, error)
 	// Name returns IPAM's name.
 	Name() string
+	// implements metrics Collector interface
+	prometheus.Collector
 }
 
 // FloatingIPInfo is floatingIP information
