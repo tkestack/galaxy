@@ -18,9 +18,11 @@ package schedulerplugin
 
 import (
 	"fmt"
+	"time"
 
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
+	"tkestack.io/galaxy/pkg/ipam/metrics"
 )
 
 // cloudProviderAssignIP send assign ip req to cloud provider
@@ -28,7 +30,9 @@ func (p *FloatingIPPlugin) cloudProviderAssignIP(req *rpc.AssignIPRequest) error
 	if p.cloudProvider == nil {
 		return nil
 	}
+	start := time.Now()
 	reply, err := p.cloudProvider.AssignIP(req)
+	metrics.CloudProviderLatency.WithLabelValues("assign").Observe(time.Since(start).Seconds())
 	if err != nil {
 		return fmt.Errorf("cloud provider AssignIP reply err %v", err)
 	}
@@ -47,7 +51,9 @@ func (p *FloatingIPPlugin) cloudProviderUnAssignIP(req *rpc.UnAssignIPRequest) e
 	if p.cloudProvider == nil {
 		return nil
 	}
+	start := time.Now()
 	reply, err := p.cloudProvider.UnAssignIP(req)
+	metrics.CloudProviderLatency.WithLabelValues("unassign").Observe(time.Since(start).Seconds())
 	if err != nil {
 		return fmt.Errorf("cloud provider UnAssignIP reply err %v", err)
 	}

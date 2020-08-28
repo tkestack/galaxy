@@ -36,6 +36,7 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider"
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
+	"tkestack.io/galaxy/pkg/ipam/metrics"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
@@ -148,6 +149,7 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 // If the given pod doesn't want floating IP, none failedNodes returns
 func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev1.Node, schedulerapi.FailedNodesMap,
 	error) {
+	start := time.Now()
 	failedNodesMap := schedulerapi.FailedNodesMap{}
 	if !p.hasResourceName(&pod.Spec) {
 		return nodes, failedNodesMap, nil
@@ -178,6 +180,7 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 		}
 		glog.V(5).Infof("filtered nodes %v failed nodes %v", nodeNames, failedNodesMap)
 	}
+	metrics.ScheduleLatency.WithLabelValues("filter").Observe(time.Since(start).Seconds())
 	return filteredNodes, failedNodesMap, nil
 }
 
@@ -320,6 +323,7 @@ func (p *FloatingIPPlugin) allocateIP(key string, nodeName string, pod *corev1.P
 
 // Bind binds a new floatingip or reuse an old one to pod
 func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
+	start := time.Now()
 	pod, err := p.PluginFactoryArgs.PodLister.Pods(args.PodNamespace).Get(args.PodName)
 	if err != nil {
 		return fmt.Errorf("failed to find pod %s: %w", util.Join(args.PodName, args.PodNamespace), err)
@@ -375,6 +379,7 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 		// If fails to update, depending on resync to update
 		return fmt.Errorf("update pod %s: %w", keyObj.KeyInDB, err1)
 	}
+	metrics.ScheduleLatency.WithLabelValues("bind").Observe(time.Since(start).Seconds())
 	return nil
 }
 
