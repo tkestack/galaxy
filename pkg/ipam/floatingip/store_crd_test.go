@@ -38,13 +38,14 @@ func TestAddFloatingIPEventByUser(t *testing.T) {
 		IP:        net.ParseIP("10.49.27.205"),
 		Key:       "pod2",
 		Subnets:   sets.NewString("subnet1"),
-		Attr:      "pod2 attr",
 		Policy:    0,
 		UpdatedAt: time.Now(),
 	}
 	fipCrd := ipam.newFIPCrd(fip.IP.String())
 	fipCrd.Labels[constant.ReserveFIPLabel] = ""
-	assign(fipCrd, fip)
+	if err := assign(fipCrd, fip); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := ipam.client.GalaxyV1alpha1().FloatingIPs().Create(fipCrd); err != nil {
 		t.Fatal(err)
 	}

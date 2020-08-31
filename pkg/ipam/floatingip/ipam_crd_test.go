@@ -35,8 +35,8 @@ import (
 )
 
 const (
-	pod1CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod1","attribute":"212","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`
-	pod2CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.216","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod2","attribute":"333","policy":1,"subnet":"10.49.27.0/24","updateTime":null}}`
+	pod1CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod1","attribute":"{\"NodeName\":\"212\",\"Uid\":\"xx1\"}","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`
+	pod2CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.216","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod2","attribute":"{\"NodeName\":\"333\",\"Uid\":\"xx2\"}","policy":1,"subnet":"10.49.27.0/24","updateTime":null}}`
 
 	policy = constant.ReleasePolicyPodDelete
 )
@@ -111,7 +111,6 @@ func TestConfigurePoolWithAllocatedIP(t *testing.T) {
 		IP:        net.ParseIP("10.49.27.205"),
 		Key:       "pod2",
 		Subnets:   sets.NewString("subnet1"), // assign a bad subnet to test if it can be correct
-		Attr:      "pod2 attr",
 		Policy:    0,
 		UpdatedAt: time.Now(),
 	}
@@ -120,7 +119,9 @@ func TestConfigurePoolWithAllocatedIP(t *testing.T) {
 	internalIP := InternalIp
 	ipType, _ := internalIP.String()
 	fipCrd.Labels[constant.IpType] = ipType
-	assign(fipCrd, expectFip)
+	if err := assign(fipCrd, expectFip); err != nil {
+		t.Fatal(err)
+	}
 	ipam := createTestCrdIPAM(t, fipCrd)
 	if len(ipam.allocatedFIPs) != 1 {
 		t.Fatal(len(ipam.allocatedFIPs))
@@ -142,7 +143,8 @@ func TestConfigurePoolWithAllocatedIP(t *testing.T) {
 func TestCRDAllocateSpecificIP(t *testing.T) {
 	now := time.Now()
 	ipam := createTestCrdIPAM(t)
-	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"), constant.ReleasePolicyNever, "212"); err != nil {
+	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"),
+		Attr{Policy: constant.ReleasePolicyNever, NodeName: "212", Uid: "xx1"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(ipam.allocatedFIPs) != 1 {
@@ -155,7 +157,7 @@ func TestCRDAllocateSpecificIP(t *testing.T) {
 	if !allocated.UpdatedAt.After(now) {
 		t.Fatal(allocated.UpdatedAt)
 	}
-	if `FloatingIP{ip:10.49.27.205 key:pod1 attr:212 policy:2 subnets:map[10.49.27.0/24:{}]}` !=
+	if `FloatingIP{ip:10.49.27.205 key:pod1 policy:2 nodeName:212 podUid:xx1 subnets:map[10.49.27.0/24:{}]}` !=
 		fmt.Sprintf("%+v", allocated) {
 		t.Fatal(fmt.Sprintf("%+v", allocated))
 	}
@@ -186,8 +188,18 @@ func checkFIP(ipam *crdIpam, expect string) error {
 
 func TestCRDReserveIP(t *testing.T) {
 	ipam := createTestCrdIPAM(t)
-	testReserveIP(t, ipam)
-	if err := checkFIP(ipam, `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"p1","attribute":"this is p1","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`); err != nil {
+	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"),
+		Attr{Policy: constant.ReleasePolicyNever, NodeName: "node1", Uid: "xx1"}); err != nil {
+		t.Fatal(err)
+	}
+	newAttr := Attr{NodeName: "node2", Uid: "xx2"}
+	if err := ipam.ReserveIP("pod1", "p1", newAttr); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkIPKeyAttr(ipam, "10.49.27.205", "p1", &newAttr); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkFIP(ipam, `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"p1","attribute":"{\"NodeName\":\"node2\",\"Uid\":\"xx2\"}","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -239,18 +251,6 @@ func testRelease(t *testing.T, ipam IPAM) {
 	}
 }
 
-func testReserveIP(t *testing.T, ipam IPAM) {
-	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"), constant.ReleasePolicyNever, "212"); err != nil {
-		t.Fatal(err)
-	}
-	if err := ipam.ReserveIP("pod1", "p1", "this is p1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkIPKeyAttr(ipam, "10.49.27.205", "p1", "this is p1"); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func testReleaseIPs(t *testing.T, ipam IPAM) {
 	allocateSomeIPs(t, ipam)
 	relesed, unreleased, err := ipam.ReleaseIPs(map[string]string{
@@ -289,16 +289,24 @@ func testByKeyword(t *testing.T, ipam IPAM) {
 	if fips[0].Key != "pod2" {
 		t.Fatal(fips)
 	}
+	if fips[0].NodeName != "333" {
+		t.Fatal(fips)
+	}
+	if fips[0].PodUid != "xx2" {
+		t.Fatal(fips)
+	}
 	if !fips[0].UpdatedAt.After(now) {
 		t.Fatalf("now %v, update time %v", now, fips[0].UpdatedAt)
 	}
 }
 
 func allocateSomeIPs(t *testing.T, ipam IPAM) {
-	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"), constant.ReleasePolicyNever, "212"); err != nil {
+	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"),
+		Attr{Policy: constant.ReleasePolicyNever, NodeName: "212", Uid: "xx1"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ipam.AllocateSpecificIP("pod2", net.ParseIP("10.49.27.216"), constant.ReleasePolicyImmutable, "333"); err != nil {
+	if err := ipam.AllocateSpecificIP("pod2", net.ParseIP("10.49.27.216"),
+		Attr{Policy: constant.ReleasePolicyImmutable, NodeName: "333", Uid: "xx2"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -332,6 +340,9 @@ func checkByPrefix(ipam IPAM, prefix string, expectKeys ...string) error {
 		if _, ok := expectMap[fip.Key]; !ok {
 			return fmt.Errorf("expect %v, got %v", expectKeys, fips)
 		}
+		if fip.NodeName == "" || fip.PodUid == "" {
+			return fmt.Errorf("expect nodeName and podUid are not empty")
+		}
 	}
 	return nil
 }
@@ -340,11 +351,11 @@ func checkIPKey(ipam IPAM, checkIP, expectKey string) error {
 	return checkByIP(ipam, checkIP, expectKey, nil)
 }
 
-func checkIPKeyAttr(ipam IPAM, checkIP, expectKey, expectAttr string) error {
-	return checkByIP(ipam, checkIP, expectKey, &expectAttr)
+func checkIPKeyAttr(ipam IPAM, checkIP, expectKey string, expectAttr *Attr) error {
+	return checkByIP(ipam, checkIP, expectKey, expectAttr)
 }
 
-func checkByIP(ipam IPAM, checkIP, expectKey string, expectAttr *string) error {
+func checkByIP(ipam IPAM, checkIP, expectKey string, expectAttr *Attr) error {
 	ip := net.ParseIP(checkIP)
 	if ip == nil {
 		return fmt.Errorf("bad check ip: %s", checkIP)
@@ -357,8 +368,11 @@ func checkByIP(ipam IPAM, checkIP, expectKey string, expectAttr *string) error {
 		return fmt.Errorf("expect key: %s, got %s, ip %s", expectKey, fip.Key, checkIP)
 	}
 	if expectAttr != nil {
-		if fip.Attr != *expectAttr {
-			return fmt.Errorf("expect attr: %s, got %s, ip %s", *expectAttr, fip.Attr, checkIP)
+		if fip.PodUid != expectAttr.Uid {
+			return fmt.Errorf("expect podUid: %s, got %s, ip %s", expectAttr.Uid, fip.PodUid, checkIP)
+		}
+		if fip.NodeName != expectAttr.NodeName {
+			return fmt.Errorf("expect nodeName: %s, got %s, ip %s", expectAttr.NodeName, fip.NodeName, checkIP)
 		}
 	}
 	return nil
@@ -379,7 +393,7 @@ func TestAllocateInSubnet(t *testing.T) {
 	}
 	for i := range testCases {
 		testCase := testCases[i]
-		allocatedIP, err := ipam.AllocateInSubnet("pod1", testCase.nodeIPNet, policy, "")
+		allocatedIP, err := ipam.AllocateInSubnet("pod1", testCase.nodeIPNet, Attr{Policy: policy})
 		if err != nil {
 			t.Fatalf("test case %d: %v", i, err)
 		}
@@ -389,18 +403,18 @@ func TestAllocateInSubnet(t *testing.T) {
 	}
 	// test can't find available ip
 	_, noConfigNode, _ := net.ParseCIDR("10.173.14.0/24")
-	if _, err := ipam.AllocateInSubnet("pod1-1", noConfigNode, policy, ""); err == nil || err != ErrNoEnoughIP {
+	if _, err := ipam.AllocateInSubnet("pod1-1", noConfigNode, Attr{Policy: policy}); err == nil || err != ErrNoEnoughIP {
 		t.Fatalf("should fail because of ErrNoEnoughIP: %v", err)
 	}
 }
 
 func TestAllocateInSubnetWithKey(t *testing.T) {
 	ipam := createTestCrdIPAM(t)
-	allocatedIP, err := ipam.AllocateInSubnet("pod2", node2IPNet, policy, "")
+	allocatedIP, err := ipam.AllocateInSubnet("pod2", node2IPNet, Attr{Policy: policy})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ipam.AllocateInSubnetWithKey("pod2", "pod3", node2IPNet.String(), policy, ""); err != nil {
+	if err := ipam.AllocateInSubnetWithKey("pod2", "pod3", node2IPNet.String(), Attr{Policy: policy}); err != nil {
 		t.Fatal(err)
 	}
 	ipInfo, err := ipam.First("pod2")
@@ -455,7 +469,7 @@ func TestAllocateInMultipleSubnet(t *testing.T) {
 	ipam := createTestCrdIPAM(t)
 	nodeSubnets := sets.NewString()
 	for {
-		allocatedIP, err := ipam.AllocateInSubnet("pod1", node7IPNet, policy, "")
+		allocatedIP, err := ipam.AllocateInSubnet("pod1", node7IPNet, Attr{Policy: policy})
 		if err != nil {
 			if err == ErrNoEnoughIP {
 				break

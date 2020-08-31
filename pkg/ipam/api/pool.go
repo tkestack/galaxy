@@ -164,7 +164,7 @@ func (c *PoolController) preAllocateIP(req *restful.Request, resp *restful.Respo
 	}
 	needAllocateIPs := pool.Size - len(fips)
 	for i := 0; i < needAllocateIPs; i++ {
-		ip, err := c.IPAM.AllocateInSubnet(poolPrefix, subnetIPNet, constant.ReleasePolicyNever, "")
+		ip, err := c.IPAM.AllocateInSubnet(poolPrefix, subnetIPNet, floatingip.Attr{Policy: constant.ReleasePolicyNever})
 		if err == nil {
 			glog.Infof("allocated ip %s to %s during creating or updating pool", ip.String(), poolPrefix)
 			continue

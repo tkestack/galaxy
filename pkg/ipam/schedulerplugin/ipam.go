@@ -48,9 +48,8 @@ func (p *FloatingIPPlugin) ensureIPAMConf(lastConf *string, newConf string) (boo
 	return true, nil
 }
 
-func (p *FloatingIPPlugin) allocateInSubnet(key string, subnet *net.IPNet, policy constant.ReleasePolicy, attr,
-	when string) error {
-	ip, err := p.ipam.AllocateInSubnet(key, subnet, policy, attr)
+func (p *FloatingIPPlugin) allocateInSubnet(key string, subnet *net.IPNet, attr floatingip.Attr, when string) error {
+	ip, err := p.ipam.AllocateInSubnet(key, subnet, attr)
 	if err != nil {
 		return err
 	}
@@ -58,9 +57,8 @@ func (p *FloatingIPPlugin) allocateInSubnet(key string, subnet *net.IPNet, polic
 	return nil
 }
 
-func (p *FloatingIPPlugin) allocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy,
-	attr, when string) error {
-	if err := p.ipam.AllocateInSubnetWithKey(oldK, newK, subnet, policy, attr); err != nil {
+func (p *FloatingIPPlugin) allocateInSubnetWithKey(oldK, newK, subnet string, attr floatingip.Attr, when string) error {
+	if err := p.ipam.AllocateInSubnetWithKey(oldK, newK, subnet, attr); err != nil {
 		return err
 	}
 	fip, err := p.ipam.First(newK)
@@ -138,7 +136,7 @@ func (p *FloatingIPPlugin) releaseIP(key string, reason string) error {
 }
 
 func (p *FloatingIPPlugin) reserveIP(key, prefixKey string, reason string) error {
-	if err := p.ipam.ReserveIP(key, prefixKey, getAttr("", "")); err != nil {
+	if err := p.ipam.ReserveIP(key, prefixKey, floatingip.Attr{}); err != nil {
 		return fmt.Errorf("reserve ip from pod %s to %s: %v", key, prefixKey, err)
 	}
 	glog.Infof("reserved ip from pod %s to %s, because %s", key, prefixKey, reason)

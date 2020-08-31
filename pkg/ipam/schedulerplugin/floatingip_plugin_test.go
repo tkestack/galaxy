@@ -117,7 +117,8 @@ func TestFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	// test filter for reserve situation
-	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyPodDelete, ""); err != nil {
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"),
+		floatingip.Attr{Policy: constant.ReleasePolicyPodDelete}); err != nil {
 		t.Fatal(err)
 	}
 	filtered, failed, err = fipPlugin.Filter(pod, nodes)
@@ -155,11 +156,13 @@ func TestAllocateIP(t *testing.T) {
 	fipPlugin, stopChan, _ := createPluginTestNodes(t)
 	defer func() { stopChan <- struct{}{} }()
 
-	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyPodDelete, ""); err != nil {
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"),
+		floatingip.Attr{Policy: constant.ReleasePolicyPodDelete}); err != nil {
 		t.Fatal(err)
 	}
 	// check update from ReleasePolicyPodDelete to ReleasePolicyImmutable
 	pod.Spec.NodeName = node4
+	pod.SetUID("pod-xx-1")
 	ipInfo, err := fipPlugin.allocateIP(podKey.KeyInDB, pod.Spec.NodeName, pod)
 	if err != nil {
 		t.Fatal(err)
@@ -167,8 +170,18 @@ func TestAllocateIP(t *testing.T) {
 	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
 		t.Fatal(ipInfo)
 	}
-	if err := checkPolicyAndAttr(fipPlugin.ipam, podKey.KeyInDB, constant.ReleasePolicyImmutable, expectAttrNotEmpty()); err != nil {
+	fip, err := fipPlugin.ipam.First(podKey.KeyInDB)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if fip.FIP.Policy != uint16(constant.ReleasePolicyImmutable) {
+		t.Fatal(fip.FIP.Policy)
+	}
+	if fip.FIP.NodeName != node4 {
+		t.Fatal(fip.FIP.NodeName)
+	}
+	if fip.FIP.PodUid != string(pod.UID) {
+		t.Fatal(fip.FIP.PodUid)
 	}
 }
 
@@ -200,7 +213,8 @@ func TestUpdatePod(t *testing.T) {
 func TestReleaseIP(t *testing.T) {
 	fipPlugin, stopChan, _ := createPluginTestNodes(t)
 	defer func() { stopChan <- struct{}{} }()
-	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyPodDelete, ""); err != nil {
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"),
+		floatingip.Attr{Policy: constant.ReleasePolicyPodDelete}); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkIPKey(fipPlugin.ipam, "10.173.13.2", podKey.KeyInDB); err != nil {
@@ -369,7 +383,8 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 			// test bind gets the right key, i.e. dp_ns1_dp_dp-xxx-yyy, and filter gets reserved node
 			testPod: pod, expectFiltererd: []string{node4}, expectFailed: []string{drainedNode, nodeHasNoIP, node3},
 			preHook: func() error {
-				return fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyNever, "")
+				return fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"),
+					floatingip.Attr{Policy: constant.ReleasePolicyNever})
 			},
 		},
 		{
@@ -403,43 +418,6 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 			t.Fatalf("Case %d: %v", i, err)
 		}
 	}
-}
-
-// Attr has a time field which makes it hard to check, so creating this struct to do part check
-type expectAttr struct {
-	empty    bool
-	contains []string
-}
-
-func expectAttrEmpty() expectAttr {
-	return expectAttr{empty: true}
-}
-
-func expectAttrNotEmpty() expectAttr {
-	return expectAttr{empty: false}
-}
-
-func checkPolicyAndAttr(ipam floatingip.IPAM, key string, expectPolicy constant.ReleasePolicy, expectAttr expectAttr) error {
-	fip, err := ipam.First(key)
-	if err != nil {
-		return err
-	}
-	// policy should be
-	if fip.FIP.Policy != uint16(expectPolicy) {
-		return fmt.Errorf("expect policy %d, real %d", expectPolicy, fip.FIP.Policy)
-	}
-	if expectAttr.empty && fip.FIP.Attr != "" {
-		return fmt.Errorf("expect attr empty, real attr %q", fip.FIP.Attr)
-	}
-	if !expectAttr.empty && fip.FIP.Attr == "" {
-		return fmt.Errorf("expect attr not empty, real attr empty")
-	}
-	for i := range expectAttr.contains {
-		if !strings.Contains(fip.FIP.Attr, expectAttr.contains[i]) {
-			return fmt.Errorf("expect attr contains %q, real attr %q", expectAttr.contains[i], fip.FIP.Attr)
-		}
-	}
-	return nil
 }
 
 func checkFilterResult(realFilterd []corev1.Node, realFailed schedulerapi.FailedNodesMap, expectFiltererd, expectFailed []string) error {
@@ -603,11 +581,11 @@ func TestParseReleasePolicy(t *testing.T) {
 			expect: constant.ReleasePolicyPodDelete,
 		},
 		{
-			meta:   &v1.ObjectMeta{Labels: map[string]string{}, Annotations: map[string]string{constant.ReleasePolicyAnnotation: constant.Immutable}},
+			meta:   &v1.ObjectMeta{Labels: map[string]string{}, Annotations: immutableAnnotation},
 			expect: constant.ReleasePolicyImmutable,
 		},
 		{
-			meta:   &v1.ObjectMeta{Labels: map[string]string{}, Annotations: map[string]string{constant.ReleasePolicyAnnotation: constant.Never}},
+			meta:   &v1.ObjectMeta{Labels: map[string]string{}, Annotations: neverAnnotation},
 			expect: constant.ReleasePolicyNever,
 		},
 		{
@@ -707,8 +685,8 @@ func TestUnBind(t *testing.T) {
 
 func drainNode(fipPlugin *FloatingIPPlugin, subnet *net.IPNet, except net.IP) error {
 	for {
-		if _, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", subnet, constant.ReleasePolicyPodDelete,
-			""); err != nil {
+		if _, err := fipPlugin.ipam.AllocateInSubnet("ns_notexistpod", subnet,
+			floatingip.Attr{Policy: constant.ReleasePolicyPodDelete}); err != nil {
 			if err == floatingip.ErrNoEnoughIP {
 				break
 			}
@@ -726,7 +704,8 @@ func TestUnBindImmutablePod(t *testing.T) {
 	podKey, _ = schedulerplugin_util.FormatKey(pod)
 	fipPlugin, stopChan, _ := createPluginTestNodes(t, pod, CreateStatefulSet(pod.ObjectMeta, 1))
 	defer func() { stopChan <- struct{}{} }()
-	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"), constant.ReleasePolicyImmutable, ""); err != nil {
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"),
+		floatingip.Attr{Policy: constant.ReleasePolicyImmutable}); err != nil {
 		t.Fatal(err)
 	}
 	// unbind the pod, check ip should be reserved, because pod has is immutable
@@ -745,11 +724,13 @@ func TestAllocateRecentIPs(t *testing.T) {
 	fipPlugin, stopChan, nodes := createPluginTestNodes(t, pod, dp)
 	defer func() { stopChan <- struct{}{} }()
 	podKey, _ := schedulerplugin_util.FormatKey(pod)
-	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.PoolPrefix(), net.ParseIP("10.49.27.205"), constant.ReleasePolicyPodDelete, ""); err != nil {
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.PoolPrefix(), net.ParseIP("10.49.27.205"),
+		floatingip.Attr{Policy: constant.ReleasePolicyPodDelete}); err != nil {
 		t.Fatal(err)
 	}
 	// update time of 10.49.27.216 is more recently than 10.49.27.205
-	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.PoolPrefix(), net.ParseIP("10.49.27.216"), constant.ReleasePolicyPodDelete, ""); err != nil {
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.PoolPrefix(), net.ParseIP("10.49.27.216"),
+		floatingip.Attr{Policy: constant.ReleasePolicyPodDelete}); err != nil {
 		t.Fatal(err)
 	}
 	// check filter allocates recent ips for deployment pod from ip pool

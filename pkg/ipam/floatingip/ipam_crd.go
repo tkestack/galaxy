@@ -97,7 +97,7 @@ func NewCrdIPAM(fipClient crd_clientset.Interface, ipType Type, informer crdInfo
 }
 
 // AllocateSpecificIP allocate pod a specific IP.
-func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
+func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, attr Attr) error {
 	ipStr := ip.String()
 	ci.cacheLock.RLock()
 	spec, find := ci.unallocatedFIPs[ipStr]
@@ -105,15 +105,7 @@ func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.Rel
 	if !find {
 		return fmt.Errorf("failed to find floating ip by %s in cache", ipStr)
 	}
-	date := time.Now()
-	allocated := &FloatingIP{
-		IP:        ip,
-		Key:       key,
-		Subnets:   spec.Subnets,
-		Attr:      attr,
-		Policy:    uint16(policy),
-		UpdatedAt: date,
-	}
+	allocated := New(ip, spec.Subnets, key, &attr, time.Now())
 	if err := ci.createFloatingIP(allocated); err != nil {
 		glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
 		return err
@@ -125,55 +117,38 @@ func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, policy constant.Rel
 }
 
 // AllocateInSubnet allocate subnet of IPs.
-func (ci *crdIpam) AllocateInSubnet(key string, nodeSubnet *net.IPNet, policy constant.ReleasePolicy,
-	attr string) (allocated net.IP, err error) {
+func (ci *crdIpam) AllocateInSubnet(key string, nodeSubnet *net.IPNet, attr Attr) (net.IP, error) {
 	if nodeSubnet == nil {
 		// this should never happen
 		return nil, fmt.Errorf("nil nodeSubnet")
 	}
 	var ipStr string
 	ci.cacheLock.Lock()
+	defer ci.cacheLock.Unlock()
 	nodeSubnetStr := nodeSubnet.String()
 	for k, v := range ci.unallocatedFIPs {
 		//find an unallocated fip, then use it
 		if v.Subnets.Has(nodeSubnetStr) {
 			ipStr = k
-			date := time.Now()
 			// we never updates ip or subnet object, it's ok to share these objs.
-			allocatedFIP := &FloatingIP{
-				IP:        v.IP,
-				Key:       key,
-				Subnets:   v.Subnets,
-				Attr:      attr,
-				Policy:    uint16(policy),
-				UpdatedAt: date,
-			}
-			if err = ci.createFloatingIP(allocatedFIP); err != nil {
+			allocated := New(v.IP, v.Subnets, key, &attr, time.Now())
+			if err := ci.createFloatingIP(allocated); err != nil {
 				glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
-				ci.cacheLock.Unlock()
-				return
+				return nil, err
 			}
 			//sync cache when crd create success
-			ci.syncCacheAfterCreate(allocatedFIP)
+			ci.syncCacheAfterCreate(allocated)
 			break
 		}
 	}
-	ci.cacheLock.Unlock()
 	if ipStr == "" {
 		return nil, ErrNoEnoughIP
 	}
-	ci.cacheLock.RLock()
-	defer ci.cacheLock.RUnlock()
-	if err = ci.getFloatingIP(ipStr); err != nil {
-		return
-	}
-	allocated = net.ParseIP(ipStr)
-	return
+	return net.ParseIP(ipStr), nil
 }
 
 // AllocateInSubnetWithKey allocate a floatingIP in given subnet and key.
-func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy,
-	attr string) error {
+func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, attr Attr) error {
 	ci.cacheLock.Lock()
 	defer ci.cacheLock.Unlock()
 	var (
@@ -193,35 +168,36 @@ func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, policy con
 		return fmt.Errorf("failed to find floatIP by key %s", oldK)
 	}
 	date := time.Now()
-	cloned := latest.CloneWith(newK, attr, uint16(policy), date)
+	cloned := latest.CloneWith(newK, &attr, date)
 	if err := ci.updateFloatingIP(cloned); err != nil {
 		glog.Errorf("failed to update floatingIP %s: %v", cloned.IP.String(), err)
 		return err
 	}
-	latest.Assign(newK, attr, uint16(policy), date)
+	latest.Assign(newK, &attr, date)
 	return nil
 }
 
 // ReserveIP can reserve a IP entitled by a terminated pod.
-func (ci *crdIpam) ReserveIP(oldK, newK, attr string) error {
+func (ci *crdIpam) ReserveIP(oldK, newK string, attr Attr) error {
 	ci.cacheLock.Lock()
 	defer ci.cacheLock.Unlock()
 	for k, v := range ci.allocatedFIPs {
 		if v.Key == oldK {
+			attr.Policy = constant.ReleasePolicy(v.Policy)
 			date := time.Now()
-			if err := ci.updateFloatingIP(v.CloneWith(newK, attr, v.Policy, date)); err != nil {
+			if err := ci.updateFloatingIP(v.CloneWith(newK, &attr, date)); err != nil {
 				glog.Errorf("failed to update floatingIP %s: %v", k, err)
 				return err
 			}
-			v.Assign(newK, attr, v.Policy, date)
+			v.Assign(newK, &attr, date)
 			return nil
 		}
 	}
 	return fmt.Errorf("failed to find floatIP by key %s", oldK)
 }
 
-// UpdatePolicy update floatingIP's release policy and attr according to ip and key
-func (ci *crdIpam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePolicy, attr string) error {
+// UpdateAttr update floatingIP's release policy and attr according to ip and key
+func (ci *crdIpam) UpdateAttr(key string, ip net.IP, attr Attr) error {
 	ipStr := ip.String()
 	ci.cacheLock.Lock()
 	defer ci.cacheLock.Unlock()
@@ -233,11 +209,11 @@ func (ci *crdIpam) UpdatePolicy(key string, ip net.IP, policy constant.ReleasePo
 		return fmt.Errorf("key for %s is %s, not %s", ipStr, v.Key, key)
 	}
 	date := time.Now()
-	if err := ci.updateFloatingIP(v.CloneWith(v.Key, attr, uint16(policy), date)); err != nil {
+	if err := ci.updateFloatingIP(v.CloneWith(v.Key, &attr, date)); err != nil {
 		glog.Errorf("failed to update floatingIP %s: %v", ipStr, err)
 		return err
 	}
-	v.Assign(v.Key, attr, uint16(policy), date)
+	v.Assign(v.Key, &attr, date)
 	return nil
 }
 
@@ -395,13 +371,15 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
 				tmpFip := &FloatingIP{
 					IP:     netIP,
 					Key:    ip.Spec.Key,
-					Attr:   ip.Spec.Attribute,
 					Policy: uint16(ip.Spec.Policy),
 					// Since subnets may change and for reserved fips crds created by user manually, subnets may not be
 					// correct, assign it to the latest config instead of crd value
 					// TODO we can delete subnets field from crd?
 					Subnets:   nodeSubnets[i],
 					UpdatedAt: ip.Spec.UpdateTime.Time,
+				}
+				if err := tmpFip.unmarshalAttr(ip.Spec.Attribute); err != nil {
+					glog.Error(err)
 				}
 				tmpCacheAllocated[ip.Name] = tmpFip
 				break
@@ -440,7 +418,6 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
 					tmpFip := &FloatingIP{
 						IP:        ip,
 						Key:       "",
-						Attr:      "",
 						Policy:    uint16(constant.ReleasePolicyPodDelete),
 						Subnets:   subnetSet,
 						UpdatedAt: now,
@@ -467,7 +444,7 @@ func (ci *crdIpam) syncCacheAfterCreate(fip *FloatingIP) {
 // don't use lock inner function, otherwise deadlock will be caused
 func (ci *crdIpam) syncCacheAfterDel(released *FloatingIP) {
 	ipStr := released.IP.String()
-	released.Assign("", "", uint16(constant.ReleasePolicyPodDelete), time.Now())
+	released.Assign("", &Attr{Policy: constant.ReleasePolicyPodDelete}, time.Now())
 	released.Labels = nil
 	delete(ci.allocatedFIPs, ipStr)
 	ci.unallocatedFIPs[ipStr] = released

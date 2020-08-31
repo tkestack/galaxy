@@ -19,37 +19,35 @@ package schedulerplugin
 import (
 	"fmt"
 
-	appv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
-	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
-func (p *FloatingIPPlugin) unbindStsOrTappPod(pod *corev1.Pod, keyObj *util.KeyObj,
-	policy constant.ReleasePolicy) error {
+func (p *FloatingIPPlugin) unbindNoneDpPod(keyObj *util.KeyObj, policy constant.ReleasePolicy, when string) error {
 	key := keyObj.KeyInDB
-	if policy == constant.ReleasePolicyPodDelete {
-		return p.releaseIP(key, deletedAndIPMutablePod)
+	if policy == constant.ReleasePolicyPodDelete || (!keyObj.StatefulSet() && !keyObj.TApp()) {
+		// TODO for other workload pods, if we support more release policy other than ReleasePolicyPodDelete,
+		// make sure change this
+		return p.releaseIP(key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
 	} else if policy == constant.ReleasePolicyNever {
-		return p.reserveIP(key, key, "never policy")
+		return p.reserveIP(key, key, fmt.Sprintf("never release policy %s", when))
 	} else if policy == constant.ReleasePolicyImmutable {
 		if keyObj.TApp() && p.TAppLister == nil {
 			// tapp lister is nil, we can't get replicas and it's better to reserve the ip.
-			return p.reserveIP(key, key, "immutable policy")
+			return p.reserveIP(key, key, fmt.Sprintf("immutable policy %s", when))
 		}
 		appExist, replicas, err := p.checkAppAndReplicas(keyObj)
 		if err != nil {
 			return err
 		}
-		shouldRelease, reason, err := p.shouldRelease(keyObj, policy, appExist, replicas)
+		shouldRelease, reason, err := p.shouldRelease(keyObj, appExist, replicas)
 		if err != nil {
 			return err
 		}
+		reason = fmt.Sprintf("%s %s", reason, when)
 		if !shouldRelease {
-			return p.reserveIP(key, key, "immutable policy")
+			return p.reserveIP(key, key, reason)
 		} else {
 			return p.releaseIP(key, reason)
 		}
@@ -85,17 +83,10 @@ func (p *FloatingIPPlugin) getStsReplicas(keyObj *util.KeyObj) (appExist bool, r
 	return
 }
 
-func (p *FloatingIPPlugin) shouldRelease(keyObj *util.KeyObj, releasePolicy constant.ReleasePolicy,
-	parentAppExist bool, replicas int32) (bool, string, error) {
+func (p *FloatingIPPlugin) shouldRelease(keyObj *util.KeyObj, parentAppExist bool,
+	replicas int32) (bool, string, error) {
 	if !parentAppExist {
-		if releasePolicy != constant.ReleasePolicyNever {
-			return true, deletedAndParentAppNotExistPod, nil
-		}
-		return false, "", nil
-	}
-	if releasePolicy != constant.ReleasePolicyImmutable {
-		// 2. deleted pods whose parent statefulset or tapp exist but is not ip immutable
-		return true, deletedAndIPMutablePod, nil
+		return true, deletedAndParentAppNotExistPod, nil
 	}
 	index, err := parsePodIndex(keyObj.KeyInDB)
 	if err != nil {
@@ -104,21 +95,5 @@ func (p *FloatingIPPlugin) shouldRelease(keyObj *util.KeyObj, releasePolicy cons
 	if replicas < int32(index)+1 {
 		return true, deletedAndScaledDownAppPod, nil
 	}
-	return false, "", nil
-}
-
-func (p *FloatingIPPlugin) getSSMap() (map[string]*appv1.StatefulSet, error) {
-	sss, err := p.StatefulSetLister.List(labels.Everything())
-	if err != nil {
-		return nil, err
-	}
-	key2App := make(map[string]*appv1.StatefulSet)
-	for i := range sss {
-		if !p.hasResourceName(&sss[i].Spec.Template.Spec) {
-			continue
-		}
-		key2App[util.StatefulsetName(sss[i])] = sss[i]
-	}
-	glog.V(5).Infof("%v", key2App)
-	return key2App, nil
+	return false, "pod index is less than replicas", nil
 }

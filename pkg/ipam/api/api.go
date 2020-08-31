@@ -60,7 +60,6 @@ type FloatingIP struct {
 	UpdateTime time.Time         `json:"updateTime,omitempty"`
 	Status     string            `json:"status,omitempty"`
 	Releasable bool              `json:"releasable,omitempty"`
-	attr       string            `json:"-"`
 	labels     map[string]string `json:"-"`
 }
 
@@ -349,8 +348,7 @@ func transform(fips []floatingip.FloatingIP) []FloatingIP {
 			AppType:    toAppType(keyObj.AppTypePrefix),
 			Policy:     fips[i].Policy,
 			UpdateTime: fips[i].UpdatedAt,
-			labels:     fips[i].Labels,
-			attr:       fips[i].Attr})
+			labels:     fips[i].Labels})
 	}
 	return res
 }
