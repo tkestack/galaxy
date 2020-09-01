@@ -178,22 +178,26 @@ func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, attr Attr)
 }
 
 // ReserveIP can reserve a IP entitled by a terminated pod.
-func (ci *crdIpam) ReserveIP(oldK, newK string, attr Attr) error {
+func (ci *crdIpam) ReserveIP(oldK, newK string, attr Attr) (bool, error) {
 	ci.cacheLock.Lock()
 	defer ci.cacheLock.Unlock()
 	for k, v := range ci.allocatedFIPs {
 		if v.Key == oldK {
+			if oldK == newK && v.PodUid == attr.Uid && v.NodeName == attr.NodeName {
+				// nothing changed
+				return false, nil
+			}
 			attr.Policy = constant.ReleasePolicy(v.Policy)
 			date := time.Now()
 			if err := ci.updateFloatingIP(v.CloneWith(newK, &attr, date)); err != nil {
 				glog.Errorf("failed to update floatingIP %s: %v", k, err)
-				return err
+				return false, err
 			}
 			v.Assign(newK, &attr, date)
-			return nil
+			return true, nil
 		}
 	}
-	return fmt.Errorf("failed to find floatIP by key %s", oldK)
+	return false, fmt.Errorf("failed to find floatIP by key %s", oldK)
 }
 
 // UpdateAttr update floatingIP's release policy and attr according to ip and key

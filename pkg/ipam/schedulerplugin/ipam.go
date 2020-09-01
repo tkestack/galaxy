@@ -136,10 +136,13 @@ func (p *FloatingIPPlugin) releaseIP(key string, reason string) error {
 }
 
 func (p *FloatingIPPlugin) reserveIP(key, prefixKey string, reason string) error {
-	if err := p.ipam.ReserveIP(key, prefixKey, floatingip.Attr{}); err != nil {
+	if reserved, err := p.ipam.ReserveIP(key, prefixKey, floatingip.Attr{}); err != nil {
 		return fmt.Errorf("reserve ip from pod %s to %s: %v", key, prefixKey, err)
+	} else if reserved {
+		// resync will call reserveIP for sts and tapp pod with immutable/never release policy for endless times,
+		// so print "success reserved ip" only when succeeded
+		glog.Infof("reserved ip from pod %s to %s, because %s", key, prefixKey, reason)
 	}
-	glog.Infof("reserved ip from pod %s to %s, because %s", key, prefixKey, reason)
 	return nil
 }
 

@@ -192,15 +192,24 @@ func TestCRDReserveIP(t *testing.T) {
 		Attr{Policy: constant.ReleasePolicyNever, NodeName: "node1", Uid: "xx1"}); err != nil {
 		t.Fatal(err)
 	}
-	newAttr := Attr{NodeName: "node2", Uid: "xx2"}
-	if err := ipam.ReserveIP("pod1", "p1", newAttr); err != nil {
+	newAttr := Attr{NodeName: "node2", Uid: "xx2", Policy: constant.ReleasePolicyNever}
+	if reserved, err := ipam.ReserveIP("pod1", "p1", newAttr); err != nil {
 		t.Fatal(err)
+	} else if !reserved {
+		t.Fatal()
 	}
 	if err := checkIPKeyAttr(ipam, "10.49.27.205", "p1", &newAttr); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkFIP(ipam, `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"p1","attribute":"{\"NodeName\":\"node2\",\"Uid\":\"xx2\"}","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`); err != nil {
 		t.Fatal(err)
+	}
+	// reserve again, should not succeed
+	newAttr.Policy = constant.ReleasePolicyPodDelete // policy should not be updated by ReserveIP
+	if reserved, err := ipam.ReserveIP("p1", "p1", newAttr); err != nil {
+		t.Fatal(err)
+	} else if reserved {
+		t.Fatal()
 	}
 }
 
@@ -373,6 +382,9 @@ func checkByIP(ipam IPAM, checkIP, expectKey string, expectAttr *Attr) error {
 		}
 		if fip.NodeName != expectAttr.NodeName {
 			return fmt.Errorf("expect nodeName: %s, got %s, ip %s", expectAttr.NodeName, fip.NodeName, checkIP)
+		}
+		if fip.Policy != uint16(expectAttr.Policy) {
+			return fmt.Errorf("expect policy: %v, got %d, ip %s", expectAttr.Policy, fip.Policy, checkIP)
 		}
 	}
 	return nil

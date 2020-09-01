@@ -79,10 +79,6 @@ func (p *FloatingIPPlugin) fetchChecklist(meta *resyncMeta) error {
 			glog.Warningf("unexpected key: %s", fip.Key)
 			continue
 		}
-		if fip.Policy != uint16(constant.ReleasePolicyPodDelete) && fip.NodeName == "" && fip.PodUid == "" {
-			// the ip is already reserved, skip it
-			continue
-		}
 		meta.allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
 	}
 	return nil
