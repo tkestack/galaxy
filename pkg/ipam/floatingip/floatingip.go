@@ -24,39 +24,51 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/sets"
+	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 // FloatingIP defines a floating ip
 type FloatingIP struct {
-	Key     string
-	Subnets sets.String // node subnet, not container ip's subnet
-	// TODO Replace attr with labels
-	Attr      string
+	Key       string
+	Subnets   sets.String // node subnet, not container ip's subnet
 	IP        net.IP
-	Policy    uint16
 	UpdatedAt time.Time
 	Labels    map[string]string
+	Policy    uint16
+	NodeName  string
+	PodUid    string
 }
 
 func (f FloatingIP) String() string {
-	return fmt.Sprintf("FloatingIP{ip:%s key:%s attr:%s policy:%d subnets:%v}", f.IP.String(), f.Key, f.Attr, f.Policy, f.Subnets)
+	return fmt.Sprintf("FloatingIP{ip:%s key:%s policy:%d nodeName:%s podUid:%s subnets:%v}",
+		f.IP.String(), f.Key, f.Policy, f.NodeName, f.PodUid, f.Subnets)
 }
 
-func (f *FloatingIP) Assign(key, attr string, policy uint16, updateAt time.Time) *FloatingIP {
+// New creates a new FloatingIP
+func New(ip net.IP, subnets sets.String, key string, attr *Attr, updateAt time.Time) *FloatingIP {
+	fip := &FloatingIP{IP: ip, Subnets: subnets}
+	fip.Assign(key, attr, updateAt)
+	return fip
+}
+
+// Assign updates key, attr, updatedAt of FloatingIP
+func (f *FloatingIP) Assign(key string, attr *Attr, updateAt time.Time) *FloatingIP {
 	f.Key = key
-	f.Attr = attr
-	f.Policy = policy
+	f.Policy = uint16(attr.Policy)
 	f.UpdatedAt = updateAt
+	f.NodeName = attr.NodeName
+	f.PodUid = attr.Uid
 	return f
 }
 
-func (f *FloatingIP) CloneWith(key, attr string, policy uint16, updateAt time.Time) *FloatingIP {
+// CloneWith creates a new FloatingIP and updates key, attr, updatedAt
+func (f *FloatingIP) CloneWith(key string, attr *Attr, updateAt time.Time) *FloatingIP {
 	fip := &FloatingIP{
 		IP:      f.IP,
 		Subnets: f.Subnets,
 	}
-	return fip.Assign(key, attr, policy, updateAt)
+	return fip.Assign(key, attr, updateAt)
 }
 
 // FloatingIPPool is FloatingIPPool structure.
@@ -283,4 +295,35 @@ func (s FloatingIPSlice) Swap(i, j int) {
 // Less compares two given ip.
 func (s FloatingIPSlice) Less(i, j int) bool {
 	return nets.IPToInt(s[i].Gateway) < nets.IPToInt(s[j].Gateway)
+}
+
+// Attr stores attrs about this pod
+type Attr struct {
+	// NodeName is needed to send unassign request to cloud provider on resync
+	NodeName string
+	// uid is used to differentiate a deleting pod and a newly created pod with the same name such as statefulsets
+	// or tapp pod
+	Uid string
+	// Release policy
+	Policy constant.ReleasePolicy `json:"-"`
+}
+
+func (a Attr) String() string {
+	return fmt.Sprintf("Attr{policy:%d nodeName:%s uid:%s}", a.Policy, a.NodeName, a.Uid)
+}
+
+// unmarshalAttr unmarshal attributes and assign PodUid and NodeName
+// Make sure invoke this func in a copied FloatingIP
+func (f *FloatingIP) unmarshalAttr(attrStr string) error {
+	if attrStr == "" {
+		return nil
+	}
+	var attr Attr
+	if err := json.Unmarshal([]byte(attrStr), &attr); err != nil {
+		return fmt.Errorf("unmarshal attr %s for %s %s: %v", attrStr, f.Key, f.IP.String(), err)
+	} else {
+		f.NodeName = attr.NodeName
+		f.PodUid = attr.Uid
+	}
+	return nil
 }

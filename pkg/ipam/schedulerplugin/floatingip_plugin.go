@@ -17,7 +17,6 @@
 package schedulerplugin
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
@@ -234,9 +233,9 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, reserve, isPoolSizeDefined bool,
 	reserveSubnet string, policy constant.ReleasePolicy, uid string) error {
 	// we can't get nodename during filter, update attr on bind
-	attr := getAttr("", uid)
+	attr := floatingip.Attr{Policy: policy, NodeName: "", Uid: uid}
 	if reserve {
-		if err := p.allocateInSubnetWithKey(keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, policy, attr,
+		if err := p.allocateInSubnetWithKey(keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, attr,
 			"filter"); err != nil {
 			return err
 		}
@@ -246,7 +245,7 @@ func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, reserve, is
 		if err != nil {
 			return err
 		}
-		if err := p.allocateInSubnet(keyObj.KeyInDB, ipNet, policy, attr, "filter"); err != nil {
+		if err := p.allocateInSubnet(keyObj.KeyInDB, ipNet, attr, "filter"); err != nil {
 			return err
 		}
 	}
@@ -271,26 +270,20 @@ func (p *FloatingIPPlugin) allocateIP(key string, nodeName string, pod *corev1.P
 	}
 	started := time.Now()
 	policy := parseReleasePolicy(&pod.ObjectMeta)
-	attr := getAttr(nodeName, string(pod.UID))
+	attr := floatingip.Attr{Policy: policy, NodeName: nodeName, Uid: string(pod.UID)}
 	if ipInfo != nil {
 		how = "reused"
 		// check if uid missmatch, if we delete a statfulset/tapp and creates a same name statfulset/tapp immediately,
 		// galaxy-ipam may receive bind event for new pod early than deleting event for old pod
-		var oldAttr Attr
-		if ipInfo.FIP.Attr != "" {
-			if err := json.Unmarshal([]byte(ipInfo.FIP.Attr), &oldAttr); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal attr %s", ipInfo.FIP.Attr)
-			}
-			if oldAttr.Uid != "" && oldAttr.Uid != string(pod.UID) {
-				return nil, fmt.Errorf("waiting for delete event of %s before reuse this ip", key)
-			}
+		if ipInfo.FIP.PodUid != "" && ipInfo.FIP.PodUid != string(pod.GetUID()) {
+			return nil, fmt.Errorf("waiting for delete event of %s before reuse this ip", key)
 		}
 	} else {
 		subnet, err := p.queryNodeSubnet(nodeName)
 		if err != nil {
 			return nil, err
 		}
-		if err := p.allocateInSubnet(key, subnet, policy, attr, "bind"); err != nil {
+		if err := p.allocateInSubnet(key, subnet, attr, "bind"); err != nil {
 			return nil, err
 		}
 		how = "allocated"
@@ -311,13 +304,13 @@ func (p *FloatingIPPlugin) allocateIP(key string, nodeName string, pod *corev1.P
 		return nil, fmt.Errorf("failed to assign ip %s to %s: %v", ipInfo.IPInfo.IP.IP.String(), key, err)
 	}
 	if how == "reused" {
-		glog.Infof("pod %s reused %s, updating policy to %v attr %s", key, ipInfo.IPInfo.IP.String(), policy, attr)
-		if err := p.ipam.UpdatePolicy(key, ipInfo.IPInfo.IP.IP, policy, attr); err != nil {
+		glog.Infof("pod %s reused %s, updating attr to %v", key, ipInfo.IPInfo.IP.String(), attr)
+		if err := p.ipam.UpdateAttr(key, ipInfo.IPInfo.IP.IP, attr); err != nil {
 			return nil, fmt.Errorf("failed to update floating ip release policy: %v", err)
 		}
 	}
-	glog.Infof("started at %d %s ip %s, policy %v, attr %s for %s", started.UnixNano(), how,
-		ipInfo.IPInfo.IP.String(), policy, attr, key)
+	glog.Infof("started at %d %s ip %s, attr %v for %s", started.UnixNano(), how,
+		ipInfo.IPInfo.IP.String(), attr, key)
 	return &ipInfo.IPInfo, nil
 }
 
@@ -406,14 +399,9 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 			return nil
 		}
 		ipStr := ipInfo.IPInfo.IP.IP.String()
-		var attr Attr
-		if err := json.Unmarshal([]byte(ipInfo.FIP.Attr), &attr); err != nil {
-			return fmt.Errorf("failed to unmarshal attr %s for pod %s: %v", ipInfo.FIP.Attr, key, err)
-		}
-
-		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", attr.NodeName, ipStr, key)
+		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", ipInfo.FIP.NodeName, ipStr, key)
 		if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
-			NodeName:  attr.NodeName,
+			NodeName:  ipInfo.FIP.NodeName,
 			IPAddress: ipStr,
 		}); err != nil {
 			return fmt.Errorf("failed to unassign ip %s from %s: %v", ipStr, key, err)
@@ -423,7 +411,7 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	if keyObj.Deployment() {
 		return p.unbindDpPod(keyObj, policy, "during unbinding pod")
 	}
-	return p.unbindStsOrTappPod(pod, keyObj, policy)
+	return p.unbindNoneDpPod(keyObj, policy, "during unbinding pod")
 }
 
 // hasResourceName checks if the podspec has floatingip resource name
@@ -489,24 +477,6 @@ func parseReleasePolicy(meta *v1.ObjectMeta) constant.ReleasePolicy {
 		return constant.ReleasePolicyNever
 	}
 	return constant.ConvertReleasePolicy(meta.Annotations[constant.ReleasePolicyAnnotation])
-}
-
-// Attr stores attrs about this pod
-type Attr struct {
-	// NodeName is needed to send unassign request to cloud provider on resync
-	NodeName string
-	// uid is used to differentiate a deleting pod and a newly created pod with the same name such as statefulsets
-	// or tapp pod
-	Uid string
-}
-
-func getAttr(nodeName, uid string) string {
-	obj := Attr{NodeName: nodeName, Uid: uid}
-	attr, err := json.Marshal(obj)
-	if err != nil {
-		glog.Warningf("failed to marshal attr %+v: %v", obj, err)
-	}
-	return string(attr)
 }
 
 func (p *FloatingIPPlugin) GetIpam() floatingip.IPAM {

@@ -24,6 +24,7 @@ import (
 
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/api/k8s/schedulerapi"
+	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	schedulerplugin_util "tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
@@ -36,7 +37,8 @@ func TestConcurrentBindUnbind(t *testing.T) {
 	defer func() { stopChan <- struct{}{} }()
 	cloudProvider := &fakeCloudProvider1{m: make(map[string]string)}
 	plugin.cloudProvider = cloudProvider
-	if err := plugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.49.27.216"), constant.ReleasePolicyPodDelete, "{}"); err != nil {
+	if err := plugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.49.27.216"),
+		floatingip.Attr{Policy: constant.ReleasePolicyPodDelete}); err != nil {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup

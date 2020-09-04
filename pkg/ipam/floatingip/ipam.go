@@ -39,15 +39,16 @@ type IPAM interface {
 	// unreleased map stores ip with its latest key if key changed
 	ReleaseIPs(map[string]string) (map[string]string, map[string]string, error)
 	// AllocateSpecificIP allocate pod a specific IP.
-	AllocateSpecificIP(string, net.IP, constant.ReleasePolicy, string) error
+	AllocateSpecificIP(string, net.IP, Attr) error
 	// AllocateInSubnet allocate subnet of IPs.
-	AllocateInSubnet(string, *net.IPNet, constant.ReleasePolicy, string) (net.IP, error)
+	AllocateInSubnet(string, *net.IPNet, Attr) (net.IP, error)
 	// AllocateInSubnetWithKey allocate a floatingIP in given subnet and key.
-	AllocateInSubnetWithKey(oldK, newK, subnet string, policy constant.ReleasePolicy, attr string) error
-	// ReserveIP can reserve a IP entitled by a terminated pod.
-	ReserveIP(oldK, newK, attr string) error
-	// UpdatePolicy update floatingIP's release policy and attr according to ip and key
-	UpdatePolicy(string, net.IP, constant.ReleasePolicy, string) error
+	AllocateInSubnetWithKey(oldK, newK, subnet string, attr Attr) error
+	// ReserveIP can reserve a IP entitled by a terminated pod. Attributes **expect policy attr** will be updated.
+	// Returns true if key or attr updated.
+	ReserveIP(oldK, newK string, attr Attr) (bool, error)
+	// UpdateAttr update floatingIP's release policy and attrs according to ip and key
+	UpdateAttr(string, net.IP, Attr) error
 	// Release release a given IP.
 	Release(string, net.IP) error
 	// First returns the first matched IP by key.

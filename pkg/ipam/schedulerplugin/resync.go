@@ -17,13 +17,11 @@
 package schedulerplugin
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
 
-	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +31,6 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
-	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
 )
 
 type resyncObj struct {
@@ -56,18 +53,12 @@ func (p *FloatingIPPlugin) resyncPod() error {
 	if err := p.fetchChecklist(resyncMeta); err != nil {
 		return err
 	}
-	if err := p.fetchAppAndPodMeta(resyncMeta); err != nil {
-		return err
-	}
 	p.resyncAllocatedIPs(resyncMeta)
 	return nil
 }
 
 type resyncMeta struct {
 	allocatedIPs map[string]resyncObj // allocated ips from galaxy pool
-	unfinish     map[string]*corev1.Pod
-	tappMap      map[string]*tappv1.TApp
-	ssMap        map[string]*appv1.StatefulSet
 }
 
 func (p *FloatingIPPlugin) fetchChecklist(meta *resyncMeta) error {
@@ -93,115 +84,65 @@ func (p *FloatingIPPlugin) fetchChecklist(meta *resyncMeta) error {
 	return nil
 }
 
-func (p *FloatingIPPlugin) fetchAppAndPodMeta(meta *resyncMeta) error {
-	var err error
-	meta.unfinish, err = p.listUnfinishPodsToMap()
-	if err != nil {
-		return err
-	}
-	meta.ssMap, err = p.getSSMap()
-	if err != nil {
-		return err
-	}
-	meta.tappMap, err = p.getTAppMap()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // #lizard forgives
 func (p *FloatingIPPlugin) resyncAllocatedIPs(meta *resyncMeta) {
 	for key, obj := range meta.allocatedIPs {
 		func() {
 			defer p.lockPod(obj.keyObj.PodName, obj.keyObj.Namespace)()
-			if _, ok := meta.unfinish[key]; ok {
+			if p.podRunning(obj.keyObj.PodName, obj.keyObj.Namespace, obj.fip.PodUid) {
 				return
 			}
-			// check with apiserver to confirm it really not exist
-			if p.podRunning(obj.keyObj.PodName, obj.keyObj.Namespace) {
-				return
-			}
-			if p.cloudProvider != nil {
-				var attr Attr
-				if err := json.Unmarshal([]byte(obj.fip.Attr), &attr); err != nil {
-					glog.Errorf("failed to unmarshal attr %s for pod %s: %v", obj.fip.Attr, key, err)
+			if p.cloudProvider != nil && obj.fip.NodeName != "" {
+				// For tapp and sts pod, nodeName will be updated to empty after unassigning
+				glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", obj.fip.NodeName,
+					obj.fip.IP.String(), key)
+				if err := p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
+					NodeName:  obj.fip.NodeName,
+					IPAddress: obj.fip.IP.String(),
+				}); err != nil {
+					glog.Warningf("failed to unassign ip %s to %s: %v", obj.fip.IP.String(), key, err)
+					// return to retry unassign ip in the next resync loop
 					return
 				}
-				// For tapp and sts pod, nodeName will be updated to empty after unassigning
-				if attr.NodeName != "" {
-					glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", attr.NodeName,
-						obj.fip.IP.String(), key)
-					if err := p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
-						NodeName:  attr.NodeName,
-						IPAddress: obj.fip.IP.String(),
-					}); err != nil {
-						glog.Warningf("failed to unassign ip %s to %s: %v", obj.fip.IP.String(), key, err)
-						// return to retry unassign ip in the next resync loop
-						return
-					}
-					// for tapp and sts pod, we need to clean its node attr and uid
-					if err := p.ipam.ReserveIP(key, key, getAttr("", "")); err != nil {
-						glog.Errorf("failed to reserve %s ip: %v", key, err)
-					}
+				// for tapp and sts pod, we need to clean its node attr and uid
+				if err := p.reserveIP(key, key, "unassign ip during resync"); err != nil {
+					glog.Error(err)
 				}
 			}
 			releasePolicy := constant.ReleasePolicy(obj.fip.Policy)
-			// we can't get labels of not exist pod, so get them from it's ss or deployment
 			if !obj.keyObj.Deployment() {
-				p.resyncNoneDpPod(meta, obj.keyObj, releasePolicy)
+				if err := p.unbindNoneDpPod(obj.keyObj, releasePolicy, "during resync"); err != nil {
+					glog.Error(err)
+				}
 				return
 			}
-			if err := p.unbindDpPod(obj.keyObj, releasePolicy, "during resyncing"); err != nil {
+			if err := p.unbindDpPod(obj.keyObj, releasePolicy, "during resync"); err != nil {
 				glog.Error(err)
 			}
 		}()
 	}
 }
 
-func (p *FloatingIPPlugin) resyncNoneDpPod(meta *resyncMeta, keyObj *util.KeyObj, releasePolicy constant.ReleasePolicy) {
-	if releasePolicy == constant.ReleasePolicyNever {
-		return
+func (p *FloatingIPPlugin) podRunning(podName, namespace, podUid string) bool {
+	pod, err := p.PodLister.Pods(namespace).Get(podName)
+	if runningAndUidMatch(podUid, pod, err) {
+		return true
 	}
-	var appExist bool
-	var replicas int32
-	appFullName := util.Join(keyObj.AppName, keyObj.Namespace)
-	if keyObj.StatefulSet() {
-		ss, ok := meta.ssMap[appFullName]
-		if ok {
-			appExist = true
-			replicas = 1
-			if ss.Spec.Replicas != nil {
-				replicas = *ss.Spec.Replicas
-			}
-		}
-	} else if keyObj.TApp() {
-		tapp, ok := meta.tappMap[appFullName]
-		if ok {
-			appExist = true
-			replicas = tapp.Spec.Replicas
-		}
-	} else {
-		// release for other apps
-		appExist = false
-	}
-	if should, reason, err := p.shouldRelease(keyObj, releasePolicy, appExist, replicas); err != nil {
-		glog.Warning(err)
-	} else if should {
-		if err := p.releaseIP(keyObj.KeyInDB, fmt.Sprintf("%s during resyncing", reason)); err != nil {
-			glog.Warning(err)
-		}
-	}
+	// double check with apiserver to confirm it is not running
+	pod, err = p.Client.CoreV1().Pods(namespace).Get(podName, v1.GetOptions{})
+	return runningAndUidMatch(podUid, pod, err)
 }
 
-func (p *FloatingIPPlugin) podRunning(podName, namespace string) bool {
-	pod, err := p.Client.CoreV1().Pods(namespace).Get(podName, v1.GetOptions{})
+func runningAndUidMatch(storedUid string, pod *corev1.Pod, err error) bool {
 	if err != nil {
 		if metaErrs.IsNotFound(err) {
 			return false
 		}
 		// we cannot figure out whether pod exist or not, we'd better keep the ip
 		return true
+	}
+	if storedUid != "" && storedUid != string(pod.GetUID()) {
+		return false
 	}
 	return !finished(pod)
 }
@@ -223,25 +164,6 @@ func (p *FloatingIPPlugin) listWantedPods() ([]*corev1.Pod, error) {
 		}
 	}
 	return filtered, nil
-}
-
-func (p *FloatingIPPlugin) listUnfinishPodsToMap() (map[string]*corev1.Pod, error) {
-	pods, err := p.listWantedPods()
-	if err != nil {
-		return nil, err
-	}
-	unfinish := map[string]*corev1.Pod{}
-	for i := range pods {
-		if finished(pods[i]) {
-			continue
-		}
-		keyObj, err := util.FormatKey(pods[i])
-		if err != nil {
-			continue
-		}
-		unfinish[keyObj.KeyInDB] = pods[i]
-	}
-	return unfinish, nil
 }
 
 // syncPodIPs sync all pods' ips with db, if a pod has PodIP and its ip is unallocated, allocate the ip to it
@@ -269,6 +191,7 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 	if pod.Annotations == nil {
 		return nil
 	}
+	defer p.lockPod(pod.Name, pod.Namespace)()
 	keyObj, err := util.FormatKey(pod)
 	if err != nil {
 		glog.V(5).Infof("sync pod %s/%s ip formatKey with error %v", pod.Namespace, pod.Name, err)
@@ -296,8 +219,9 @@ func (p *FloatingIPPlugin) syncIP(key string, ip net.IP, pod *corev1.Pod) error 
 			return fmt.Errorf("conflict ip %s found for both %s and %s", ip.String(), key, storedKey)
 		}
 	} else {
-		if err := p.ipam.AllocateSpecificIP(key, ip, parseReleasePolicy(&pod.ObjectMeta),
-			getAttr(pod.Spec.NodeName, string(pod.UID))); err != nil {
+		attr := floatingip.Attr{
+			Policy: parseReleasePolicy(&pod.ObjectMeta), NodeName: pod.Spec.NodeName, Uid: string(pod.UID)}
+		if err := p.ipam.AllocateSpecificIP(key, ip, attr); err != nil {
 			return err
 		}
 		glog.Infof("updated floatingip %s to key %s", ip.String(), key)

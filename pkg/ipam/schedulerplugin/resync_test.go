@@ -22,6 +22,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
@@ -34,10 +36,12 @@ func TestResyncAppNotExist(t *testing.T) {
 	pod1Key, _ := util.FormatKey(pod1)
 	pod2Key, _ := util.FormatKey(pod2)
 
-	if err := fipPlugin.ipam.AllocateSpecificIP(pod1Key.KeyInDB, net.ParseIP("10.49.27.205"), parseReleasePolicy(&pod1.ObjectMeta), ""); err != nil {
+	if err := fipPlugin.ipam.AllocateSpecificIP(pod1Key.KeyInDB, net.ParseIP("10.49.27.205"),
+		floatingip.Attr{Policy: parseReleasePolicy(&pod1.ObjectMeta)}); err != nil {
 		t.Fatal(err)
 	}
-	if err := fipPlugin.ipam.AllocateSpecificIP(pod2Key.KeyInDB, net.ParseIP("10.49.27.216"), parseReleasePolicy(&pod2.ObjectMeta), ""); err != nil {
+	if err := fipPlugin.ipam.AllocateSpecificIP(pod2Key.KeyInDB, net.ParseIP("10.49.27.216"),
+		floatingip.Attr{Policy: parseReleasePolicy(&pod2.ObjectMeta)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := fipPlugin.resyncPod(); err != nil {
@@ -88,7 +92,8 @@ func TestResyncStsPod(t *testing.T) {
 		func() {
 			fipPlugin, stopChan, _ := createPluginTestNodes(t, objs...)
 			defer func() { stopChan <- struct{}{} }()
-			if err := fipPlugin.ipam.AllocateSpecificIP(keyObj.KeyInDB, net.ParseIP("10.49.27.205"), parseReleasePolicy(&pod.ObjectMeta), ""); err != nil {
+			if err := fipPlugin.ipam.AllocateSpecificIP(keyObj.KeyInDB, net.ParseIP("10.49.27.205"),
+				floatingip.Attr{Policy: parseReleasePolicy(&pod.ObjectMeta)}); err != nil {
 				t.Fatalf("case %d, err %v", i, err)
 			}
 			if err := fipPlugin.resyncPod(); err != nil {
@@ -98,5 +103,39 @@ func TestResyncStsPod(t *testing.T) {
 				t.Fatalf("case %d, err %v", i, err)
 			}
 		}()
+	}
+}
+
+func TestResyncPodUidChanged(t *testing.T) {
+	oldUid, newUid := "uid-1", "uid-2"
+	pod := CreateStatefulSetPod("dp-xxx-0", "ns1", immutableAnnotation)
+	pod.SetUID(types.UID(newUid))
+	sts := CreateStatefulSet(pod.ObjectMeta, 1)
+	sts.Spec.Template.Spec = pod.Spec
+	ip := net.ParseIP("10.49.27.205")
+	fipPlugin, stopChan, _ := createPluginTestNodes(t, pod, sts)
+	defer func() { stopChan <- struct{}{} }()
+	podKey, _ := util.FormatKey(pod)
+	attr := floatingip.Attr{
+		Policy: parseReleasePolicy(&pod.ObjectMeta), NodeName: "node-1", Uid: oldUid}
+	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, ip, attr); err != nil {
+		t.Fatal(err)
+	}
+	if err := fipPlugin.resyncPod(); err != nil {
+		t.Fatal(err)
+	}
+	fip, err := fipPlugin.ipam.ByIP(ip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fip.Key != podKey.KeyInDB {
+		t.Fatalf("expect key: %s, got %s", podKey.KeyInDB, fip.Key)
+	}
+	// pod uid changed, ip should be reserved, i.e. key should keep, but nodeName and podUid should be empty
+	if fip.PodUid != "" {
+		t.Fatal(fip.PodUid)
+	}
+	if fip.NodeName != "" {
+		t.Fatal(fip.NodeName)
 	}
 }

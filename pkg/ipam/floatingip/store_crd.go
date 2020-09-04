@@ -17,6 +17,7 @@
 package floatingip
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -45,7 +46,9 @@ func (ci *crdIpam) listFloatingIPs() (*v1alpha1.FloatingIPList, error) {
 func (ci *crdIpam) createFloatingIP(allocated *FloatingIP) error {
 	glog.V(4).Infof("create floatingIP %v", *allocated)
 	fip := ci.newFIPCrd(allocated.IP.String())
-	assign(fip, allocated)
+	if err := assign(fip, allocated); err != nil {
+		return err
+	}
 	if _, err := ci.client.GalaxyV1alpha1().FloatingIPs().Create(fip); err != nil {
 		return err
 	}
@@ -57,28 +60,33 @@ func (ci *crdIpam) deleteFloatingIP(name string) error {
 	return ci.client.GalaxyV1alpha1().FloatingIPs().Delete(name, &metav1.DeleteOptions{})
 }
 
-func (ci *crdIpam) getFloatingIP(name string) error {
-	_, err := ci.client.GalaxyV1alpha1().FloatingIPs().Get(name, metav1.GetOptions{})
-	return err
-}
-
 func (ci *crdIpam) updateFloatingIP(toUpdate *FloatingIP) error {
 	glog.V(4).Infof("update floatingIP %v", *toUpdate)
 	fip, err := ci.client.GalaxyV1alpha1().FloatingIPs().Get(toUpdate.IP.String(), metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
-	assign(fip, toUpdate)
+	if err := assign(fip, toUpdate); err != nil {
+		return err
+	}
 	_, err = ci.client.GalaxyV1alpha1().FloatingIPs().Update(fip)
 	return err
 }
 
-func assign(spec *v1alpha1.FloatingIP, f *FloatingIP) {
+func assign(spec *v1alpha1.FloatingIP, f *FloatingIP) error {
 	spec.Spec.Key = f.Key
 	spec.Spec.Policy = constant.ReleasePolicy(f.Policy)
-	spec.Spec.Attribute = f.Attr
+	data, err := json.Marshal(Attr{
+		NodeName: f.NodeName,
+		Uid:      f.PodUid,
+	})
+	if err != nil {
+		return err
+	}
+	spec.Spec.Attribute = string(data)
 	spec.Spec.Subnet = strings.Join(f.Subnets.List(), ",")
 	spec.Spec.UpdateTime = metav1.NewTime(f.UpdatedAt)
+	return nil
 }
 
 // handleFIPAssign handles add event for manually created reserved ips
@@ -100,7 +108,7 @@ func (ci *crdIpam) handleFIPAssign(obj interface{}) error {
 	if !ok {
 		return fmt.Errorf("there is no ip %s in unallocated map", ipStr)
 	}
-	unallocated.Assign(fip.Spec.Key, fip.Spec.Attribute, uint16(fip.Spec.Policy), time.Now())
+	unallocated.Assign(fip.Spec.Key, &Attr{Policy: fip.Spec.Policy}, time.Now())
 	unallocated.Labels = map[string]string{constant.ReserveFIPLabel: ""}
 	ci.syncCacheAfterCreate(unallocated)
 	glog.Infof("reserved ip %s", ipStr)
