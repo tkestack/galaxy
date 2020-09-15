@@ -116,10 +116,14 @@ func setupIPVlan(result *t020.Result, vlanId uint16, args *skel.CmdArgs) error {
 	if err := d.MaybeCreateVlanDevice(vlanId); err != nil {
 		return err
 	}
-	if err := utils.IPVlanConnectsHostWithContainer(result, args, d.DeviceIndex); err != nil {
+
+	if err := utils.IPVlanConnectsHostWithContainer(result, args, d.DeviceIndex, d.GetIPVlanMode()); err != nil {
 		return err
 	}
-	_ = utils.SendGratuitousARP(args.IfName, result.IP4.IP.IP.String(), args.Netns, d.GratuitousArpRequest)
+
+	if d.IpVlanMode == "l3" || d.IpVlanMode == "l3s" {
+		_ = utils.SendGratuitousARP(d.Device, result.IP4.IP.IP.String(), "", d.GratuitousArpRequest)
+	}
 	return nil
 }
 
