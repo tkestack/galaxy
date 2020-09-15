@@ -31,9 +31,9 @@ import (
 )
 
 const (
-	VlanPrefix    = "vlan"
-	BridgePrefix  = "docker"
-	DefaultBridge = "docker"
+	VlanPrefix        = "vlan"
+	BridgePrefix      = "docker"
+	DefaultBridge     = "docker"
 	DefaultIPVlanMode = "l3"
 )
 
