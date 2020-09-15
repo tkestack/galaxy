@@ -34,6 +34,8 @@ type NetConf struct {
 	Device string `json:"device"`
 	// Supports macvlan, bridge or pure(which avoid create unnecessary bridge), default bridge
 	Switch string `json:"switch"`
+	// Supports ipvlan mode l2, l3, l3s, default is l3
+	IpVlanMode string `json:"ipvlan_mode"`
 	// Disable creating default bridge
 	DisableDefaultBridge *bool `json:"disable_default_bridge"`
 	// bridge name if no vlan, default docker
@@ -42,10 +44,16 @@ type NetConf struct {
 	BridgeNamePrefix string `json:"bridge_name_prefix"`
 	// vlan name prefix for all vlan device, default vlan
 	VlanNamePrefix string `json:"vlan_name_prefix"`
+    // Send arp request
+    GratuitousArpRequest bool `json:"gratuitous_arp_request"`
 }
 ```
 
 If you want to create vlan device youself, you can set `device=$vlanDev`, otherwise setting it to your network card name, Vlan CNI will create vlan devices.
+
+If you want to use ipvlan when `Switch=ipvlan`, you can also set ipvlan mode, option values like`l2, l3, l3s`, default ipvlan mode is l3.
+
+Note: If you use ipvlan in `l3` or `l3s` mode, you may have to set `gratuitous_arp_request: true`
 
 ## SRIOV CNI
 

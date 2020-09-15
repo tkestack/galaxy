@@ -31,9 +31,10 @@ import (
 )
 
 const (
-	VlanPrefix    = "vlan"
-	BridgePrefix  = "docker"
-	DefaultBridge = "docker"
+	VlanPrefix        = "vlan"
+	BridgePrefix      = "docker"
+	DefaultBridge     = "docker"
+	DefaultIPVlanMode = "l3"
 )
 
 type VlanDriver struct {
@@ -52,6 +53,8 @@ type NetConf struct {
 	Device string `json:"device"`
 	// Supports macvlan, bridge or pure(which avoid create unnecessary bridge), default bridge
 	Switch string `json:"switch"`
+	// Supports ipvlan mode l2, l3, l3s, default is l3
+	IpVlanMode string `json:"ipvlan_mode"`
 
 	// Disable creating default bridge
 	DisableDefaultBridge *bool `json:"disable_default_bridge"`
@@ -78,6 +81,9 @@ func (d *VlanDriver) LoadConf(bytes []byte) (*NetConf, error) {
 	}
 	if conf.VlanNamePrefix == "" {
 		conf.VlanNamePrefix = VlanPrefix
+	}
+	if conf.IpVlanMode == "" {
+		conf.IpVlanMode = DefaultIPVlanMode
 	}
 	d.NetConf = conf
 	return conf, nil
@@ -367,4 +373,17 @@ func (d *VlanDriver) IPVlanMode() bool {
 
 func (d *VlanDriver) PureMode() bool {
 	return d.Switch == "pure"
+}
+
+func (d *VlanDriver) GetIPVlanMode() netlink.IPVlanMode {
+	switch d.IpVlanMode {
+	case "l2":
+		return netlink.IPVLAN_MODE_L2
+	case "l3":
+		return netlink.IPVLAN_MODE_L3
+	case "l3s":
+		return netlink.IPVLAN_MODE_L3S
+	default:
+		return netlink.IPVLAN_MODE_L3
+	}
 }

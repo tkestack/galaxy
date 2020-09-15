@@ -380,10 +380,10 @@ func MacVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, p
 }
 
 // IPVlanConnectsHostWithContainer creates ipvlan device onto parent device and connects container with host
-func IPVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, parent int) error {
+func IPVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, parent int, mode netlink.IPVlanMode) error {
 	var err error
 	ipVlan := &netlink.IPVlan{
-		Mode: netlink.IPVLAN_MODE_L3,
+		Mode: mode,
 		LinkAttrs: netlink.LinkAttrs{
 			Name:        HostMacVlanName(args.ContainerID),
 			MTU:         1500,
