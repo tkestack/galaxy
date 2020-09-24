@@ -153,14 +153,18 @@ func DeleteVeth(netnsPath, ifName string) error {
 		if err != nil {
 			return fmt.Errorf("failed to lookup sbox device %q: %v", ifName, err)
 		}
-
+		if sbox.Type() != "veth" {
+			return nil
+		}
 		// shutdown sbox device
 		if err = netlink.LinkSetDown(sbox); err != nil {
-			return fmt.Errorf("failed to down sbox device %q: %v", sbox.Attrs().Name, err)
+			return fmt.Errorf("failed to down sbox device %q %v: %v", sbox.Attrs().Name,
+				sbox.Attrs().HardwareAddr, err)
 		}
 
 		if err = netlink.LinkDel(sbox); err != nil {
-			return fmt.Errorf("failed to delete sbox device %q: %v", sbox.Attrs().Name, err)
+			return fmt.Errorf("failed to delete sbox device %q %v: %v", sbox.Attrs().Name,
+				sbox.Attrs().HardwareAddr, err)
 		}
 		return nil
 	})
@@ -202,9 +206,11 @@ func DeleteAllVeth(netnsPath string) error {
 			}
 			// shutdown sbox device
 			if err = netlink.LinkSetDown(link); err != nil {
-				err = fmt.Errorf("failed to down sbox device %q: %v", link.Attrs().Name, err)
+				err = fmt.Errorf("failed to down sbox device %q %v: %v", link.Attrs().Name,
+					link.Attrs().HardwareAddr, err)
 			} else if err = netlink.LinkDel(link); err != nil {
-				err = fmt.Errorf("failed to delete sbox device %q: %v", link.Attrs().Name, err)
+				err = fmt.Errorf("failed to delete sbox device %q %v: %v", link.Attrs().Name,
+					link.Attrs().HardwareAddr, err)
 			}
 		}
 		return err
