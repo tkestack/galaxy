@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 var (
@@ -42,6 +43,8 @@ type IPAM interface {
 	AllocateSpecificIP(string, net.IP, Attr) error
 	// AllocateInSubnet allocate subnet of IPs.
 	AllocateInSubnet(string, *net.IPNet, Attr) (net.IP, error)
+	// AllocateInSubnetsAndIPRange allocates an ip for each ip range array of the input node subnet.
+	AllocateInSubnetsAndIPRange(string, *net.IPNet, [][]nets.IPRange, Attr) ([]net.IP, error)
 	// AllocateInSubnetWithKey allocate a floatingIP in given subnet and key.
 	AllocateInSubnetWithKey(oldK, newK, subnet string, attr Attr) error
 	// ReserveIP can reserve a IP entitled by a terminated pod. Attributes **expect policy attr** will be updated.
@@ -59,10 +62,13 @@ type IPAM interface {
 	ByPrefix(string) ([]FloatingIP, error)
 	// ByKeyword returns floatingIP set by a given keyword.
 	ByKeyword(string) ([]FloatingIP, error)
+	// ByKeyAndIPRanges finds an ip for each iprange array by key, and returns all fips
+	ByKeyAndIPRanges(string, [][]nets.IPRange) ([]*FloatingIPInfo, error)
 	// NodeSubnets returns node's subnet.
 	NodeSubnet(net.IP) *net.IPNet
-	// NodeSubnetsByKey returns keys corresponding node subnets which has `key` as a prefix.
-	NodeSubnetsByKey(key string) (sets.String, error)
+	// NodeSubnetsByKeyAndIPRanges finds an ip for each iprange array by key, and returns their intersection
+	// node subnets.
+	NodeSubnetsByKeyAndIPRanges(key string, ipranges [][]nets.IPRange) (sets.String, error)
 	// Name returns IPAM's name.
 	Name() string
 	// implements metrics Collector interface

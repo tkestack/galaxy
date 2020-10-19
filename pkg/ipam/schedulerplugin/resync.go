@@ -197,15 +197,20 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 		glog.V(5).Infof("sync pod %s/%s ip formatKey with error %v", pod.Namespace, pod.Name, err)
 		return nil
 	}
-	ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
+	cniArgs, err := constant.UnmarshalCniArgs(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
 	if err != nil {
 		return err
 	}
-	if len(ipInfos) == 0 || ipInfos[0].IP == nil {
-		// should not happen
-		return fmt.Errorf("empty ipinfo for pod %s", keyObj.KeyInDB)
+	ipInfos := cniArgs.Common.IPInfos
+	for i := range ipInfos {
+		if ipInfos[i].IP == nil || ipInfos[i].IP.IP == nil {
+			continue
+		}
+		if err := p.syncIP(keyObj.KeyInDB, ipInfos[i].IP.IP, pod); err != nil {
+			glog.Warningf("sync pod %s ip %s: %v", keyObj.KeyInDB, ipInfos[i].IP.IP.String(), err)
+		}
 	}
-	return p.syncIP(keyObj.KeyInDB, ipInfos[0].IP.IP, pod)
+	return nil
 }
 
 func (p *FloatingIPPlugin) syncIP(key string, ip net.IP, pod *corev1.Pod) error {

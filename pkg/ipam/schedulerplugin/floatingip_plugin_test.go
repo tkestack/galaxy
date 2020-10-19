@@ -163,12 +163,12 @@ func TestAllocateIP(t *testing.T) {
 	// check update from ReleasePolicyPodDelete to ReleasePolicyImmutable
 	pod.Spec.NodeName = node4
 	pod.SetUID("pod-xx-1")
-	ipInfo, err := fipPlugin.allocateIP(podKey.KeyInDB, pod.Spec.NodeName, pod)
-	if err != nil {
+	cniArgs, err := fipPlugin.allocateIP(podKey.KeyInDB, pod.Spec.NodeName, pod)
+	if err != nil || len(cniArgs.Common.IPInfos) != 1 {
 		t.Fatal(err)
 	}
-	if ipInfo == nil || ipInfo.IP.String() != "10.173.13.2/24" {
-		t.Fatal(ipInfo)
+	if cniArgs.Common.IPInfos[0].IP.String() != "10.173.13.2/24" {
+		t.Fatal(cniArgs.Common.IPInfos[0])
 	}
 	fip, err := fipPlugin.ipam.First(podKey.KeyInDB)
 	if err != nil {
@@ -194,7 +194,7 @@ func TestUpdatePod(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"ip":"10.173.13.2/24","vlan":2,"gateway":"10.173.13.1","routable_subnet":"10.173.13.0/24"}`), &ipInfo); err != nil {
 		t.Fatal()
 	}
-	str, err := constant.FormatIPInfo([]constant.IPInfo{ipInfo})
+	str, err := constant.MarshalCniArgs([]constant.IPInfo{ipInfo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,10 +238,11 @@ func TestFilterForDeployment(t *testing.T) {
 	// pre-allocate ip in filter for deployment pod
 	podKey, _ := schedulerplugin_util.FormatKey(pod)
 	deadPodKey, _ := schedulerplugin_util.FormatKey(deadPod)
-	fip, err := fipPlugin.allocateIP(deadPodKey.KeyInDB, node3, deadPod)
-	if err != nil {
+	cniArgs, err := fipPlugin.allocateIP(deadPodKey.KeyInDB, node3, deadPod)
+	if err != nil || len(cniArgs.Common.IPInfos) != 1 {
 		t.Fatal(err)
 	}
+	fip := cniArgs.Common.IPInfos[0]
 	// because deployment ip is allocated to deadPod, check if pod gets none available subnets
 	filtered, failed, err := fipPlugin.Filter(pod, nodes)
 	if err == nil || !strings.Contains(err.Error(), "wait for releasing") {
@@ -552,7 +553,7 @@ func TestBind(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 		return
 	}
-	str, err := constant.FormatIPInfo([]constant.IPInfo{fipInfo.IPInfo})
+	str, err := constant.MarshalCniArgs([]constant.IPInfo{fipInfo.IPInfo})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -669,7 +670,7 @@ func TestUnBind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	str, err := constant.FormatIPInfo([]constant.IPInfo{fipInfo.IPInfo})
+	str, err := constant.MarshalCniArgs([]constant.IPInfo{fipInfo.IPInfo})
 	if err != nil {
 		t.Fatal(err)
 	}

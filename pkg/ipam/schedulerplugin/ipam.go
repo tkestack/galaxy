@@ -29,6 +29,7 @@ import (
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 func (p *FloatingIPPlugin) ensureIPAMConf(lastConf *string, newConf string) (bool, error) {
@@ -71,8 +72,13 @@ func (p *FloatingIPPlugin) allocateInSubnetWithKey(oldK, newK, subnet string, at
 
 // #lizard forgives
 func (p *FloatingIPPlugin) getAvailableSubnet(keyObj *util.KeyObj, policy constant.ReleasePolicy, replicas int,
-	isPoolSizeDefined bool) (subnets sets.String, reserve bool, err error) {
+	isPoolSizeDefined bool, ipranges [][]nets.IPRange) (subnets sets.String, reserve bool, err error) {
 	if keyObj.Deployment() && policy != constant.ReleasePolicyPodDelete {
+		if len(ipranges) > 0 {
+			// this introduce lots of complexity, don't support it for now
+			return nil, false, fmt.Errorf("request ip ranges for deployment pod with release " +
+				"policy other than ReleasePolicyPodDelete is not supported")
+		}
 		var ips []floatingip.FloatingIP
 		poolPrefix := keyObj.PoolPrefix()
 		poolAppPrefix := keyObj.PoolAppPrefix()
@@ -111,7 +117,7 @@ func (p *FloatingIPPlugin) getAvailableSubnet(keyObj *util.KeyObj, policy consta
 			return unusedSubnetSet, true, nil
 		}
 	}
-	if subnets, err = p.ipam.NodeSubnetsByKey(""); err != nil {
+	if subnets, err = p.ipam.NodeSubnetsByKeyAndIPRanges("", ipranges); err != nil {
 		err = fmt.Errorf("failed to query allocatable subnet: %v", err)
 		return
 	}
@@ -119,19 +125,21 @@ func (p *FloatingIPPlugin) getAvailableSubnet(keyObj *util.KeyObj, policy consta
 }
 
 func (p *FloatingIPPlugin) releaseIP(key string, reason string) error {
-	ipInfo, err := p.ipam.First(key)
-	if err != nil {
-		return fmt.Errorf("failed to query floating ip of %s: %v", key, err)
-	}
-	if ipInfo == nil {
+	ipInfos, err := p.ipam.ByKeyAndIPRanges(key, nil)
+	if len(ipInfos) == 0 {
 		glog.Infof("release floating ip from %s because of %s, but already been released", key, reason)
 		return nil
 	}
-	if err := p.ipam.Release(key, ipInfo.IPInfo.IP.IP); err != nil {
-		return fmt.Errorf("failed to release floating ip of %s because of %s: %v", key, reason, err)
+	m := map[string]string{}
+	for i := range ipInfos {
+		m[ipInfos[i].FIP.IP.String()] = ipInfos[i].FIP.Key
 	}
-	glog.Infof("released floating ip %s from %s because of %s", ipInfo.IPInfo.IP.String(), key,
-		reason)
+	released, unreleased, err := p.ipam.ReleaseIPs(m)
+	if err != nil {
+		return fmt.Errorf("released %v, unreleased %v of %s because of %s: %v", released, unreleased, key,
+			reason, err)
+	}
+	glog.Infof("released floating ip %v from %s because of %s", released, key, reason)
 	return nil
 }
 

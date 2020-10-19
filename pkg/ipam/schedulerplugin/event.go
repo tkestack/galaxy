@@ -45,6 +45,7 @@ func (p *FloatingIPPlugin) UpdatePod(oldPod, newPod *corev1.Pod) error {
 		// If it's a evicted one, release its ip
 		glog.Infof("release ip from %s_%s, phase %s", newPod.Name, newPod.Namespace, string(newPod.Status.Phase))
 		p.unreleased <- &releaseEvent{pod: newPod}
+		return nil
 	}
 	if err := p.syncPodIP(newPod); err != nil {
 		glog.Warningf("failed to sync pod ip: %v", err)

@@ -267,13 +267,13 @@ func parseExtendedCNIArgs(pod *corev1.Pod) (map[string]map[string]json.RawMessag
 	if pod.Annotations == nil {
 		return nil, nil
 	}
-	annotation := pod.Annotations[constant.ExtendedCNIArgsAnnotation]
-	if annotation == "" {
+	args := pod.Annotations[constant.ExtendedCNIArgsAnnotation]
+	if args == "" {
 		return nil, nil
 	}
-	argsMap, err := constant.ParseExtendedCNIArgs(annotation)
-	if err != nil {
-		return nil, err
+	argsMap := map[string]map[string]json.RawMessage{}
+	if err := json.Unmarshal([]byte(args), &argsMap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cni args %s: %v", args, err)
 	}
 	return argsMap, nil
 }
