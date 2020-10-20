@@ -60,7 +60,7 @@ func TestStsReleasePolicy(t *testing.T) {
 			if err := fipPlugin.unbind(pod); err != nil {
 				t.Fatalf("case %d, err %v", i, err)
 			}
-			if err := checkIPKey(fipPlugin.ipam, fip.FIP.IP.String(), testCase.expectKeyFunc(keyObj)); err != nil {
+			if err := checkIPKey(fipPlugin.ipam, fip.IP.String(), testCase.expectKeyFunc(keyObj)); err != nil {
 				t.Fatalf("case %d, err %v", i, err)
 			}
 		}()

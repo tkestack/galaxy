@@ -31,23 +31,23 @@ import (
 // FloatingIP defines a floating ip
 type FloatingIP struct {
 	Key       string
-	Subnets   sets.String // node subnet, not container ip's subnet
 	IP        net.IP
 	UpdatedAt time.Time
 	Labels    map[string]string
 	Policy    uint16
 	NodeName  string
 	PodUid    string
+	pool      *FloatingIPPool
 }
 
 func (f FloatingIP) String() string {
-	return fmt.Sprintf("FloatingIP{ip:%s key:%s policy:%d nodeName:%s podUid:%s subnets:%v}",
-		f.IP.String(), f.Key, f.Policy, f.NodeName, f.PodUid, f.Subnets)
+	return fmt.Sprintf("FloatingIP{ip:%s key:%s policy:%d nodeName:%s podUid:%s}",
+		f.IP.String(), f.Key, f.Policy, f.NodeName, f.PodUid)
 }
 
 // New creates a new FloatingIP
-func New(ip net.IP, subnets sets.String, key string, attr *Attr, updateAt time.Time) *FloatingIP {
-	fip := &FloatingIP{IP: ip, Subnets: subnets}
+func New(pool *FloatingIPPool, ip net.IP, key string, attr *Attr, updateAt time.Time) *FloatingIP {
+	fip := &FloatingIP{IP: ip, pool: pool}
 	fip.Assign(key, attr, updateAt)
 	return fip
 }
@@ -65,8 +65,8 @@ func (f *FloatingIP) Assign(key string, attr *Attr, updateAt time.Time) *Floatin
 // CloneWith creates a new FloatingIP and updates key, attr, updatedAt
 func (f *FloatingIP) CloneWith(key string, attr *Attr, updateAt time.Time) *FloatingIP {
 	fip := &FloatingIP{
-		IP:      f.IP,
-		Subnets: f.Subnets,
+		IP:   f.IP,
+		pool: f.pool,
 	}
 	return fip.Assign(key, attr, updateAt)
 }
@@ -76,6 +76,8 @@ type FloatingIPPool struct {
 	NodeSubnets []*net.IPNet // the node subnets
 	nets.SparseSubnet
 	sync.RWMutex
+	nodeSubnets sets.String // the node subnets, string set format
+	index       int         // the index of []FloatingIPPool
 }
 
 // FloatingIPPoolConf is FloatingIP config structure.

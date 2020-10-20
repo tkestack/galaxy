@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +31,7 @@ import (
 	fakeGalaxyCli "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned/fake"
 	crdInformer "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions"
 	"tkestack.io/galaxy/pkg/ipam/utils"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 const (
@@ -61,6 +61,7 @@ var (
 	node6FIPSubnet = &net.IPNet{IP: net.ParseIP("10.0.80.0"), Mask: mask24}
 	node7IPNet     = node6IPNet1
 	node7FIPSubnet = &net.IPNet{IP: net.ParseIP("10.0.81.0"), Mask: mask24}
+	allNodeSubnet  = []*net.IPNet{node1IPNet, node2IPNet, node3IPNet, node4IPNet, node5IPNet1, node5IPNet2, node6IPNet1, node6IPNet2, node7IPNet}
 )
 
 func createIPAM(t *testing.T, objs ...runtime.Object) (*crdIpam, crdInformer.SharedInformerFactory) {
@@ -110,7 +111,6 @@ func TestConfigurePoolWithAllocatedIP(t *testing.T) {
 	expectFip := &FloatingIP{
 		IP:        net.ParseIP("10.49.27.205"),
 		Key:       "pod2",
-		Subnets:   sets.NewString("subnet1"), // assign a bad subnet to test if it can be correct
 		Policy:    0,
 		UpdatedAt: time.Now(),
 	}
@@ -133,14 +133,9 @@ func TestConfigurePoolWithAllocatedIP(t *testing.T) {
 	if fip.Key != expectFip.Key {
 		t.Fatal()
 	}
-	subnetsStr := strings.Join(fip.Subnets.List(), ",")
-	// test subnets is equal the lastest configure value instead of the stored value in crd
-	if subnetsStr != node1IPNet.String() {
-		t.Fatal(subnetsStr)
-	}
 }
 
-func TestCRDAllocateSpecificIP(t *testing.T) {
+func TestAllocateSpecificIP(t *testing.T) {
 	now := time.Now()
 	ipam := createTestCrdIPAM(t)
 	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"),
@@ -157,7 +152,7 @@ func TestCRDAllocateSpecificIP(t *testing.T) {
 	if !allocated.UpdatedAt.After(now) {
 		t.Fatal(allocated.UpdatedAt)
 	}
-	if `FloatingIP{ip:10.49.27.205 key:pod1 policy:2 nodeName:212 podUid:xx1 subnets:map[10.49.27.0/24:{}]}` !=
+	if `FloatingIP{ip:10.49.27.205 key:pod1 policy:2 nodeName:212 podUid:xx1}` !=
 		fmt.Sprintf("%+v", allocated) {
 		t.Fatal(fmt.Sprintf("%+v", allocated))
 	}
@@ -166,31 +161,34 @@ func TestCRDAllocateSpecificIP(t *testing.T) {
 	}
 }
 
-func checkFIP(ipam *crdIpam, expect string) error {
+func checkFIP(ipam *crdIpam, expect ...string) error {
 	fips, err := ipam.client.GalaxyV1alpha1().FloatingIPs().List(v1.ListOptions{})
 	if err != nil {
 		return err
 	}
-	if len(fips.Items) != 1 {
-		return fmt.Errorf("expect 1 fip, found %v", fips)
+	if len(fips.Items) != len(expect) {
+		return fmt.Errorf("expect %d fip, found %v", len(expect), fips)
 	}
-	fip := fips.Items[0]
-	fip.Spec.UpdateTime = v1.Time{time.Time{}}
-	data, err := json.Marshal(fip)
-	if err != nil {
-		return err
-	}
-	if expect != string(data) {
-		return fmt.Errorf("expect %s, found %s", expect, string(data))
+	for i, fip := range fips.Items {
+		fip.Spec.UpdateTime = v1.Time{time.Time{}}
+		data, err := json.Marshal(fip)
+		if err != nil {
+			return err
+		}
+		if expect[i] != string(data) {
+			return fmt.Errorf("case %d, expect crd %s, found %s", i, expect[i], string(data))
+		}
 	}
 	return nil
 }
 
-func TestCRDReserveIP(t *testing.T) {
+func TestReserveIP(t *testing.T) {
 	ipam := createTestCrdIPAM(t)
-	if err := ipam.AllocateSpecificIP("pod1", net.ParseIP("10.49.27.205"),
-		Attr{Policy: constant.ReleasePolicyNever, NodeName: "node1", Uid: "xx1"}); err != nil {
-		t.Fatal(err)
+	for _, ip := range []string{"10.49.27.205", "10.49.27.216"} {
+		if err := ipam.AllocateSpecificIP("pod1", net.ParseIP(ip),
+			Attr{Policy: constant.ReleasePolicyNever, NodeName: "node1", Uid: "xx1"}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	newAttr := Attr{NodeName: "node2", Uid: "xx2", Policy: constant.ReleasePolicyNever}
 	if reserved, err := ipam.ReserveIP("pod1", "p1", newAttr); err != nil {
@@ -198,10 +196,14 @@ func TestCRDReserveIP(t *testing.T) {
 	} else if !reserved {
 		t.Fatal()
 	}
-	if err := checkIPKeyAttr(ipam, "10.49.27.205", "p1", &newAttr); err != nil {
-		t.Fatal(err)
+	for _, ip := range []string{"10.49.27.205", "10.49.27.216"} {
+		if err := checkIPKeyAttr(ipam, ip, "p1", &newAttr); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := checkFIP(ipam, `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"p1","attribute":"{\"NodeName\":\"node2\",\"Uid\":\"xx2\"}","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`); err != nil {
+	if err := checkFIP(ipam,
+		`{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"p1","attribute":"{\"NodeName\":\"node2\",\"Uid\":\"xx2\"}","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`,
+		`{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.216","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"p1","attribute":"{\"NodeName\":\"node2\",\"Uid\":\"xx2\"}","policy":2,"subnet":"10.49.27.0/24","updateTime":null}}`); err != nil {
 		t.Fatal(err)
 	}
 	// reserve again, should not succeed
@@ -213,7 +215,7 @@ func TestCRDReserveIP(t *testing.T) {
 	}
 }
 
-func TestCRDRelease(t *testing.T) {
+func TestRelease(t *testing.T) {
 	ipam := createTestCrdIPAM(t)
 	testRelease(t, ipam)
 	if err := checkFIP(ipam, pod1CRD); err != nil {
@@ -221,7 +223,7 @@ func TestCRDRelease(t *testing.T) {
 	}
 }
 
-func TestCRDReleaseIPs(t *testing.T) {
+func TestReleaseIPs(t *testing.T) {
 	ipam := createTestCrdIPAM(t)
 	testReleaseIPs(t, ipam)
 	if err := checkFIP(ipam, pod2CRD); err != nil {
@@ -229,12 +231,12 @@ func TestCRDReleaseIPs(t *testing.T) {
 	}
 }
 
-func TestCRDByKeyword(t *testing.T) {
+func TestByKeyword(t *testing.T) {
 	ipam := createTestCrdIPAM(t)
 	testByKeyword(t, ipam)
 }
 
-func TestCRDByPrefix(t *testing.T) {
+func TestByPrefix(t *testing.T) {
 	ipam := createTestCrdIPAM(t)
 	testByPrefix(t, ipam)
 }
@@ -280,8 +282,15 @@ func testReleaseIPs(t *testing.T, ipam IPAM) {
 
 func testByKeyword(t *testing.T, ipam IPAM) {
 	now := time.Now()
-	allocateSomeIPs(t, ipam)
 	fips, err := ipam.ByKeyword("od")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fips) != 0 {
+		t.Fatal(len(fips))
+	}
+	allocateSomeIPs(t, ipam)
+	fips, err = ipam.ByKeyword("od")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -499,5 +508,181 @@ func TestAllocateInMultipleSubnet(t *testing.T) {
 	}
 	if nodeSubnets.Len() != 2 {
 		t.Fatalf("expect allocated ip both from %s and %s", node7FIPSubnet, node6FIPSubnet)
+	}
+}
+
+func TestAllocateInSubnetsAndIPRange(t *testing.T) {
+	for i, testCase := range []struct {
+		nodeSubnet      *net.IPNet
+		ipranges        string
+		expectIPs       []string // skip check ips if expectIPs is empty
+		expectFIPSubnet *net.IPNet
+		expectError     error
+	}{
+		{nodeSubnet: node1IPNet, ipranges: "", expectFIPSubnet: node1FIPSubnet},
+		{nodeSubnet: node1IPNet, ipranges: `[["10.49.27.216~10.49.27.218"]]`, expectFIPSubnet: node1FIPSubnet},
+		{nodeSubnet: node1IPNet, ipranges: `[["10.49.27.217~10.49.27.218"],["10.49.27.217~10.49.27.218"]]`,
+			expectFIPSubnet: node1FIPSubnet, expectIPs: []string{"10.49.27.217", "10.49.27.218"}},
+		{nodeSubnet: node1IPNet, ipranges: `[["10.49.27.205", "10.49.27.218"]]`, expectFIPSubnet: node1FIPSubnet,
+			expectIPs: []string{"10.49.27.205"}},
+		{nodeSubnet: node1IPNet, ipranges: `[["10.49.27.205"],["10.49.27.218"]]`, expectFIPSubnet: node1FIPSubnet,
+			expectIPs: []string{"10.49.27.205", "10.49.27.218"}},
+		{nodeSubnet: node1IPNet, ipranges: `[["10.49.27.216"],["10.49.27.217"],["10.49.27.218"]]`,
+			expectFIPSubnet: node1FIPSubnet,
+			expectIPs:       []string{"10.49.27.216", "10.49.27.217", "10.49.27.218"}},
+		// node1IPNet has not 10.50.0.1
+		{nodeSubnet: node1IPNet, ipranges: `[["10.49.27.216"],["10.50.0.1"]]`, expectError: ErrNoEnoughIP},
+		// node2IPNet has not 10.49.27.216
+		{nodeSubnet: node2IPNet, ipranges: `[["10.49.27.216"]]`, expectError: ErrNoEnoughIP},
+	} {
+		ipam := createTestCrdIPAM(t)
+		var ipranges [][]nets.IPRange
+		if testCase.ipranges != "" {
+			if err := json.Unmarshal([]byte(testCase.ipranges), &ipranges); err != nil {
+				t.Fatalf("case %d: %v", i, err)
+			}
+		}
+		ips, err := ipam.AllocateInSubnetsAndIPRange("p1", testCase.nodeSubnet, ipranges, Attr{})
+		if err != nil {
+			if testCase.expectError != nil && testCase.expectError == err && len(ips) == 0 {
+				continue
+			}
+			t.Fatalf("case %d: %v", i, err)
+		}
+		for i := range ips {
+			if !testCase.expectFIPSubnet.Contains(ips[i]) {
+				t.Fatalf("case %d, expect %s contains allocatedIP %s", i, testCase.expectFIPSubnet, ips[i])
+			}
+		}
+		if len(testCase.expectIPs) == 0 {
+			continue
+		}
+		if len(testCase.expectIPs) != len(ips) {
+			t.Fatalf("case %d, expect %v, real %v", i, testCase.expectIPs, ips)
+		}
+		for i := range ips {
+			if ips[i].String() != testCase.expectIPs[i] {
+				t.Fatalf("case %d, expect %v, real %v", i, testCase.expectIPs, ips)
+			}
+		}
+	}
+}
+
+func TestAllocateInSubnetsAndIPRange2(t *testing.T) {
+	// check if AllocateInSubnetsAndIPRange allocates all ips or nothing
+	ipam := createTestCrdIPAM(t)
+	ipranges := [][]nets.IPRange{{*nets.ParseIPRange("10.49.27.216")}, {*nets.ParseIPRange("10.50.0.1")}}
+	ips, err := ipam.AllocateInSubnetsAndIPRange("p1", node1IPNet, ipranges, Attr{})
+	if err != ErrNoEnoughIP || len(ips) != 0 {
+		t.Fatalf("%v, %v", ips, err)
+	}
+	if fip, err := ipam.ByIP(net.ParseIP("10.49.27.216")); err != nil {
+		t.Fatal(err)
+	} else if fip.Key != "" {
+		t.Fatal()
+	}
+	ipranges = [][]nets.IPRange{{*nets.ParseIPRange("10.49.27.216")}, {*nets.ParseIPRange("10.49.27.218")}}
+	// check if attr is correct
+	ips, err = ipam.AllocateInSubnetsAndIPRange("p1", node1IPNet, ipranges,
+		Attr{Policy: constant.ReleasePolicyImmutable, NodeName: "node2", Uid: "xx1"})
+	if err != nil || len(ips) != 2 {
+		t.Fatalf("%v, %v", ips, err)
+	}
+	for _, ipStr := range []string{"10.49.27.216", "10.49.27.218"} {
+		fip, err := ipam.ByIP(net.ParseIP(ipStr))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fip.Policy != uint16(constant.ReleasePolicyImmutable) || fip.NodeName != "node2" || fip.PodUid != "xx1" {
+			t.Fatal(fip)
+		}
+	}
+}
+
+func TestByKeyAndIPRanges(t *testing.T) {
+	ipam := createTestCrdIPAM(t)
+	ipranges := [][]nets.IPRange{{*nets.ParseIPRange("10.49.27.216")}, {*nets.ParseIPRange("10.49.27.218")}}
+	_, err := ipam.AllocateInSubnetsAndIPRange("p1", node1IPNet, ipranges, Attr{})
+	if err != nil {
+		t.Fatal()
+	}
+	ipInfos, err := ipam.ByKeyAndIPRanges("p1", ipranges)
+	if err != nil || len(ipInfos) != 2 ||
+		ipInfos[0].IP.String() != "10.49.27.216" || ipInfos[1].IP.String() != "10.49.27.218" ||
+		ipInfos[0].IPInfo.Gateway.String() != "10.49.27.1" || ipInfos[1].IPInfo.Gateway.String() != "10.49.27.1" {
+		t.Fatalf("%v, %v", ipInfos, err)
+	}
+	// test if ipranges is nil, result should be the same
+	ipInfos1, err := ipam.ByKeyAndIPRanges("p1", nil)
+	if err != nil || len(ipInfos1) != 2 {
+		t.Fatalf("%v, %v", ipInfos1, err)
+	}
+	if ipInfos1[0].IP.String() == "10.49.27.218" {
+		ipInfos1[0], ipInfos1[1] = ipInfos1[1], ipInfos1[0]
+	}
+	if ipInfos1[0].IP.String() != "10.49.27.216" || ipInfos1[1].IP.String() != "10.49.27.218" ||
+		ipInfos1[0].IPInfo.Gateway.String() != "10.49.27.1" || ipInfos1[1].IPInfo.Gateway.String() != "10.49.27.1" {
+		t.Fatalf("%v, %v", ipInfos1, err)
+	}
+	// test if there is unallocated ips in ipranges
+	ipranges = append([][]nets.IPRange{{*nets.ParseIPRange("10.49.27.205~10.49.27.214")}}, ipranges...)
+	ipInfos2, err := ipam.ByKeyAndIPRanges("p1", ipranges)
+	if err != nil || len(ipInfos2) != 3 ||
+		ipInfos2[0] != nil ||
+		ipInfos2[1].IP.String() != "10.49.27.216" || ipInfos2[2].IP.String() != "10.49.27.218" ||
+		ipInfos2[1].IPInfo.Gateway.String() != "10.49.27.1" || ipInfos2[2].IPInfo.Gateway.String() != "10.49.27.1" {
+		t.Fatalf("%v, %v", ipInfos2, err)
+	}
+	// test if iprange is small
+	ipInfos, err = ipam.ByKeyAndIPRanges("p1", [][]nets.IPRange{{*nets.ParseIPRange("10.49.27.218")}})
+	if err != nil || len(ipInfos) != 1 ||
+		ipInfos[0].IP.String() != "10.49.27.218" ||
+		ipInfos[0].IPInfo.Gateway.String() != "10.49.27.1" {
+		t.Fatalf("%v, %v", ipInfos, err)
+	}
+}
+
+func TestNodeSubnetsByKeyAndIPRanges(t *testing.T) {
+	allNodeSubnetsSet := sets.NewString()
+	for i := range allNodeSubnet {
+		allNodeSubnetsSet.Insert(allNodeSubnet[i].String())
+	}
+	ipam := createTestCrdIPAM(t)
+	for i, testCase := range []struct {
+		ipranges      string
+		expectSubnets []*net.IPNet
+	}{
+		{expectSubnets: allNodeSubnet},
+		{ipranges: `[["10.49.27.216~10.49.27.218"]]`, expectSubnets: []*net.IPNet{node1IPNet}},
+		{ipranges: `[["10.49.27.216"],["10.49.27.218"]]`, expectSubnets: []*net.IPNet{node1IPNet}},
+		{ipranges: `[["10.49.27.216", "10.173.13.10~10.173.13.13"]]`,
+			expectSubnets: []*net.IPNet{node1IPNet, node2IPNet}},
+		{ipranges: `[["10.49.27.216", "10.173.13.10~10.173.13.13"],["10.173.13.13"]]`,
+			expectSubnets: []*net.IPNet{node2IPNet}},
+		{ipranges: `[["10.49.27.216", "10.173.13.10~10.173.13.13", "10.180.154.2"]]`,
+			expectSubnets: []*net.IPNet{node1IPNet, node2IPNet, node3IPNet}},
+		{ipranges: `[["10.49.27.216"],["10.173.13.10~10.173.13.13"]]`, expectSubnets: []*net.IPNet{}},
+		{ipranges: `[["10.0.70.3~10.0.70.20"]]`,
+			expectSubnets: []*net.IPNet{node5IPNet1, node5IPNet2}},
+		{ipranges: `[["10.0.70.3", "10.0.80.2"]]`,
+			expectSubnets: []*net.IPNet{node5IPNet1, node5IPNet2, node6IPNet1, node6IPNet2}},
+	} {
+		var ipranges [][]nets.IPRange
+		if testCase.ipranges != "" {
+			if err := json.Unmarshal([]byte(testCase.ipranges), &ipranges); err != nil {
+				t.Fatalf("case %d: %v", i, err)
+			}
+		}
+		subnets, err := ipam.NodeSubnetsByIPRanges(ipranges)
+		if err != nil {
+			t.Fatalf("case %d: %v", i, err)
+		}
+		expectSubnets := sets.NewString()
+		for i := range testCase.expectSubnets {
+			expectSubnets.Insert(testCase.expectSubnets[i].String())
+		}
+		if !reflect.DeepEqual(subnets.List(), expectSubnets.List()) {
+			t.Fatalf("case %d, expect %v, real %v", i, testCase.expectSubnets, subnets)
+		}
 	}
 }

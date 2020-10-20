@@ -17,6 +17,7 @@
 package schedulerplugin
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"reflect"
@@ -25,6 +26,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	fakeV1 "k8s.io/client-go/kubernetes/typed/core/v1/fake"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
@@ -33,6 +35,7 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	schedulerplugin_util "tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 func TestBind(t *testing.T) {
@@ -42,29 +45,10 @@ func TestBind(t *testing.T) {
 	if err != nil {
 		t.Fatalf("checkBind error %v", err)
 	}
-	fakePods := fipPlugin.PluginFactoryArgs.Client.CoreV1().Pods(pod.Namespace).(*fakeV1.FakePods)
-
-	actualBinding, err := fakePods.GetBinding(pod.GetName())
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-		return
-	}
-	str, err := constant.MarshalCniArgs([]constant.IPInfo{fipInfo.IPInfo})
-	if err != nil {
+	if err := checkBinding(fipPlugin, pod, &constant.CniArgs{Common: constant.CommonCniArgs{
+		IPInfos: []constant.IPInfo{fipInfo.IPInfo},
+	}}, node3); err != nil {
 		t.Fatal(err)
-	}
-	expect := &corev1.Binding{
-		ObjectMeta: v1.ObjectMeta{
-			Namespace: pod.Namespace, Name: pod.Name,
-			Annotations: map[string]string{
-				constant.ExtendedCNIArgsAnnotation: str}},
-		Target: corev1.ObjectReference{
-			Kind: "Node",
-			Name: node3,
-		},
-	}
-	if !reflect.DeepEqual(expect, actualBinding) {
-		t.Fatalf("Binding did not match expectation, expect %v, actual %v", expect, actualBinding)
 	}
 }
 
@@ -90,14 +74,14 @@ func TestAllocateIP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fip.FIP.Policy != uint16(constant.ReleasePolicyImmutable) {
-		t.Fatal(fip.FIP.Policy)
+	if fip.Policy != uint16(constant.ReleasePolicyImmutable) {
+		t.Fatal(fip.Policy)
 	}
-	if fip.FIP.NodeName != node4 {
-		t.Fatal(fip.FIP.NodeName)
+	if fip.NodeName != node4 {
+		t.Fatal(fip.NodeName)
 	}
-	if fip.FIP.PodUid != string(pod.UID) {
-		t.Fatal(fip.FIP.PodUid)
+	if fip.PodUid != string(pod.UID) {
+		t.Fatal(fip.PodUid)
 	}
 }
 
@@ -153,10 +137,14 @@ func TestUnBind(t *testing.T) {
 	if err := drainNode(fipPlugin, node3Subnet, expectIP); err != nil {
 		t.Fatal(err)
 	}
-	fakeCP := &FakeCloudProvider{ExpectIP: expectIP.String(), ExpectNode: node3}
+	fakeCP := NewFakeCloudProvider()
 	fipPlugin.cloudProvider = fakeCP
 	fipInfo, err := checkBind(fipPlugin, pod1, node3, keyObj.KeyInDB, node3Subnet)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkFakeCloudProviderState(fakeCP, map[string]string{"10.49.27.205": node3},
+		map[string]string{}); err != nil {
 		t.Fatal(err)
 	}
 	str, err := constant.MarshalCniArgs([]constant.IPInfo{fipInfo.IPInfo})
@@ -168,8 +156,9 @@ func TestUnBind(t *testing.T) {
 	if err := fipPlugin.unbind(pod1); err != nil {
 		t.Fatal(err)
 	}
-	if !fakeCP.InvokedAssignIP || !fakeCP.InvokedUnAssignIP {
-		t.Fatal()
+	if err := checkFakeCloudProviderState(fakeCP, map[string]string{"10.49.27.205": node3},
+		map[string]string{"10.49.27.205": node3}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -236,10 +225,176 @@ func TestReleaseIPOfFinishedPod(t *testing.T) {
 				t.Fatalf("case %d: %v", i, err)
 			}
 			if err := wait.Poll(time.Microsecond*10, time.Second*30, func() (done bool, err error) {
-				return checkIPKey(fipPlugin.ipam, fipInfo.FIP.IP.String(), "") == nil, nil
+				return checkIPKey(fipPlugin.ipam, fipInfo.IP.String(), "") == nil, nil
 			}); err != nil {
 				t.Fatalf("case %d: %v", i, err)
 			}
 		}()
 	}
+}
+
+func TestBindUnBindRequestIPRange(t *testing.T) {
+	// create a pod request for two ips
+	request := `{"request_ip_range":[["10.49.27.205"],["10.49.27.217"]]}`
+	cniArgs, err := constant.UnmarshalCniArgs(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod := CreateStatefulSetPod("pod1-0", "ns1", cniArgsAnnotation(request))
+	podKey, _ := schedulerplugin_util.FormatKey(pod)
+	fipPlugin, stopChan, _ := createPluginTestNodes(t, pod)
+	cp := NewFakeCloudProvider()
+	fipPlugin.cloudProvider = cp
+	defer func() { stopChan <- struct{}{} }()
+	if err := checkBindForIPRanges(fipPlugin, pod, node3, cniArgs, "10.49.27.205", "10.49.27.217"); err != nil {
+		t.Fatal(err)
+	}
+	if err := fipPlugin.unbind(pod); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checkByKeyAndIPRanges(fipPlugin, podKey.KeyInDB, cniArgs.RequestIPRange); err != nil {
+		t.Fatal(err)
+	}
+	expectAssigned := map[string]string{"10.49.27.205": node3, "10.49.27.217": node3}
+	// both assigned ips should be unassigned
+	if err := checkFakeCloudProviderState(cp, expectAssigned, expectAssigned); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFilterBindRequestIPRange(t *testing.T) {
+	// test for both allocated iprange and unallocated iprange
+	request := `{"request_ip_range":[["10.49.27.205"]]}`
+	cniArgs, err := constant.UnmarshalCniArgs(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod := CreateStatefulSetPod("pod1-0", "ns1", cniArgsAnnotation(request))
+	fipPlugin, stopChan, _ := createPluginTestNodes(t, pod)
+	cp := NewFakeCloudProvider()
+	fipPlugin.cloudProvider = cp
+	defer func() { stopChan <- struct{}{} }()
+	if err := checkBindForIPRanges(fipPlugin, pod, node3, cniArgs, "10.49.27.205"); err != nil {
+		t.Fatal(err)
+	}
+	request = `{"request_ip_range":[["10.49.27.205"],["10.49.27.218"]]}`
+	cniArgs, err = constant.UnmarshalCniArgs(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod.Annotations = cniArgsAnnotation(request)
+	if _, err := fipPlugin.Client.CoreV1().Pods(pod.Namespace).Update(pod); err != nil {
+		t.Fatal(err)
+	}
+	// wait for lister updates
+	if err := wait.Poll(time.Millisecond*100, time.Minute, func() (done bool, err error) {
+		pod1, err := fipPlugin.PodLister.Pods(pod.Namespace).Get(pod.Name)
+		if err != nil {
+			return false, nil
+		}
+		return pod1.Annotations[constant.ExtendedCNIArgsAnnotation] ==
+			pod.Annotations[constant.ExtendedCNIArgsAnnotation], nil
+	}); err != nil {
+		t.Fatal()
+	}
+	if err := checkBindForIPRanges(fipPlugin, pod, node3, cniArgs, "10.49.27.205", "10.49.27.218"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func checkBindForIPRanges(fipPlugin *FloatingIPPlugin, pod *corev1.Pod, node string, cniArgs *constant.CniArgs,
+	expectIPs ...string) error {
+	podKey, _ := schedulerplugin_util.FormatKey(pod)
+	if err := fipPlugin.Bind(&schedulerapi.ExtenderBindingArgs{
+		PodName:      pod.Name,
+		PodNamespace: pod.Namespace,
+		Node:         node,
+	}); err != nil {
+		return err
+	}
+	fipInfos, err := checkByKeyAndIPRanges(fipPlugin, podKey.KeyInDB, cniArgs.RequestIPRange, expectIPs...)
+	if err != nil {
+		return err
+	}
+	var ipInfos []constant.IPInfo
+	for i := range fipInfos {
+		ipInfos = append(ipInfos, fipInfos[i].IPInfo)
+	}
+	cniArgs.Common.IPInfos = ipInfos
+	if err := checkBinding(fipPlugin, pod, cniArgs, node); err != nil {
+		return err
+	}
+	if fipPlugin.cloudProvider != nil {
+		expectAssigned := map[string]string{}
+		for _, ip := range expectIPs {
+			expectAssigned[ip] = node
+		}
+		if err := checkFakeCloudProviderState(fipPlugin.cloudProvider.(*FakeCloudProvider), expectAssigned,
+			map[string]string{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkFakeCloudProviderState(cp *FakeCloudProvider, expectAssigned, expectUnassigned map[string]string) error {
+	if !reflect.DeepEqual(cp.Assigned, expectAssigned) {
+		return fmt.Errorf("fake cloud provider assigned missmatch, expect %v, real %v", expectAssigned,
+			cp.Assigned)
+	}
+	if !reflect.DeepEqual(cp.UnAssigned, expectUnassigned) {
+		return fmt.Errorf("fake cloud provider unassigned missmatch, expect %v, real %v", expectAssigned,
+			cp.Assigned)
+	}
+	return nil
+}
+
+func checkBinding(fipPlugin *FloatingIPPlugin, pod *corev1.Pod, expectCniArgs *constant.CniArgs,
+	expectNode string) error {
+	actualBinding, err := fipPlugin.PluginFactoryArgs.Client.CoreV1().Pods(pod.Namespace).(*fakeV1.FakePods).
+		GetBinding(pod.GetName())
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(expectCniArgs)
+	if err != nil {
+		return err
+	}
+	expect := &corev1.Binding{
+		ObjectMeta: v1.ObjectMeta{
+			Namespace: pod.Namespace, Name: pod.Name,
+			Annotations: cniArgsAnnotation(string(data))},
+		Target: corev1.ObjectReference{
+			Kind: "Node",
+			Name: expectNode,
+		},
+	}
+	if !reflect.DeepEqual(expect, actualBinding) {
+		return fmt.Errorf("binding did not match expectation, expect %v, actual %v", expect, actualBinding)
+	}
+	return nil
+}
+
+func checkByKeyAndIPRanges(fipPlugin *FloatingIPPlugin, key string, ipranges [][]nets.IPRange,
+	expectIP ...string) ([]*floatingip.FloatingIPInfo, error) {
+	fipInfos, err := fipPlugin.ipam.ByKeyAndIPRanges(key, ipranges)
+	if err != nil {
+		return nil, err
+	}
+	realIPs := sets.NewString()
+	for i := range fipInfos {
+		if fipInfos[i] != nil {
+			realIPs.Insert(fipInfos[i].IPInfo.IP.IP.String())
+		}
+	}
+	realIPList := realIPs.List()
+	if len(realIPList) != len(expectIP) {
+		return nil, fmt.Errorf("expect %v, real %v", expectIP, realIPList)
+	}
+	for i := range expectIP {
+		if expectIP[i] != realIPList[i] {
+			return nil, fmt.Errorf("expect %v, real %v", expectIP, realIPList)
+		}
+	}
+	return fipInfos, nil
 }

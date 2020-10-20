@@ -144,7 +144,7 @@ func (c *PoolController) preAllocateIP(req *restful.Request, resp *restful.Respo
 		httputil.InternalError(resp, err)
 		return
 	}
-	subnetSet, err := c.IPAM.NodeSubnetsByKeyAndIPRanges("", nil)
+	subnetSet, err := c.IPAM.NodeSubnetsByIPRanges(nil)
 	if err != nil {
 		httputil.InternalError(resp, err)
 		return

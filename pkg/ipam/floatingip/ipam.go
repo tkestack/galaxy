@@ -44,6 +44,7 @@ type IPAM interface {
 	// AllocateInSubnet allocate subnet of IPs.
 	AllocateInSubnet(string, *net.IPNet, Attr) (net.IP, error)
 	// AllocateInSubnetsAndIPRange allocates an ip for each ip range array of the input node subnet.
+	// It guarantees allocating all ips or no ips.
 	AllocateInSubnetsAndIPRange(string, *net.IPNet, [][]nets.IPRange, Attr) ([]net.IP, error)
 	// AllocateInSubnetWithKey allocate a floatingIP in given subnet and key.
 	AllocateInSubnetWithKey(oldK, newK, subnet string, attr Attr) error
@@ -59,16 +60,19 @@ type IPAM interface {
 	// ByIP transform a given IP to FloatingIP struct.
 	ByIP(net.IP) (FloatingIP, error)
 	// ByPrefix filter floatingIPs by prefix key.
-	ByPrefix(string) ([]FloatingIP, error)
+	ByPrefix(string) ([]*FloatingIPInfo, error)
 	// ByKeyword returns floatingIP set by a given keyword.
 	ByKeyword(string) ([]FloatingIP, error)
-	// ByKeyAndIPRanges finds an ip for each iprange array by key, and returns all fips
+	// ByKeyAndIPRanges finds an allocated ip for each []nets.IPRange by key.
+	// If input [][]nets.IPRange is nil or empty, it finds all allocated ips by key.
+	// Otherwise, it always return the same size of []*FloatingIPInfo as [][]nets.IPRange, the element of
+	// []*FloatingIPInfo may be nil when it can't find an allocated ip for the same index of []iprange.
 	ByKeyAndIPRanges(string, [][]nets.IPRange) ([]*FloatingIPInfo, error)
 	// NodeSubnets returns node's subnet.
 	NodeSubnet(net.IP) *net.IPNet
-	// NodeSubnetsByKeyAndIPRanges finds an ip for each iprange array by key, and returns their intersection
+	// NodeSubnetsByIPRanges finds an unallocated ip for each []nets.IPRange, and returns their intersection
 	// node subnets.
-	NodeSubnetsByKeyAndIPRanges(key string, ipranges [][]nets.IPRange) (sets.String, error)
+	NodeSubnetsByIPRanges(ipranges [][]nets.IPRange) (sets.String, error)
 	// Name returns IPAM's name.
 	Name() string
 	// implements metrics Collector interface
@@ -78,5 +82,6 @@ type IPAM interface {
 // FloatingIPInfo is floatingIP information
 type FloatingIPInfo struct {
 	IPInfo constant.IPInfo
-	FIP    FloatingIP
+	FloatingIP
+	NodeSubnets sets.String
 }

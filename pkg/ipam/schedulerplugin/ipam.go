@@ -79,7 +79,7 @@ func (p *FloatingIPPlugin) getAvailableSubnet(keyObj *util.KeyObj, policy consta
 			return nil, false, fmt.Errorf("request ip ranges for deployment pod with release " +
 				"policy other than ReleasePolicyPodDelete is not supported")
 		}
-		var ips []floatingip.FloatingIP
+		var ips []*floatingip.FloatingIPInfo
 		poolPrefix := keyObj.PoolPrefix()
 		poolAppPrefix := keyObj.PoolAppPrefix()
 		ips, err = p.ipam.ByPrefix(poolPrefix)
@@ -100,7 +100,7 @@ func (p *FloatingIPPlugin) getAvailableSubnet(keyObj *util.KeyObj, policy consta
 					}
 				}
 			} else {
-				unusedSubnetSet.Insert(ip.Subnets.UnsortedList()...)
+				unusedSubnetSet.Insert(ip.NodeSubnets.UnsortedList()...)
 			}
 		}
 		glog.V(4).Infof("keyObj %v, unusedSubnetSet %v, usedCount %d, replicas %d, isPoolSizeDefined %v", keyObj,
@@ -117,7 +117,7 @@ func (p *FloatingIPPlugin) getAvailableSubnet(keyObj *util.KeyObj, policy consta
 			return unusedSubnetSet, true, nil
 		}
 	}
-	if subnets, err = p.ipam.NodeSubnetsByKeyAndIPRanges("", ipranges); err != nil {
+	if subnets, err = p.ipam.NodeSubnetsByIPRanges(ipranges); err != nil {
 		err = fmt.Errorf("failed to query allocatable subnet: %v", err)
 		return
 	}
@@ -132,7 +132,7 @@ func (p *FloatingIPPlugin) releaseIP(key string, reason string) error {
 	}
 	m := map[string]string{}
 	for i := range ipInfos {
-		m[ipInfos[i].FIP.IP.String()] = ipInfos[i].FIP.Key
+		m[ipInfos[i].IP.String()] = ipInfos[i].Key
 	}
 	released, unreleased, err := p.ipam.ReleaseIPs(m)
 	if err != nil {

@@ -77,6 +77,11 @@ func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlu
 	if err := drainNode(fipPlugin, subnet, nil); err != nil {
 		t.Fatal(err)
 	}
+	for i := range objs {
+		if node, ok := objs[i].(*corev1.Node); ok {
+			nodes = append(nodes, *node)
+		}
+	}
 	return fipPlugin, stopChan, nodes
 }
 

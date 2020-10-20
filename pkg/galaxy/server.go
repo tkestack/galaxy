@@ -217,11 +217,9 @@ func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]
 	if err != nil {
 		return nil, err
 	}
-	if commonArgs, exist := extendedCNIArgs[constant.CommonCNIArgsKey]; exist {
-		for i := range networkInfos {
-			for k, v := range commonArgs {
-				networkInfos[i].Args[k] = string([]byte(v))
-			}
+	for i := range networkInfos {
+		for k, v := range extendedCNIArgs {
+			networkInfos[i].Args[k] = string(v)
 		}
 	}
 	glog.V(4).Infof("pod %s_%s networkInfo %v", pod.Name, pod.Namespace, networkInfos)
@@ -263,7 +261,7 @@ func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Resul
 }
 
 // parseExtendedCNIArgs parses extended cni args from pod's annotation
-func parseExtendedCNIArgs(pod *corev1.Pod) (map[string]map[string]json.RawMessage, error) {
+func parseExtendedCNIArgs(pod *corev1.Pod) (map[string]json.RawMessage, error) {
 	if pod.Annotations == nil {
 		return nil, nil
 	}
@@ -271,11 +269,15 @@ func parseExtendedCNIArgs(pod *corev1.Pod) (map[string]map[string]json.RawMessag
 	if args == "" {
 		return nil, nil
 	}
-	argsMap := map[string]map[string]json.RawMessage{}
-	if err := json.Unmarshal([]byte(args), &argsMap); err != nil {
+	// CniArgs is the cni args in pod annotation
+	var cniArgs struct {
+		// Common is the common args for cni plugins to setup network
+		Common map[string]json.RawMessage `json:"common"`
+	}
+	if err := json.Unmarshal([]byte(args), &cniArgs); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cni args %s: %v", args, err)
 	}
-	return argsMap, nil
+	return cniArgs.Common, nil
 }
 
 func (g *Galaxy) setupIPtables() error {

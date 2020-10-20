@@ -151,14 +151,14 @@ type filterCase struct {
 	testPod                       *corev1.Pod
 	expectErr                     error
 	expectFiltererd, expectFailed []string
-	preHook                       func() error
+	preHook                       func(*filterCase) error
 	postHook                      func() error
 }
 
 // #lizard forgives
 func checkFilterCase(fipPlugin *FloatingIPPlugin, testCase filterCase, nodes []corev1.Node) error {
 	if testCase.preHook != nil {
-		if err := testCase.preHook(); err != nil {
+		if err := testCase.preHook(&testCase); err != nil {
 			return fmt.Errorf("preHook failed: %v", err)
 		}
 	}
@@ -200,7 +200,7 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 		{
 			// test bind gets the right key, i.e. dp_ns1_dp_dp-xxx-yyy, and filter gets reserved node
 			testPod: pod, expectFiltererd: []string{node4}, expectFailed: []string{drainedNode, nodeHasNoIP, node3},
-			preHook: func() error {
+			preHook: func(*filterCase) error {
 				return fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"),
 					floatingip.Attr{Policy: constant.ReleasePolicyNever})
 			},
@@ -208,7 +208,7 @@ func TestFilterForDeploymentIPPool(t *testing.T) {
 		{
 			// test unbind gets the right key, i.e. pool__pool1_, and filter on pod2 gets reserved node and key is updating to pod2, i.e. dp_ns1_dp2_dp2-abc-def
 			testPod: pod2, expectFiltererd: []string{node4}, expectFailed: []string{drainedNode, nodeHasNoIP, node3},
-			preHook: func() error {
+			preHook: func(*filterCase) error {
 				// because replicas = 1, ip will be reserved
 				if err := fipPlugin.unbind(pod); err != nil {
 					t.Fatal(err)
@@ -276,4 +276,84 @@ func checkFailed(realFailed schedulerapi.FailedNodesMap, failed ...string) error
 		}
 	}
 	return nil
+}
+
+func TestFilterRequestIPRange(t *testing.T) {
+	// node3 can allocate 10.49.27.0/24
+	// node5 can allocate 10.49.27.0/24, 10.0.80.0/24, 10.0.81.0/24
+	// node6 can allocate 10.0.80.0/24
+	n5, n6 := CreateNode("node5", nil, "10.49.28.3"), CreateNode("node6", nil, "10.49.29.3")
+	node5, node6 := n5.Name, n6.Name
+	fipPlugin, stopChan, nodes := createPluginTestNodes(t, &n5, &n6)
+	defer func() { stopChan <- struct{}{} }()
+	for i, testCase := range []filterCase{
+		{
+			testPod: CreateStatefulSetPod("pod1-0", "ns1",
+				cniArgsAnnotation(`{"request_ip_range":[["10.49.27.205"],["10.49.27.216~10.49.27.218"]]}`)),
+			expectFiltererd: []string{node3},
+			expectFailed:    []string{drainedNode, nodeHasNoIP, node4, node5, node6},
+		},
+		// create a pod request for two ips, only nodes in 10.49.28.0/24() can meet the requests
+		{
+			testPod: CreateStatefulSetPod("pod1-0", "ns1",
+				cniArgsAnnotation(`{"request_ip_range":[["10.0.80.2~10.0.80.4"],["10.0.81.2"]]}`)),
+			expectFiltererd: []string{node5},
+			expectFailed:    []string{drainedNode, nodeHasNoIP, node3, node4, node6},
+		},
+		// create a pod request for 10.0.80.2~10.0.80.4, both node5 and node6 meet the requests
+		{
+			testPod: CreateStatefulSetPod("pod1-0", "ns1",
+				cniArgsAnnotation(`{"request_ip_range":[["10.0.80.2~10.0.80.4"]]}`)),
+			expectFiltererd: []string{node5, node6},
+			expectFailed:    []string{drainedNode, nodeHasNoIP, node3, node4},
+		},
+		// create a pod request for two ips, 10.49.27.205 and one of 10.0.80.2~10.0.80.4, no node meet the requests
+		{
+			testPod: CreateStatefulSetPod("pod1-0", "ns1",
+				cniArgsAnnotation(`{"request_ip_range":[["10.49.27.205"],["10.0.80.2~10.0.80.4"]]}`)),
+			expectFiltererd: []string{},
+			expectFailed:    []string{drainedNode, nodeHasNoIP, node3, node4, node5, node6},
+		},
+		// create a pod request for 10.49.27.205 or 10.0.80.2~10.0.80.4, node3, node5, node6 meet the requests
+		{
+			testPod: CreateStatefulSetPod("pod1-0", "ns1",
+				cniArgsAnnotation(`{"request_ip_range":[["10.49.27.205","10.0.80.2~10.0.80.4"]]}`)),
+			expectFiltererd: []string{node3, node5, node6},
+			expectFailed:    []string{drainedNode, nodeHasNoIP, node4},
+		},
+		// TODO allocates multiple ips in the overlapped ip range
+		//{
+		//	testPod: CreateStatefulSetPod("pod1-0", "ns1",
+		//		cniArgsAnnotation(`{"request_ip_range":[["10.49.27.205","10.0.80.2~10.0.80.4"],["10.49.27.205","10.0.80.2~10.0.80.4"]]}`)),
+		//	expectFiltererd: []string{node5, node6},
+		//	expectFailed:    []string{drainedNode, nodeHasNoIP, node3, node4},
+		//},
+		{
+			testPod: CreateStatefulSetPod("pod1-0", "ns1",
+				cniArgsAnnotation(`{"request_ip_range":[["10.49.27.216~10.49.27.218","10.0.80.2~10.0.80.4"],["10.49.27.216~10.49.27.218","10.0.80.2~10.0.80.4"]]}`)),
+			expectFiltererd: []string{node3, node5, node6},
+			expectFailed:    []string{drainedNode, nodeHasNoIP, node4},
+		},
+		{
+			testPod: CreateStatefulSetPod("pod1-0", "ns1",
+				cniArgsAnnotation(`{"request_ip_range":[["10.49.27.216~10.49.27.218","10.0.80.2~10.0.80.4"],["10.49.27.216~10.49.27.218","10.0.80.2~10.0.80.4"]]}`)),
+			preHook: func(fc *filterCase) error {
+				podKey, _ := schedulerplugin_util.FormatKey(fc.testPod)
+				if _, err := fipPlugin.allocateIP(podKey.KeyInDB, node6, fc.testPod); err != nil {
+					t.Fatal(err)
+				}
+				return nil
+			},
+			expectFiltererd: []string{node5, node6},
+			expectFailed:    []string{drainedNode, nodeHasNoIP, node3, node4},
+		},
+	} {
+		if err := checkFilterCase(fipPlugin, testCase, nodes); err != nil {
+			t.Fatalf("case %d: %v", i, err)
+		}
+	}
+}
+
+func cniArgsAnnotation(poolName string) map[string]string {
+	return map[string]string{constant.ExtendedCNIArgsAnnotation: poolName}
 }

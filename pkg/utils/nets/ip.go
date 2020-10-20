@@ -149,6 +149,22 @@ func ParseIPRange(ipr string) *IPRange {
 	}
 }
 
+func (ipr IPRange) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ipr.String())
+}
+
+func (ipr *IPRange) UnmarshalJSON(data []byte) error {
+	if len(data) < 3 {
+		return fmt.Errorf("bad IPRange format %s", string(data))
+	}
+	r := ParseIPRange(string(data[1 : len(data)-1]))
+	if r == nil {
+		return fmt.Errorf("bad IPRange format %s", string(data))
+	}
+	*ipr = *r
+	return nil
+}
+
 // SparseSubnet represents a sparse subnet
 type SparseSubnet struct {
 	IPRanges []IPRange  `json:"ranges"`

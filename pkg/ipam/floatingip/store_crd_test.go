@@ -24,7 +24,6 @@ import (
 	"time"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 )
@@ -37,7 +36,6 @@ func TestAddFloatingIPEventByUser(t *testing.T) {
 	fip := &FloatingIP{
 		IP:        net.ParseIP("10.49.27.205"),
 		Key:       "pod2",
-		Subnets:   sets.NewString("subnet1"),
 		Policy:    0,
 		UpdatedAt: time.Now(),
 	}
@@ -78,7 +76,7 @@ func waitFor(ipam *crdIpam, ip net.IP, key string, expectReserveLabel bool, expe
 		if hasReserveLabel != expectReserveLabel {
 			return false, fmt.Errorf("expect has reserve label %v, got %v", expectReserveLabel, hasReserveLabel)
 		}
-		subnetStr := strings.Join(searched.Subnets.List(), ",")
+		subnetStr := strings.Join(searched.pool.nodeSubnets.List(), ",")
 		if subnetStr != expectSubnetStr {
 			return false, fmt.Errorf("expect subnet %v, got %v", expectSubnetStr, subnetStr)
 		}

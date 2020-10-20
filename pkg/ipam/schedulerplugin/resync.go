@@ -47,9 +47,7 @@ type resyncObj struct {
 func (p *FloatingIPPlugin) resyncPod() error {
 	glog.V(4).Infof("resync pods+")
 	defer glog.V(4).Infof("resync pods-")
-	resyncMeta := &resyncMeta{
-		allocatedIPs: make(map[string]resyncObj),
-	}
+	resyncMeta := &resyncMeta{}
 	if err := p.fetchChecklist(resyncMeta); err != nil {
 		return err
 	}
@@ -58,7 +56,7 @@ func (p *FloatingIPPlugin) resyncPod() error {
 }
 
 type resyncMeta struct {
-	allocatedIPs map[string]resyncObj // allocated ips from galaxy pool
+	allocatedIPs []resyncObj // allocated ips from galaxy pool
 }
 
 func (p *FloatingIPPlugin) fetchChecklist(meta *resyncMeta) error {
@@ -79,14 +77,15 @@ func (p *FloatingIPPlugin) fetchChecklist(meta *resyncMeta) error {
 			glog.Warningf("unexpected key: %s", fip.Key)
 			continue
 		}
-		meta.allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
+		meta.allocatedIPs = append(meta.allocatedIPs, resyncObj{keyObj: keyObj, fip: fip.FloatingIP})
 	}
 	return nil
 }
 
 // #lizard forgives
 func (p *FloatingIPPlugin) resyncAllocatedIPs(meta *resyncMeta) {
-	for key, obj := range meta.allocatedIPs {
+	for _, obj := range meta.allocatedIPs {
+		key := obj.keyObj.KeyInDB
 		func() {
 			defer p.lockPod(obj.keyObj.PodName, obj.keyObj.Namespace)()
 			if p.podRunning(obj.keyObj.PodName, obj.keyObj.Namespace, obj.fip.PodUid) {

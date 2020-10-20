@@ -29,6 +29,7 @@ import (
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	"tkestack.io/galaxy/pkg/ipam/metrics"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
+	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 // Filter marks nodes which have no available ips as FailedNodes
@@ -64,7 +65,8 @@ func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev
 		for i := range filteredNodes {
 			nodeNames[i] = filteredNodes[i].Name
 		}
-		glog.V(5).Infof("filtered nodes %v failed nodes %v", nodeNames, failedNodesMap)
+		glog.V(5).Infof("filtered nodes %v failed nodes %v for %s_%s", nodeNames, failedNodesMap,
+			pod.Namespace, pod.Name)
 	}
 	metrics.ScheduleLatency.WithLabelValues("filter").Observe(time.Since(start).Seconds())
 	return filteredNodes, failedNodesMap, nil
@@ -80,14 +82,42 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 	if err != nil {
 		return nil, err
 	}
+	ipranges := cniArgs.RequestIPRange
 	// first check if exists an already allocated ip for this pod
-	subnets, err := p.ipam.NodeSubnetsByKeyAndIPRanges(keyObj.KeyInDB, cniArgs.RequestIPRange)
+	ipInfos, err := p.ipam.ByKeyAndIPRanges(keyObj.KeyInDB, ipranges)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query by key %s: %v", keyObj.KeyInDB, err)
 	}
-	if len(subnets) > 0 {
-		glog.V(3).Infof("%s already have an allocated ip in subnets %v", keyObj.KeyInDB, subnets)
-		return subnets, nil
+	allocatedSubnets := sets.NewString()
+	if len(ipranges) == 0 {
+		if len(ipInfos) > 0 {
+			glog.V(3).Infof("%s already have an allocated ip %s in subnets %v", keyObj.KeyInDB,
+				ipInfos[0].IP.String(), ipInfos[0].NodeSubnets)
+			return ipInfos[0].NodeSubnets, nil
+		}
+	} else {
+		var unallocatedIPRange [][]nets.IPRange // those does not have allocated ips
+		var ips []string
+		for i := range ipInfos {
+			if ipInfos[i] == nil {
+				unallocatedIPRange = append(unallocatedIPRange, ipranges[i])
+			} else {
+				ips = append(ips, ipInfos[i].IP.String())
+				if allocatedSubnets.Len() == 0 {
+					allocatedSubnets.Insert(ipInfos[i].NodeSubnets.UnsortedList()...)
+				} else {
+					allocatedSubnets = allocatedSubnets.Intersection(ipInfos[i].NodeSubnets)
+				}
+			}
+		}
+		if len(unallocatedIPRange) == 0 {
+			glog.V(3).Infof("%s already have allocated ips %v with intersection subnets %v",
+				keyObj.KeyInDB, ips, allocatedSubnets)
+			return allocatedSubnets, nil
+		}
+		glog.V(3).Infof("%s have allocated ips %v with intersection subnets %v, but also unallocated "+
+			"ip ranges %v", keyObj.KeyInDB, ips, allocatedSubnets, unallocatedIPRange)
+		ipranges = unallocatedIPRange
 	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)
 	if !keyObj.Deployment() && !keyObj.StatefulSet() && !keyObj.TApp() && policy != constant.ReleasePolicyPodDelete {
@@ -103,9 +133,12 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		// Lock to make checking available subnets and allocating reserved ip atomic
 		defer p.LockDpPool(keyObj.PoolPrefix())()
 	}
-	subnetSet, reserve, err := p.getAvailableSubnet(keyObj, policy, replicas, isPoolSizeDefined, cniArgs.RequestIPRange)
+	subnetSet, reserve, err := p.getAvailableSubnet(keyObj, policy, replicas, isPoolSizeDefined, ipranges)
 	if err != nil {
 		return nil, err
+	}
+	if allocatedSubnets.Len() > 0 {
+		subnetSet = subnetSet.Intersection(allocatedSubnets)
 	}
 	if (reserve || isPoolSizeDefined) && subnetSet.Len() > 0 {
 		// Since bind is in a different goroutine than filter in scheduler, we can't ensure this pod got binded
