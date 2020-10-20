@@ -39,7 +39,7 @@ func TestDpReleasePolicy(t *testing.T) {
 	} {
 		pod := CreateDeploymentPod("dp-xxx-yy", "ns1", testCase.annotations)
 		keyObj, _ := util.FormatKey(pod)
-		dp := createDeployment(pod.ObjectMeta, testCase.replicas)
+		dp := CreateDeployment(pod.ObjectMeta, testCase.replicas)
 		func() {
 			fipPlugin, stopChan, _ := createPluginTestNodes(t, pod, dp)
 			defer func() { stopChan <- struct{}{} }()
