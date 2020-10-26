@@ -322,35 +322,39 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 
 // listIPs lists ips from ipams
 func listIPs(keyword string, ipam floatingip.IPAM, fuzzyQuery bool) ([]FloatingIP, error) {
-	var fips []floatingip.FloatingIP
-	var err error
+	var result []FloatingIP
 	if fuzzyQuery {
-		fips, err = ipam.ByKeyword(keyword)
+		fips, err := ipam.ByKeyword(keyword)
+		if err != nil {
+			return nil, err
+		}
+		for i := range fips {
+			result = append(result, convert(&fips[i]))
+		}
 	} else {
-		fips, err = ipam.ByPrefix(keyword)
+		fips, err := ipam.ByPrefix(keyword)
+		if err != nil {
+			return nil, err
+		}
+		for i := range fips {
+			result = append(result, convert(&fips[i].FloatingIP))
+		}
 	}
-	if err != nil {
-		return nil, err
-	}
-	return transform(fips), nil
+	return result, nil
 }
 
-// transform converts `floatingip.FloatingIP` slice to `FloatingIP` slice
-func transform(fips []floatingip.FloatingIP) []FloatingIP {
-	var res []FloatingIP
-	for i := range fips {
-		keyObj := util.ParseKey(fips[i].Key)
-		res = append(res, FloatingIP{IP: fips[i].IP.String(),
-			Namespace:  keyObj.Namespace,
-			AppName:    keyObj.AppName,
-			PodName:    keyObj.PodName,
-			PoolName:   keyObj.PoolName,
-			AppType:    toAppType(keyObj.AppTypePrefix),
-			Policy:     fips[i].Policy,
-			UpdateTime: fips[i].UpdatedAt,
-			labels:     fips[i].Labels})
-	}
-	return res
+// convert converts `floatingip.FloatingIP` to `FloatingIP`
+func convert(fip *floatingip.FloatingIP) FloatingIP {
+	keyObj := util.ParseKey(fip.Key)
+	return FloatingIP{IP: fip.IP.String(),
+		Namespace:  keyObj.Namespace,
+		AppName:    keyObj.AppName,
+		PodName:    keyObj.PodName,
+		PoolName:   keyObj.PoolName,
+		AppType:    toAppType(keyObj.AppTypePrefix),
+		Policy:     fip.Policy,
+		UpdateTime: fip.UpdatedAt,
+		labels:     fip.Labels}
 }
 
 // batchReleaseIPs release ips from ipams

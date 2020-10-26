@@ -30,22 +30,9 @@ const (
 
 	MultusCNIAnnotation = "k8s.v1.cni.cncf.io/networks"
 
-	CommonCNIArgsKey = "common"
-
 	// For fip crd object which has this label, it's reserved by admin manually. IPAM will not allocate it to pods.
 	ReserveFIPLabel = "reserved"
-)
 
-// ParseExtendedCNIArgs parses extended cni args from pod annotation
-func ParseExtendedCNIArgs(args string) (map[string]map[string]json.RawMessage, error) {
-	argsMap := map[string]map[string]json.RawMessage{}
-	if err := json.Unmarshal([]byte(args), &argsMap); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal %s value %s: %v", ExtendedCNIArgsAnnotation, args, err)
-	}
-	return argsMap, nil
-}
-
-const (
 	IPInfosKey = "ipinfos"
 )
 
@@ -54,38 +41,6 @@ type IPInfo struct {
 	IP      *nets.IPNet `json:"ip"`
 	Vlan    uint16      `json:"vlan"`
 	Gateway net.IP      `json:"gateway"`
-}
-
-// FormatIPInfo formats ipInfos as extended CNI Args annotation value
-func FormatIPInfo(ipInfos []IPInfo) (string, error) {
-	data, err := json.Marshal(ipInfos)
-	if err != nil {
-		return "", err
-	}
-	raw := json.RawMessage(data)
-	str, err := json.Marshal(map[string]map[string]*json.RawMessage{CommonCNIArgsKey: {IPInfosKey: &raw}})
-	return string(str), err
-}
-
-// ParseIPInfo pareses ipInfo from annotation
-func ParseIPInfo(str string) ([]IPInfo, error) {
-	m := map[string]map[string]*json.RawMessage{}
-	if err := json.Unmarshal([]byte(str), &m); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal %s value %s: %v", ExtendedCNIArgsAnnotation, str, err)
-	}
-	commonMap := m[CommonCNIArgsKey]
-	if commonMap == nil {
-		return []IPInfo{}, nil
-	}
-	ipInfoStr := commonMap[IPInfosKey]
-	if ipInfoStr == nil {
-		return []IPInfo{}, nil
-	}
-	var ipInfos []IPInfo
-	if err := json.Unmarshal([]byte(*ipInfoStr), &ipInfos); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal %s value %s as common/ipInfos: %v", ExtendedCNIArgsAnnotation, str, err)
-	}
-	return ipInfos, nil
 }
 
 // ReleasePolicy defines floatingip release policy
@@ -124,3 +79,39 @@ const (
 	NameSpace    = "floating-ip"
 	IpType       = "ipType"
 )
+
+// CniArgs is the cni args in pod annotation
+type CniArgs struct {
+	// RequestIPRange is the requested ip candidates to allocate, one ip per []nets.IPRange
+	RequestIPRange [][]nets.IPRange `json:"request_ip_range,omitempty"`
+	// Common is the common args for cni plugins to setup network
+	Common CommonCniArgs `json:"common"`
+}
+
+type CommonCniArgs struct {
+	IPInfos []IPInfo `json:"ipinfos,omitempty"`
+}
+
+// UnmarshalCniArgs unmarshal cni args from input str
+func UnmarshalCniArgs(str string) (*CniArgs, error) {
+	if str == "" {
+		return nil, nil
+	}
+	var cniArgs CniArgs
+	if err := json.Unmarshal([]byte(str), &cniArgs); err != nil {
+		return nil, fmt.Errorf("unmarshal pod cni args: %v", err)
+	}
+	return &cniArgs, nil
+}
+
+// MarshalCniArgs marshal cni args of the given ipInfos
+func MarshalCniArgs(ipInfos []IPInfo) (string, error) {
+	cniArgs := CniArgs{Common: CommonCniArgs{
+		IPInfos: ipInfos,
+	}}
+	data, err := json.Marshal(cniArgs)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}

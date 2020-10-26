@@ -47,9 +47,7 @@ type resyncObj struct {
 func (p *FloatingIPPlugin) resyncPod() error {
 	glog.V(4).Infof("resync pods+")
 	defer glog.V(4).Infof("resync pods-")
-	resyncMeta := &resyncMeta{
-		allocatedIPs: make(map[string]resyncObj),
-	}
+	resyncMeta := &resyncMeta{}
 	if err := p.fetchChecklist(resyncMeta); err != nil {
 		return err
 	}
@@ -58,7 +56,7 @@ func (p *FloatingIPPlugin) resyncPod() error {
 }
 
 type resyncMeta struct {
-	allocatedIPs map[string]resyncObj // allocated ips from galaxy pool
+	allocatedIPs []resyncObj // allocated ips from galaxy pool
 }
 
 func (p *FloatingIPPlugin) fetchChecklist(meta *resyncMeta) error {
@@ -79,14 +77,15 @@ func (p *FloatingIPPlugin) fetchChecklist(meta *resyncMeta) error {
 			glog.Warningf("unexpected key: %s", fip.Key)
 			continue
 		}
-		meta.allocatedIPs[fip.Key] = resyncObj{keyObj: keyObj, fip: fip}
+		meta.allocatedIPs = append(meta.allocatedIPs, resyncObj{keyObj: keyObj, fip: fip.FloatingIP})
 	}
 	return nil
 }
 
 // #lizard forgives
 func (p *FloatingIPPlugin) resyncAllocatedIPs(meta *resyncMeta) {
-	for key, obj := range meta.allocatedIPs {
+	for _, obj := range meta.allocatedIPs {
+		key := obj.keyObj.KeyInDB
 		func() {
 			defer p.lockPod(obj.keyObj.PodName, obj.keyObj.Namespace)()
 			if p.podRunning(obj.keyObj.PodName, obj.keyObj.Namespace, obj.fip.PodUid) {
@@ -197,15 +196,20 @@ func (p *FloatingIPPlugin) syncPodIP(pod *corev1.Pod) error {
 		glog.V(5).Infof("sync pod %s/%s ip formatKey with error %v", pod.Namespace, pod.Name, err)
 		return nil
 	}
-	ipInfos, err := constant.ParseIPInfo(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
+	cniArgs, err := constant.UnmarshalCniArgs(pod.Annotations[constant.ExtendedCNIArgsAnnotation])
 	if err != nil {
 		return err
 	}
-	if len(ipInfos) == 0 || ipInfos[0].IP == nil {
-		// should not happen
-		return fmt.Errorf("empty ipinfo for pod %s", keyObj.KeyInDB)
+	ipInfos := cniArgs.Common.IPInfos
+	for i := range ipInfos {
+		if ipInfos[i].IP == nil || ipInfos[i].IP.IP == nil {
+			continue
+		}
+		if err := p.syncIP(keyObj.KeyInDB, ipInfos[i].IP.IP, pod); err != nil {
+			glog.Warningf("sync pod %s ip %s: %v", keyObj.KeyInDB, ipInfos[i].IP.IP.String(), err)
+		}
 	}
-	return p.syncIP(keyObj.KeyInDB, ipInfos[0].IP.IP, pod)
+	return nil
 }
 
 func (p *FloatingIPPlugin) syncIP(key string, ip net.IP, pod *corev1.Pod) error {

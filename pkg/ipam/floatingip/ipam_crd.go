@@ -105,7 +105,7 @@ func (ci *crdIpam) AllocateSpecificIP(key string, ip net.IP, attr Attr) error {
 	if !find {
 		return fmt.Errorf("failed to find floating ip by %s in cache", ipStr)
 	}
-	allocated := New(ip, spec.Subnets, key, &attr, time.Now())
+	allocated := New(spec.pool, ip, key, &attr, time.Now())
 	if err := ci.createFloatingIP(allocated); err != nil {
 		glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
 		return err
@@ -128,10 +128,10 @@ func (ci *crdIpam) AllocateInSubnet(key string, nodeSubnet *net.IPNet, attr Attr
 	nodeSubnetStr := nodeSubnet.String()
 	for k, v := range ci.unallocatedFIPs {
 		//find an unallocated fip, then use it
-		if v.Subnets.Has(nodeSubnetStr) {
+		if v.pool.nodeSubnets.Has(nodeSubnetStr) {
 			ipStr = k
 			// we never updates ip or subnet object, it's ok to share these objs.
-			allocated := New(v.IP, v.Subnets, key, &attr, time.Now())
+			allocated := New(v.pool, v.IP, key, &attr, time.Now())
 			if err := ci.createFloatingIP(allocated); err != nil {
 				glog.Errorf("failed to create floatingIP %s: %v", ipStr, err)
 				return nil, err
@@ -157,7 +157,7 @@ func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, attr Attr)
 	)
 	//find latest floatingIP by updateTime.
 	for _, v := range ci.allocatedFIPs {
-		if v.Key == oldK && v.Subnets.Has(subnet) {
+		if v.Key == oldK && v.pool.nodeSubnets.Has(subnet) {
 			if v.UpdatedAt.UnixNano() > recordTs {
 				latest = v
 				recordTs = v.UpdatedAt.UnixNano()
@@ -181,23 +181,24 @@ func (ci *crdIpam) AllocateInSubnetWithKey(oldK, newK, subnet string, attr Attr)
 func (ci *crdIpam) ReserveIP(oldK, newK string, attr Attr) (bool, error) {
 	ci.cacheLock.Lock()
 	defer ci.cacheLock.Unlock()
+	date := time.Now()
+	var reserved bool
 	for k, v := range ci.allocatedFIPs {
 		if v.Key == oldK {
 			if oldK == newK && v.PodUid == attr.Uid && v.NodeName == attr.NodeName {
 				// nothing changed
-				return false, nil
+				continue
 			}
 			attr.Policy = constant.ReleasePolicy(v.Policy)
-			date := time.Now()
 			if err := ci.updateFloatingIP(v.CloneWith(newK, &attr, date)); err != nil {
 				glog.Errorf("failed to update floatingIP %s: %v", k, err)
 				return false, err
 			}
 			v.Assign(newK, &attr, date)
-			return true, nil
+			reserved = true
 		}
 	}
-	return false, fmt.Errorf("failed to find floatIP by key %s", oldK)
+	return reserved, nil
 }
 
 // UpdateAttr update floatingIP's release policy and attr according to ip and key
@@ -244,32 +245,12 @@ func (ci *crdIpam) Release(key string, ip net.IP) error {
 func (ci *crdIpam) First(key string) (*FloatingIPInfo, error) {
 	ci.cacheLock.RLock()
 	defer ci.cacheLock.RUnlock()
-	var fip *FloatingIP
 	for _, spec := range ci.allocatedFIPs {
 		if spec.Key == key {
-			fip = spec
+			return ci.toFloatingIPInfo(spec), nil
 		}
 	}
-	if fip == nil {
-		return nil, nil
-	}
-	for _, fips := range ci.FloatingIPs {
-		if fips.Contains(fip.IP) {
-			ip := nets.IPNet(net.IPNet{
-				IP:   fip.IP,
-				Mask: fips.Mask,
-			})
-			return &FloatingIPInfo{
-				IPInfo: constant.IPInfo{
-					IP:      &ip,
-					Vlan:    fips.Vlan,
-					Gateway: fips.Gateway,
-				},
-				FIP: *fip,
-			}, nil
-		}
-	}
-	return nil, fmt.Errorf("could not find match floating ip config for ip %s", fip.IP.String())
+	return nil, nil
 }
 
 // ByIP transform a given IP to FloatingIP struct.
@@ -288,18 +269,18 @@ func (ci *crdIpam) ByIP(ip net.IP) (FloatingIP, error) {
 }
 
 // ByPrefix filter floatingIPs by prefix key.
-func (ci *crdIpam) ByPrefix(prefix string) ([]FloatingIP, error) {
-	var fips []FloatingIP
+func (ci *crdIpam) ByPrefix(prefix string) ([]*FloatingIPInfo, error) {
+	var fips []*FloatingIPInfo
 	ci.cacheLock.RLock()
 	defer ci.cacheLock.RUnlock()
 	for _, spec := range ci.allocatedFIPs {
 		if strings.HasPrefix(spec.Key, prefix) {
-			fips = append(fips, *spec)
+			fips = append(fips, ci.toFloatingIPInfo(spec))
 		}
 	}
 	if prefix == "" {
 		for _, spec := range ci.unallocatedFIPs {
-			fips = append(fips, *spec)
+			fips = append(fips, ci.toFloatingIPInfo(spec))
 		}
 	}
 	return fips, nil
@@ -319,11 +300,53 @@ func (ci *crdIpam) NodeSubnet(nodeIP net.IP) *net.IPNet {
 	return nil
 }
 
-func (ci *crdIpam) NodeSubnetsByKey(key string) (sets.String, error) {
-	if key == "" {
-		return ci.filterUnallocatedSubnet(), nil
+func (ci *crdIpam) NodeSubnetsByIPRanges(ipranges [][]nets.IPRange) (sets.String, error) {
+	subnetSet := sets.NewString()
+	insertSubnet := func(poolIndexSet sets.Int, subnetSet sets.String) {
+		for _, index := range poolIndexSet.UnsortedList() {
+			if index >= 0 && index <= len(ci.FloatingIPs)-1 {
+				subnetSet.Insert(ci.FloatingIPs[index].nodeSubnets.UnsortedList()...)
+			}
+		}
 	}
-	return ci.filterAllocatedSubnet(key), nil
+	ci.cacheLock.RLock()
+	defer ci.cacheLock.RUnlock()
+	if len(ipranges) == 0 {
+		poolIndexSet := sets.NewInt()
+		for _, val := range ci.unallocatedFIPs {
+			poolIndexSet.Insert(val.pool.index)
+		}
+		insertSubnet(poolIndexSet, subnetSet)
+		return subnetSet, nil
+	}
+	for _, ranges := range ipranges {
+		poolIndexSet := sets.NewInt()
+		walkIPRanges(ranges, func(ip net.IP) bool {
+			ipStr := ip.String()
+			if fip, ok := ci.unallocatedFIPs[ipStr]; !ok {
+				return false
+			} else {
+				poolIndexSet.Insert(fip.pool.index)
+			}
+			return false
+		})
+		// no ip left in this []nets.IPRange
+		if poolIndexSet.Len() == 0 {
+			glog.V(3).Infof("no enough ips for ip range %v", ranges)
+			return sets.NewString(), nil
+		}
+		if subnetSet.Len() == 0 {
+			insertSubnet(poolIndexSet, subnetSet)
+		} else {
+			partset := sets.NewString()
+			insertSubnet(poolIndexSet, partset)
+			subnetSet = subnetSet.Intersection(partset)
+		}
+	}
+	// TODO try to allocate to check if each subnet has enough ips when [][]nets.IPRange has overlap ranges
+	// e.g. if [][]nets.IPRange = [["10.0.0.1","10.0.1.1~10.0.1.3"]["10.0.0.1","10.0.1.1~10.0.1.3"]], we should
+	// return 10.0.1.0/24 and exclude 10.0.0.0/24
+	return subnetSet, nil
 }
 
 // Shutdown shutdowns IPAM.
@@ -354,13 +377,13 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
 		return err
 	}
 	glog.V(3).Infof("floating ip config %v", floatIPs)
-	nodeSubnets := make([]sets.String, len(floatIPs))
-	for i, fipConf := range floatIPs {
+	for index, fipConf := range floatIPs {
 		subnetSet := sets.NewString()
 		for i := range fipConf.NodeSubnets {
 			subnetSet.Insert(fipConf.NodeSubnets[i].String())
 		}
-		nodeSubnets[i] = subnetSet
+		fipConf.nodeSubnets = subnetSet
+		fipConf.index = index
 	}
 	var deletingIPs []string
 	tmpCacheAllocated := make(map[string]*FloatingIP)
@@ -368,20 +391,11 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
 	for _, ip := range ips.Items {
 		netIP := net.ParseIP(ip.Name)
 		found := false
-		for i, fipConf := range floatIPs {
+		for _, fipConf := range floatIPs {
 			if fipConf.IPNet().Contains(netIP) && fipConf.Contains(netIP) {
 				found = true
 				//ip in config, insert it into cache
-				tmpFip := &FloatingIP{
-					IP:     netIP,
-					Key:    ip.Spec.Key,
-					Policy: uint16(ip.Spec.Policy),
-					// Since subnets may change and for reserved fips crds created by user manually, subnets may not be
-					// correct, assign it to the latest config instead of crd value
-					// TODO we can delete subnets field from crd?
-					Subnets:   nodeSubnets[i],
-					UpdatedAt: ip.Spec.UpdateTime.Time,
-				}
+				tmpFip := New(fipConf, netIP, ip.Spec.Key, &Attr{Policy: ip.Spec.Policy}, ip.Spec.UpdateTime.Time)
 				if err := tmpFip.unmarshalAttr(ip.Spec.Attribute); err != nil {
 					glog.Error(err)
 				}
@@ -410,26 +424,15 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
 	now := time.Now()
 	// fresh unallocated floatIP
 	tmpCacheUnallocated := make(map[string]*FloatingIP)
-	for i, fipConf := range floatIPs {
-		subnetSet := nodeSubnets[i]
-		for _, ipr := range fipConf.IPRanges {
-			first := nets.IPToInt(ipr.First)
-			last := nets.IPToInt(ipr.Last)
-			for ; first <= last; first++ {
-				ip := nets.IntToIP(first)
-				ipStr := ip.String()
-				if _, contain := ci.allocatedFIPs[ipStr]; !contain {
-					tmpFip := &FloatingIP{
-						IP:        ip,
-						Key:       "",
-						Policy:    uint16(constant.ReleasePolicyPodDelete),
-						Subnets:   subnetSet,
-						UpdatedAt: now,
-					}
-					tmpCacheUnallocated[ipStr] = tmpFip
-				}
+	for _, fipConf := range floatIPs {
+		walkIPRanges(fipConf.IPRanges, func(ip net.IP) bool {
+			ipStr := ip.String()
+			if _, contain := ci.allocatedFIPs[ipStr]; !contain {
+				tmpFip := New(fipConf, ip, "", &Attr{Policy: constant.ReleasePolicyPodDelete}, now)
+				tmpCacheUnallocated[ipStr] = tmpFip
 			}
-		}
+			return false
+		})
 	}
 	ci.unallocatedFIPs = tmpCacheUnallocated
 	return nil
@@ -455,40 +458,12 @@ func (ci *crdIpam) syncCacheAfterDel(released *FloatingIP) {
 	return
 }
 
-func (ci *crdIpam) filterAllocatedSubnet(key string) sets.String {
-	//key would not be empty
-	subnetSet := sets.NewString()
-	ci.cacheLock.RLock()
-	defer ci.cacheLock.RUnlock()
-	for _, spec := range ci.allocatedFIPs {
-		if spec.Key == key {
-			subnetSet.Insert(spec.Subnets.UnsortedList()...)
-		}
-	}
-	return subnetSet
-}
-
-// Sometimes unallocated subnet(key equals "") is needed,
-// it will filter all subnet in unallocated floatingIP in cache
-func (ci *crdIpam) filterUnallocatedSubnet() sets.String {
-	subnetSet := sets.NewString()
-	ci.cacheLock.RLock()
-	for _, val := range ci.unallocatedFIPs {
-		subnetSet.Insert(val.Subnets.UnsortedList()...)
-	}
-	ci.cacheLock.RUnlock()
-	return subnetSet
-}
-
 // ByKeyword returns floatingIP set by a given keyword.
 func (ci *crdIpam) ByKeyword(keyword string) ([]FloatingIP, error) {
 	//not implement
 	var fips []FloatingIP
 	ci.cacheLock.RLock()
 	defer ci.cacheLock.RUnlock()
-	if ci.allocatedFIPs == nil {
-		return fips, nil
-	}
 	for _, spec := range ci.allocatedFIPs {
 		if strings.Contains(spec.Key, keyword) {
 			fips = append(fips, *spec)
@@ -569,5 +544,138 @@ func (ci *crdIpam) Collect(ch chan<- prometheus.Metric) {
 			"allocated", subnetStr, firstIP)
 		ch <- prometheus.MustNewConstMetric(ci.ipCounterDesc, prometheus.GaugeValue, float64(pool.Size()),
 			"total", subnetStr, firstIP)
+	}
+}
+
+// AllocateInSubnetsAndIPRange allocates an ip for each ip range array of the input node subnet.
+// It guarantees allocating all ips or no ips.
+// TODO Fix allocation for [][]nets.IPRange [["10.0.0.1~10.0.0.2"]["10.0.0.1"]]
+func (ci *crdIpam) AllocateInSubnetsAndIPRange(key string, nodeSubnet *net.IPNet, ipranges [][]nets.IPRange,
+	attr Attr) ([]net.IP, error) {
+	if nodeSubnet == nil {
+		// this should never happen
+		return nil, fmt.Errorf("nil nodeSubnet")
+	}
+	if len(ipranges) == 0 {
+		ip, err := ci.AllocateInSubnet(key, nodeSubnet, attr)
+		if err != nil {
+			return nil, err
+		}
+		return []net.IP{ip}, nil
+	}
+	ci.cacheLock.Lock()
+	defer ci.cacheLock.Unlock()
+	// pick ips to allocate, one per []nets.IPRange
+	var allocatedIPStrs []string
+	// allocatedIPSet is the allocated ips in the previous loop, to avoid count in duplicate ips
+	allocatedIPSet := sets.NewString()
+	for _, ranges := range ipranges {
+		var allocated bool
+		walkIPRanges(ranges, func(ip net.IP) bool {
+			ipStr := ip.String()
+			if fip, ok := ci.unallocatedFIPs[ipStr]; !ok || !fip.pool.nodeSubnets.Has(nodeSubnet.String()) ||
+				allocatedIPSet.Has(ipStr) {
+				return false
+			}
+			allocatedIPStrs = append(allocatedIPStrs, ipStr)
+			allocatedIPSet.Insert(ipStr)
+			allocated = true
+			return true
+		})
+		if !allocated {
+			glog.V(3).Infof("no enough ips to allocate for %s node subnet %s, ip range %v", key,
+				nodeSubnet.String(), ipranges)
+			return nil, ErrNoEnoughIP
+		}
+	}
+	var allocatedIPs []net.IP
+	var allocatedFips []*FloatingIP
+	// allocate all ips in crd before sync cache in memory
+	for i, allocatedIPStr := range allocatedIPStrs {
+		v := ci.unallocatedFIPs[allocatedIPStr]
+		// we never updates ip or subnet object, it's ok to share these objs.
+		allocated := New(v.pool, v.IP, key, &attr, time.Now())
+		if err := ci.createFloatingIP(allocated); err != nil {
+			glog.Errorf("failed to create floatingIP %s: %v", allocatedIPStr, err)
+			// rollback all allocated ips
+			for j := range allocatedIPStrs {
+				if j == i {
+					break
+				}
+				if err := ci.deleteFloatingIP(allocatedIPStrs[j]); err != nil {
+					glog.Errorf("failed to delete floatingIP %s: %v", allocatedIPStrs[j], err)
+				}
+			}
+			return nil, err
+		}
+		allocatedIPs = append(allocatedIPs, v.IP)
+		allocatedFips = append(allocatedFips, allocated)
+	}
+	// sync cache when crds created
+	for i := range allocatedFips {
+		ci.syncCacheAfterCreate(allocatedFips[i])
+	}
+	return allocatedIPs, nil
+}
+
+// ByKeyAndIPRanges finds an allocated ip for each []iprange by key.
+// If input [][]nets.IPRange is nil or empty, it finds all allocated ips by key.
+// Otherwise, it always return the same size of []*FloatingIPInfo as [][]nets.IPRange, the element of
+// []*FloatingIPInfo may be nil when it can't find an allocated ip for the same index of []iprange.
+func (ci *crdIpam) ByKeyAndIPRanges(key string, ipranges [][]nets.IPRange) ([]*FloatingIPInfo, error) {
+	ci.cacheLock.RLock()
+	defer ci.cacheLock.RUnlock()
+	var ipinfos []*FloatingIPInfo
+	if len(ipranges) != 0 {
+		ipinfos = make([]*FloatingIPInfo, len(ipranges))
+		for i, ranges := range ipranges {
+			walkIPRanges(ranges, func(ip net.IP) bool {
+				ipStr := ip.String()
+				fip, ok := ci.allocatedFIPs[ipStr]
+				if !ok || fip.Key != key {
+					return false
+				}
+				ipinfos[i] = ci.toFloatingIPInfo(fip)
+				return true
+			})
+		}
+	} else {
+		for _, fip := range ci.allocatedFIPs {
+			if fip.Key == key {
+				ipinfos = append(ipinfos, ci.toFloatingIPInfo(fip))
+			}
+		}
+	}
+	return ipinfos, nil
+}
+
+func (ci *crdIpam) toFloatingIPInfo(fip *FloatingIP) *FloatingIPInfo {
+	fipPool := fip.pool
+	ip := nets.IPNet(net.IPNet{
+		IP:   fip.IP,
+		Mask: fipPool.Mask,
+	})
+	return &FloatingIPInfo{
+		IPInfo: constant.IPInfo{
+			IP:      &ip,
+			Vlan:    fipPool.Vlan,
+			Gateway: fipPool.Gateway,
+		},
+		FloatingIP:  *fip,
+		NodeSubnets: sets.NewString(fipPool.nodeSubnets.UnsortedList()...),
+	}
+}
+
+// walkIPRanges walks all ips in the ranges, and calls f for each ip. If f returns true, walkIPRanges stops.
+func walkIPRanges(ranges []nets.IPRange, f func(ip net.IP) bool) {
+	for _, r := range ranges {
+		first := nets.IPToInt(r.First)
+		last := nets.IPToInt(r.Last)
+		for ; first <= last; first++ {
+			ip := nets.IntToIP(first)
+			if f(ip) {
+				return
+			}
+		}
 	}
 }

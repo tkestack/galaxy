@@ -84,7 +84,9 @@ func assign(spec *v1alpha1.FloatingIP, f *FloatingIP) error {
 		return err
 	}
 	spec.Spec.Attribute = string(data)
-	spec.Spec.Subnet = strings.Join(f.Subnets.List(), ",")
+	if f.pool != nil {
+		spec.Spec.Subnet = strings.Join(f.pool.nodeSubnets.List(), ",")
+	}
 	spec.Spec.UpdateTime = metav1.NewTime(f.UpdatedAt)
 	return nil
 }

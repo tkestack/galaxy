@@ -15,3 +15,38 @@
  * specific language governing permissions and limitations under the License.
  */
 package testing
+
+import (
+	"fmt"
+
+	"tkestack.io/galaxy/pkg/ipam/cloudprovider"
+	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
+)
+
+var _ cloudprovider.CloudProvider = &FakeCloudProvider{}
+
+// FakeCloudProvider is a fake cloud provider for testing
+type FakeCloudProvider struct {
+	Assigned   map[string]string // Assigned ipaddress to nodeName
+	UnAssigned map[string]string // UnAssigned ipaddress to nodeName
+}
+
+func NewFakeCloudProvider() *FakeCloudProvider {
+	return &FakeCloudProvider{Assigned: map[string]string{}, UnAssigned: map[string]string{}}
+}
+
+func (f *FakeCloudProvider) AssignIP(in *rpc.AssignIPRequest) (*rpc.AssignIPReply, error) {
+	if in == nil {
+		return nil, fmt.Errorf("nil request")
+	}
+	f.Assigned[in.IPAddress] = in.NodeName
+	return &rpc.AssignIPReply{Success: true}, nil
+}
+
+func (f *FakeCloudProvider) UnAssignIP(in *rpc.UnAssignIPRequest) (*rpc.UnAssignIPReply, error) {
+	if in == nil {
+		return nil, fmt.Errorf("nil request")
+	}
+	f.UnAssigned[in.IPAddress] = in.NodeName
+	return &rpc.UnAssignIPReply{Success: true}, nil
+}

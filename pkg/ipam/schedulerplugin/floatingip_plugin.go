@@ -25,7 +25,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	glog "k8s.io/klog"
 	"k8s.io/utils/keymutex"
@@ -33,10 +32,7 @@ import (
 	"tkestack.io/galaxy/pkg/api/galaxy/constant/utils"
 	"tkestack.io/galaxy/pkg/api/k8s/schedulerapi"
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider"
-	"tkestack.io/galaxy/pkg/ipam/cloudprovider/rpc"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
-	"tkestack.io/galaxy/pkg/ipam/metrics"
-	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
 // FloatingIPPlugin Allocates Floating IP for deployments
@@ -144,114 +140,6 @@ func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
 	return true, nil
 }
 
-// Filter marks nodes which have no available ips as FailedNodes
-// If the given pod doesn't want floating IP, none failedNodes returns
-func (p *FloatingIPPlugin) Filter(pod *corev1.Pod, nodes []corev1.Node) ([]corev1.Node, schedulerapi.FailedNodesMap,
-	error) {
-	start := time.Now()
-	failedNodesMap := schedulerapi.FailedNodesMap{}
-	if !p.hasResourceName(&pod.Spec) {
-		return nodes, failedNodesMap, nil
-	}
-	filteredNodes := []corev1.Node{}
-	defer p.lockPod(pod.Name, pod.Namespace)()
-	subnetSet, err := p.getSubnet(pod)
-	if err != nil {
-		return filteredNodes, failedNodesMap, err
-	}
-	for i := range nodes {
-		nodeName := nodes[i].Name
-		subnet, err := p.getNodeSubnet(&nodes[i])
-		if err != nil {
-			failedNodesMap[nodes[i].Name] = err.Error()
-			continue
-		}
-		if subnetSet.Has(subnet.String()) {
-			filteredNodes = append(filteredNodes, nodes[i])
-		} else {
-			failedNodesMap[nodeName] = "FloatingIPPlugin:NoFIPLeft"
-		}
-	}
-	if glog.V(5) {
-		nodeNames := make([]string, len(filteredNodes))
-		for i := range filteredNodes {
-			nodeNames[i] = filteredNodes[i].Name
-		}
-		glog.V(5).Infof("filtered nodes %v failed nodes %v", nodeNames, failedNodesMap)
-	}
-	metrics.ScheduleLatency.WithLabelValues("filter").Observe(time.Since(start).Seconds())
-	return filteredNodes, failedNodesMap, nil
-}
-
-// #lizard forgives
-func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
-	keyObj, err := util.FormatKey(pod)
-	if err != nil {
-		return nil, err
-	}
-	// first check if exists an already allocated ip for this pod
-	subnets, err := p.ipam.NodeSubnetsByKey(keyObj.KeyInDB)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query by key %s: %v", keyObj.KeyInDB, err)
-	}
-	if len(subnets) > 0 {
-		glog.V(3).Infof("%s already have an allocated ip in subnets %v", keyObj.KeyInDB, subnets)
-		return subnets, nil
-	}
-	policy := parseReleasePolicy(&pod.ObjectMeta)
-	if !keyObj.Deployment() && !keyObj.StatefulSet() && !keyObj.TApp() && policy != constant.ReleasePolicyPodDelete {
-		return nil, fmt.Errorf("policy %s not supported for non deployment/tapp/sts app", constant.PolicyStr(policy))
-	}
-	var replicas int
-	var isPoolSizeDefined bool
-	if keyObj.Deployment() {
-		replicas, isPoolSizeDefined, err = p.getDpReplicas(keyObj)
-		if err != nil {
-			return nil, err
-		}
-		// Lock to make checking available subnets and allocating reserved ip atomic
-		defer p.LockDpPool(keyObj.PoolPrefix())()
-	}
-	subnetSet, reserve, err := p.getAvailableSubnet(keyObj, policy, replicas, isPoolSizeDefined)
-	if err != nil {
-		return nil, err
-	}
-	if (reserve || isPoolSizeDefined) && subnetSet.Len() > 0 {
-		// Since bind is in a different goroutine than filter in scheduler, we can't ensure this pod got binded
-		// before the next one got filtered to ensure max size of allocated ips.
-		// So we'd better do the allocate in filter for reserve situation.
-		reserveSubnet := subnetSet.List()[0]
-		subnetSet = sets.NewString(reserveSubnet)
-		if err := p.allocateDuringFilter(keyObj, reserve, isPoolSizeDefined, reserveSubnet, policy,
-			string(pod.UID)); err != nil {
-			return nil, err
-		}
-	}
-	return subnetSet, nil
-}
-
-func (p *FloatingIPPlugin) allocateDuringFilter(keyObj *util.KeyObj, reserve, isPoolSizeDefined bool,
-	reserveSubnet string, policy constant.ReleasePolicy, uid string) error {
-	// we can't get nodename during filter, update attr on bind
-	attr := floatingip.Attr{Policy: policy, NodeName: "", Uid: uid}
-	if reserve {
-		if err := p.allocateInSubnetWithKey(keyObj.PoolPrefix(), keyObj.KeyInDB, reserveSubnet, attr,
-			"filter"); err != nil {
-			return err
-		}
-	} else if isPoolSizeDefined {
-		// if pool size defined and we got no reserved IP, we need to allocate IP from empty key
-		_, ipNet, err := net.ParseCIDR(reserveSubnet)
-		if err != nil {
-			return err
-		}
-		if err := p.allocateInSubnet(keyObj.KeyInDB, ipNet, attr, "filter"); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Prioritize can score each node, currently it does nothing
 func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*schedulerapi.HostPriorityList, error) {
 	list := &schedulerapi.HostPriorityList{}
@@ -260,158 +148,6 @@ func (p *FloatingIPPlugin) Prioritize(pod *corev1.Pod, nodes []corev1.Node) (*sc
 	}
 	//TODO
 	return list, nil
-}
-
-func (p *FloatingIPPlugin) allocateIP(key string, nodeName string, pod *corev1.Pod) (*constant.IPInfo, error) {
-	var how string
-	ipInfo, err := p.ipam.First(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
-	}
-	started := time.Now()
-	policy := parseReleasePolicy(&pod.ObjectMeta)
-	attr := floatingip.Attr{Policy: policy, NodeName: nodeName, Uid: string(pod.UID)}
-	if ipInfo != nil {
-		how = "reused"
-		// check if uid missmatch, if we delete a statfulset/tapp and creates a same name statfulset/tapp immediately,
-		// galaxy-ipam may receive bind event for new pod early than deleting event for old pod
-		if ipInfo.FIP.PodUid != "" && ipInfo.FIP.PodUid != string(pod.GetUID()) {
-			return nil, fmt.Errorf("waiting for delete event of %s before reuse this ip", key)
-		}
-	} else {
-		subnet, err := p.queryNodeSubnet(nodeName)
-		if err != nil {
-			return nil, err
-		}
-		if err := p.allocateInSubnet(key, subnet, attr, "bind"); err != nil {
-			return nil, err
-		}
-		how = "allocated"
-		ipInfo, err = p.ipam.First(key)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query floating ip by key %s: %v", key, err)
-		}
-		if ipInfo == nil {
-			return nil, fmt.Errorf("nil floating ip for key %s: %v", key, err)
-		}
-	}
-	glog.Infof("AssignIP nodeName %s, ip %s, key %s", nodeName, ipInfo.IPInfo.IP.IP.String(), key)
-	if err := p.cloudProviderAssignIP(&rpc.AssignIPRequest{
-		NodeName:  nodeName,
-		IPAddress: ipInfo.IPInfo.IP.IP.String(),
-	}); err != nil {
-		// do not rollback allocated ip
-		return nil, fmt.Errorf("failed to assign ip %s to %s: %v", ipInfo.IPInfo.IP.IP.String(), key, err)
-	}
-	if how == "reused" {
-		glog.Infof("pod %s reused %s, updating attr to %v", key, ipInfo.IPInfo.IP.String(), attr)
-		if err := p.ipam.UpdateAttr(key, ipInfo.IPInfo.IP.IP, attr); err != nil {
-			return nil, fmt.Errorf("failed to update floating ip release policy: %v", err)
-		}
-	}
-	glog.Infof("started at %d %s ip %s, attr %v for %s", started.UnixNano(), how,
-		ipInfo.IPInfo.IP.String(), attr, key)
-	return &ipInfo.IPInfo, nil
-}
-
-// Bind binds a new floatingip or reuse an old one to pod
-func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
-	start := time.Now()
-	pod, err := p.PluginFactoryArgs.PodLister.Pods(args.PodNamespace).Get(args.PodName)
-	if err != nil {
-		return fmt.Errorf("failed to find pod %s: %w", util.Join(args.PodName, args.PodNamespace), err)
-	}
-	if !p.hasResourceName(&pod.Spec) {
-		// we will config extender resources which ensures pod which doesn't want floatingip won't be sent to plugin
-		// see https://github.com/kubernetes/kubernetes/pull/60332
-		return fmt.Errorf("pod which doesn't want floatingip have been sent to plugin")
-	}
-	defer p.lockPod(pod.Name, pod.Namespace)()
-	keyObj, err := util.FormatKey(pod)
-	if err != nil {
-		return err
-	}
-	ipInfo, err := p.allocateIP(keyObj.KeyInDB, args.Node, pod)
-	if err != nil {
-		return err
-	}
-	ipInfos := []constant.IPInfo{*ipInfo}
-	bindAnnotation := make(map[string]string)
-	data, err := constant.FormatIPInfo(ipInfos)
-	if err != nil {
-		return fmt.Errorf("failed to format ipinfo %v: %v", ipInfos, err)
-	}
-	bindAnnotation[constant.ExtendedCNIArgsAnnotation] = data //TODO don't overlap this annotation
-	var err1 error
-	if err := wait.PollImmediate(time.Millisecond*500, 3*time.Second, func() (bool, error) {
-		// It's the extender's response to bind pods to nodes since it is a binder
-		if err := p.Client.CoreV1().Pods(args.PodNamespace).Bind(&corev1.Binding{
-			ObjectMeta: v1.ObjectMeta{Namespace: args.PodNamespace, Name: args.PodName, UID: args.PodUID,
-				Annotations: bindAnnotation},
-			Target: corev1.ObjectReference{
-				Kind: "Node",
-				Name: args.Node,
-			},
-		}); err != nil {
-			err1 = err
-			if isPodNotFoundError(err) {
-				// break retry if pod no longer exists
-				return false, err
-			}
-			return false, nil
-		}
-		glog.Infof("bind pod %s to %s with ip %v", keyObj.KeyInDB, args.Node,
-			bindAnnotation[constant.ExtendedCNIArgsAnnotation])
-		return true, nil
-	}); err != nil {
-		if isPodNotFoundError(err1) {
-			glog.Infof("binding returns not found for pod %s, putting it into unreleased chan", keyObj.KeyInDB)
-			// attach ip annotation
-			p.unreleased <- &releaseEvent{pod: pod}
-		}
-		// If fails to update, depending on resync to update
-		return fmt.Errorf("update pod %s: %w", keyObj.KeyInDB, err1)
-	}
-	metrics.ScheduleLatency.WithLabelValues("bind").Observe(time.Since(start).Seconds())
-	return nil
-}
-
-func isPodNotFoundError(err error) bool {
-	return apierrors.IsNotFound(err)
-}
-
-// unbind release ip from pod
-func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
-	defer p.lockPod(pod.Name, pod.Namespace)()
-	glog.V(3).Infof("handle unbind pod %s", pod.Name)
-	keyObj, err := util.FormatKey(pod)
-	if err != nil {
-		return err
-	}
-	key := keyObj.KeyInDB
-	if p.cloudProvider != nil {
-		ipInfo, err := p.ipam.First(key)
-		if err != nil {
-			return fmt.Errorf("failed to query floating ip of %s: %v", key, err)
-		}
-		if ipInfo == nil {
-			glog.Infof("pod %s hasn't an allocated ip", key)
-			return nil
-		}
-		ipStr := ipInfo.IPInfo.IP.IP.String()
-		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s", ipInfo.FIP.NodeName, ipStr, key)
-		if err = p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
-			NodeName:  ipInfo.FIP.NodeName,
-			IPAddress: ipStr,
-		}); err != nil {
-			return fmt.Errorf("failed to unassign ip %s from %s: %v", ipStr, key, err)
-		}
-	}
-	policy := parseReleasePolicy(&pod.ObjectMeta)
-	if keyObj.Deployment() {
-		return p.unbindDpPod(keyObj, policy, "during unbinding pod")
-	}
-	return p.unbindNoneDpPod(keyObj, policy, "during unbinding pod")
 }
 
 // hasResourceName checks if the podspec has floatingip resource name
@@ -489,4 +225,20 @@ func (p *FloatingIPPlugin) lockPod(name, namespace string) func() {
 	return func() {
 		_ = p.podLockPool.UnlockKey(key)
 	}
+}
+
+func getPodCniArgs(pod *corev1.Pod) (constant.CniArgs, error) {
+	m := pod.GetAnnotations()
+	if len(m) == 0 {
+		return constant.CniArgs{}, nil
+	}
+	str, ok := m[constant.ExtendedCNIArgsAnnotation]
+	if !ok {
+		return constant.CniArgs{}, nil
+	}
+	args, err := constant.UnmarshalCniArgs(str)
+	if args == nil {
+		args = &constant.CniArgs{}
+	}
+	return *args, err
 }

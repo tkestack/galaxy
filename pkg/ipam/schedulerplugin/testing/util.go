@@ -19,6 +19,7 @@ package testing
 import (
 	"strings"
 
+	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,6 +77,7 @@ func CreateTAppPod(name, namespace string, annotations map[string]string) *corev
 	return pod
 }
 
+// CreateSimplePod creates a pod given name, namespace and annotations for testing
 func CreateSimplePod(name, namespace string, annotations map[string]string) *corev1.Pod {
 	pod := CreateStatefulSetPod(name+"-0", namespace, annotations)
 	pod.Name = name
@@ -83,8 +85,58 @@ func CreateSimplePod(name, namespace string, annotations map[string]string) *cor
 	return pod
 }
 
+// CreatePodWithKind creates a pod given name, namespace, owner kind and annotations for testing
 func CreatePodWithKind(name, namespace, kind string, annotations map[string]string) *corev1.Pod {
 	pod := CreateStatefulSetPod(name, namespace, annotations)
 	pod.OwnerReferences[0].Kind = kind
 	return pod
+}
+
+// CreateDeployment creates a controller deployment for the given pod for testing
+func CreateDeployment(podMeta v1.ObjectMeta, replicas int32) *appv1.Deployment {
+	parts := strings.Split(podMeta.OwnerReferences[0].Name, "-")
+	return &appv1.Deployment{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      strings.Join(parts[:len(parts)-1], "-"),
+			Namespace: podMeta.Namespace,
+			Labels:    podMeta.Labels,
+		},
+		Spec: appv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: podMeta,
+			},
+			Replicas: &replicas,
+			Selector: &v1.LabelSelector{
+				MatchLabels: podMeta.GetLabels(),
+			},
+		},
+	}
+}
+
+// CreateStatefulSet creates a controller statefulset for the given pod for testing
+func CreateStatefulSet(podMeta v1.ObjectMeta, replicas int32) *appv1.StatefulSet {
+	return &appv1.StatefulSet{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      podMeta.OwnerReferences[0].Name,
+			Namespace: podMeta.GetNamespace(),
+			Labels:    podMeta.GetLabels(),
+		},
+		Spec: appv1.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: podMeta,
+			},
+			Replicas: &replicas,
+			Selector: &v1.LabelSelector{
+				MatchLabels: podMeta.GetLabels(),
+			},
+		},
+	}
+}
+
+// CreateNode creates a node for testing
+func CreateNode(name string, labels map[string]string, address string) corev1.Node {
+	return corev1.Node{
+		ObjectMeta: v1.ObjectMeta{Name: name, Labels: labels},
+		Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: address}}},
+	}
 }

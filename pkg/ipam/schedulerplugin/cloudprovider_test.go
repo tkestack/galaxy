@@ -32,7 +32,7 @@ import (
 func TestConcurrentBindUnbind(t *testing.T) {
 	pod := CreateDeploymentPod("dp-xxx-yyy", "ns1", poolAnnotation("pool1"))
 	podKey, _ := schedulerplugin_util.FormatKey(pod)
-	dp1 := createDeployment(pod.ObjectMeta, 1)
+	dp1 := CreateDeployment(pod.ObjectMeta, 1)
 	plugin, stopChan, _ := createPluginTestNodes(t, pod, dp1)
 	defer func() { stopChan <- struct{}{} }()
 	cloudProvider := &fakeCloudProvider1{m: make(map[string]string)}
