@@ -28,4 +28,4 @@ For more information about contributing issues or pull requests, see our [Contri
 
 ## License
 
-Galaxy is under the Apache License 2.0. See the [License](License) file for details.
+Galaxy is under the Apache License 2.0. See the [License](LICENSE) file for details.
