@@ -53,7 +53,101 @@ size: 4
 
 Galaxy-ipam supports pre-allocating IPs for a pool by setting `preAllocateIP=true` when creating or updating pool via HTTP API. Note that this is not working by creating pool via kubectl.
 
-## Rolling upgrade policy issue
+## Allocate multiple IPs
+
+FEATURE STATE: tkestack/galaxy-ipam:v1.0.7 [alpha]
+
+Add an annotation `k8s.v1.cni.galaxy.io/args: '{"request_ip_range":[["10.0.0.200~10.0.0.238"],["10.0.0.2~10.0.0.30"],["10.0.0.60~10.0.0.80"]]}'` to pod spec.
+
+galaxy-ipam allocates 3 IPs, one from `["10.0.0.200~10.0.0.238"]`, one from `["10.0.0.2~10.0.0.30"]`, one from `["10.0.0.60~10.0.0.80"]`
+and write it back to the same annotation `k8s.v1.cni.galaxy.io/args` value.
+
+```
+{
+	"request_ip_range": [
+		["10.0.0.200~10.0.0.238"],
+		["10.0.0.2~10.0.0.30"],
+		["10.0.0.60~10.0.0.80"]
+	],
+	"common": {
+		"ipinfos": [{
+			"ip": "10.0.0.200/24",
+			"vlan": 0,
+			"gateway": "10.0.0.1"
+		}, {
+			"ip": "10.0.0.2/24",
+			"vlan": 0,
+			"gateway": "10.0.0.1"
+		}, {
+			"ip": "10.0.0.60/24",
+			"vlan": 0,
+			"gateway": "10.0.0.1"
+		}]
+	}
+}
+```
+
+CNI plugins should read the `k8s.v1.cni.galaxy.io/args` annotation value and configuring multiple IPs for pods.
+Currently supporting CNI plugins are galaxy-underlay-veth and galaxy-k8s-vlan.
+
+## API
+
+Galaxy-ipam provides swagger 1.2 docs. Please check [swagger.json](swagger.json) for cached galaxy-ipam API doc.
+Also, you can add `--swagger` command line args to galaxy-ipam and restart it, check `http://${galaxy-ipam-ip}:9041/apidocs.json/v1`.
+
+### API examples
+
+1. Query ips allocated to a given statefulset
+
+```
+curl 'http://192.168.30.7:9041/v1/ip?appName=sts&appType=statefulsets&namespace=default'{
+ "last": true,
+ "totalElements": 2,
+ "totalPages": 1,
+ "first": true,
+ "numberOfElements": 2,
+ "size": 10,
+ "number": 0,
+ "content": [
+  {
+   "ip": "10.0.0.112",
+   "namespace": "default",
+   "appName": "sts",
+   "podName": "sts-0",
+   "policy": 2,
+   "appType": "statefulset",
+   "updateTime": "2020-05-29T11:11:44.633383558Z",
+   "status": "Deleted",
+   "releasable": true
+  },
+  {
+   "ip": "10.0.0.174",
+   "namespace": "default",
+   "appName": "sts",
+   "podName": "sts-1",
+   "policy": 2,
+   "appType": "statefulset",
+   "updateTime": "2020-05-29T11:11:45.132450117Z",
+   "status": "Deleted",
+   "releasable": true
+  }
+ ]
+}
+```
+
+2. Release ip.
+
+```
+curl -X POST -H "Content-type: application/json" -d '{"ips":[{"ip":"10.0.0.112", "appName":"sts", "appType":"statefulset", "podName":"sts-0","namespace":"default"},{"ip":"10.0.0.174", "appName":"sts", "appType":"statefulset", "podName":"sts-1", "namespace":"default"}]}' 'http://192.168.30.7:9041/v1/ip'
+{
+ "code": 200,
+ "message": ""
+}
+```
+
+## FAQ
+
+### Rolling upgrade policy issue
 
 Default update strategy for a deployment is `StrategyType=RollingUpdate` and `25% max unavailable, 25% max surge`, this
 means during upgrading a deployment, deployment controller when make sure a max of 25% pods beyond replicas will be created
@@ -65,9 +159,3 @@ reuse their IPs.
 
 Thus the two strategy resulting in a dead lock during upgrading for a `replicas <= 3` deployment. We suggest to release
 one strategy to get upgrade working.
-
-## API
-
-Galaxy-ipam provides swagger 1.2 docs. Please check [swagger.json](swagger.json) for cached galaxy-ipam API doc.
-Also, you can add `--swagger` command line args to galaxy-ipam and restart it, check `http://${galaxy-ipam-ip}:9041/apidocs.json/v1`.
-

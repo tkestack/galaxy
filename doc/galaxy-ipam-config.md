@@ -74,10 +74,50 @@ data:
  floatingips: '[{"nodeSubnets":["10.0.0.0/16"],"ips":["10.0.70.2~10.0.70.241"],"subnet":"10.0.70.0/24","gateway":"10.0.70.1"}]'
 ```
 
-- nodeSubnets: the node cidr.
-- ips: available POD ips, be sure these IPs are reachable within the node cidr.
-- subnet: the POD IP subnet.
-- vlan: the POD IP vlan id. If POD IPs are not belongs to the same vlan as node IP, please specify the POD IP vlan ids. Leave it empty if not required.
+field | required | comment
+------|----------|--------
+nodeSubnets | required | the node cidr, the below configure means `10.0.70.2~10.0.70.241` can be allocated to pods running on nodes of `10.0.0.0/16`
+ips | required | available pod IPs, please configure the router to route packets destination for these IPs to nodes of `10.0.0.0/16`.
+subnet | required | the pod IP subnet.
+vlan | optional | the pod IP vlan id. If pod IPs are not belong to the same vlan as node IP, please specify the vlan id and make sure the node's connected switch port is a trunk port. Leave it empty if not required.
+
+A nodeSubnet may have multiple pod subnets. The following example means pod running on `10.49.28.0/26` may have allocated
+ips from `10.0.80.2~10.0.80.4` or `10.0.81.2~10.0.81.4`. But if it runs on `10.49.29.0/24`, its ip is in range `10.0.80.2~10.0.80.4`.
+
+```
+[{
+	"nodeSubnets": ["10.49.28.0/26", "10.49.29.0/24"],
+	"ips": ["10.0.80.2~10.0.80.4"],
+	"subnet": "10.0.80.0/24",
+	"gateway": "10.0.80.1"
+}, {
+	"nodeSubnets": ["10.49.28.0/26"],
+	"ips": ["10.0.81.2~10.0.81.4"],
+	"subnet": "10.0.81.0/24",
+	"gateway": "10.0.81.1",
+	"vlan": 3
+}]
+```
+
+Multiple nodeSubnets may share the same pod subnet with none overlapping ips. Overlapping ips is a not allowed.
+The following example means `10.180.154.2~10.180.154.3` can only be allocated to pods running on `10.180.1.2/32` and
+`10.180.154.7~10.180.154.8` can only be allocated to pods running on `10.180.1.3/32`.
+
+```
+[{
+	"routableSubnet": "10.180.1.2/32",
+	"ips": ["10.180.154.2~10.180.154.3"],
+	"subnet": "10.180.154.0/24",
+	"gateway": "10.180.154.1",
+	"vlan": 3
+}, {
+	"routableSubnet": "10.180.1.3/32",
+	"ips": ["10.180.154.7~10.180.154.8"],
+	"subnet": "10.180.154.0/24",
+	"gateway": "10.180.154.1",
+	"vlan": 3
+}]
+```
 
 For a more complex configuration, please take a look at [test_helper.go](../pkg/ipam/utils/test_helper.go)
 
