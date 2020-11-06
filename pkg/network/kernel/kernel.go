@@ -18,6 +18,7 @@ package kernel
 
 import (
 	"io/ioutil"
+	"os"
 	"syscall"
 	"time"
 
@@ -58,7 +59,7 @@ func setArg(expect string, file string, quit <-chan struct{}) {
 		}
 		if string(data) != expect+"\n" {
 			glog.Warningf("%s unset, setting it", file)
-			if err := ioutil.WriteFile(file, []byte(expect), 0644); err != nil {
+			if err := ioutil.WriteFile(file, []byte(expect), 0644); err != nil && !os.IsNotExist(err) {
 				glog.Warningf("Error set kernel args %s: %v", file, err)
 			}
 		}
