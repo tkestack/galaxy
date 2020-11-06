@@ -60,7 +60,7 @@ func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin,
 		nodeSubnet:        make(map[string]*net.IPNet),
 		PluginFactoryArgs: args,
 		conf:              &conf,
-		unreleased:        make(chan *releaseEvent, 1000),
+		unreleased:        make(chan *releaseEvent, 50000),
 		dpLockPool:        keymutex.NewHashed(500000),
 		podLockPool:       keymutex.NewHashed(500000),
 	}
@@ -108,7 +108,9 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 		}
 		p.syncPodIPsIntoDB()
 	}, time.Duration(p.conf.ResyncInterval)*time.Minute, stop)
-	go p.loop(stop)
+	for i := 0; i < 5; i++ {
+		go p.loop(stop)
+	}
 }
 
 // updateConfigMap fetches the newest floatingips configmap and syncs in memory/db config,
