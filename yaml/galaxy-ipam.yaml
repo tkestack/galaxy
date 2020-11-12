@@ -97,6 +97,7 @@ spec:
       labels:
         app: galaxy-ipam
     spec:
+      priorityClassName: system-cluster-critical
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
