@@ -59,8 +59,6 @@ type FloatingIPSpec struct {
 	Attribute string `json:"attribute"`
 	//policy used as
 	Policy constant.ReleasePolicy `json:"policy"`
-	//subnet used as node's subnet
-	Subnet string `json:"subnet"`
 	//FloatingIP update(allocate, release or update) timestamp
 	UpdateTime metav1.Time `json:"updateTime"`
 }
