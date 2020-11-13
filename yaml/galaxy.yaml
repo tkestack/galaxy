@@ -74,6 +74,7 @@ spec:
       labels:
         app: galaxy
     spec:
+      priorityClassName: system-node-critical
       serviceAccountName: galaxy
       hostNetwork: true
       hostPID: true
