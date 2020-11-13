@@ -19,7 +19,6 @@ package floatingip
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,9 +83,6 @@ func assign(spec *v1alpha1.FloatingIP, f *FloatingIP) error {
 		return err
 	}
 	spec.Spec.Attribute = string(data)
-	if f.pool != nil {
-		spec.Spec.Subnet = strings.Join(f.pool.nodeSubnets.List(), ",")
-	}
 	spec.Spec.UpdateTime = metav1.NewTime(f.UpdatedAt)
 	return nil
 }
