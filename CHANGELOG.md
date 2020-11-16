@@ -9,6 +9,11 @@
 - [Fix unbind pod is slow if lots of pod exits at the same time](https://github.com/tkestack/galaxy/pull/99)
 - [Check if device is veth before deleting eth0](https://github.com/tkestack/galaxy/pull/93)
 - [change log level if bridge-nf-call-iptables module is not installed](https://github.com/tkestack/galaxy/issues/89)
+- [Make galaxy pods critical guaranteed scheduling](https://github.com/tkestack/galaxy/pull/102)
+
+## Clean up
+
+- [Remove subnet from floatingip spec](https://github.com/tkestack/galaxy/pull/103)
 
 # v1.0.6
 
