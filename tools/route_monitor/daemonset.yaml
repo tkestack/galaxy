@@ -20,7 +20,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: route-monitor
-        image: docker.oa.com:8080/gaia/route_monitor:v1
+        image: tkestack/route_monitor:v1
         securityContext:
           privileged: true
         resources:

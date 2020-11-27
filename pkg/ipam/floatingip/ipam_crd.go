@@ -40,16 +40,12 @@ type Type uint16
 const (
 	// InternalIp is enum of pod's internal IP.
 	InternalIp Type = iota
-	// ExternalIp is enum of pod's external IP.
-	ExternalIp
 )
 
 // String used to transform IP Type to string.
 func (t *Type) String() (string, error) {
 	if *t == InternalIp {
 		return "internalIP", nil
-	} else if *t == ExternalIp {
-		return "externalIP", nil
 	}
 	return "", fmt.Errorf("unknown ip type %v", *t)
 }
@@ -351,15 +347,6 @@ func (ci *crdIpam) NodeSubnetsByIPRanges(ipranges [][]nets.IPRange) (sets.String
 
 // Shutdown shutdowns IPAM.
 func (ci *crdIpam) Shutdown() {
-}
-
-// Name returns IPAM's name.
-func (ci *crdIpam) Name() string {
-	name, err := ci.ipType.String()
-	if err != nil {
-		return "unknown type"
-	}
-	return name
 }
 
 // ConfigurePool init floatingIP pool.
