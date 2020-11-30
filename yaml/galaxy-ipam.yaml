@@ -112,7 +112,7 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       containers:
-      - image: tkestack/galaxy-ipam:v1.0.0
+      - image: tkestack/galaxy-ipam:v1.0.7
         args:
           - --logtostderr=true
           - --profiling
