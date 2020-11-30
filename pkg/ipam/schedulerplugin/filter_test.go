@@ -25,12 +25,14 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/api/k8s/schedulerapi"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	schedulerplugin_util "tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
+	. "tkestack.io/galaxy/pkg/utils/test"
 )
 
 // #lizard forgives
@@ -84,7 +86,7 @@ func TestFilterForPodWithoutRef(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, _, err = fipPlugin.Filter(CreateSimplePod("pod1", "ns1", immutableAnnotation), nodes); err == nil {
-		t.Fatalf("expect an error for non sts/deployment/tapp pod with policy immutable")
+		t.Fatalf("expect an error for pod not belong to a scalable app with policy immutable")
 	}
 }
 
@@ -356,4 +358,56 @@ func TestFilterRequestIPRange(t *testing.T) {
 
 func cniArgsAnnotation(poolName string) map[string]string {
 	return map[string]string{constant.ExtendedCNIArgsAnnotation: poolName}
+}
+
+func TestFilterForCRDPod(t *testing.T) {
+	fipPlugin, stopChan, nodes := createPluginTestNodesWithCrdObjs(t, nil,
+		[]runtime.Object{FooCrd, NotScalableCrd}, nil)
+	defer func() { stopChan <- struct{}{} }()
+	testCases := []filterCase{
+		{
+			testPod:         CreateCRDPod("crd-xxx-0", "ns1", nil, FooCrd),
+			expectFiltererd: []string{node3, node4},
+			expectFailed:    []string{drainedNode, nodeHasNoIP},
+		},
+		{
+			testPod:         CreateCRDPod("crd-xxx-0", "ns1", immutableAnnotation, FooCrd),
+			expectFiltererd: []string{node3, node4},
+			expectFailed:    []string{drainedNode, nodeHasNoIP},
+		},
+		{
+			testPod:         CreateCRDPod("crd-xxx-0", "ns1", neverAnnotation, FooCrd),
+			expectFiltererd: []string{node3, node4},
+			expectFailed:    []string{drainedNode, nodeHasNoIP},
+		},
+		{
+			testPod: CreateCRDPod("crd-xxx-sbx", "ns1", neverAnnotation, FooCrd),
+			expectErr: fmt.Errorf("release policy never is not supported for pod crd-xxx-sbx: %w",
+				NotStatefulWorkload),
+		},
+		{
+			testPod:         CreateCRDPod("crd-xxx-0", "ns1", nil, NotScalableCrd),
+			expectFiltererd: []string{node3, node4},
+			expectFailed:    []string{drainedNode, nodeHasNoIP},
+		},
+		{
+			testPod:   CreateCRDPod("crd-xxx-0", "ns1", immutableAnnotation, NotScalableCrd),
+			expectErr: fmt.Errorf("release policy immutable is not supported for pod crd-xxx-0: %w", NoReplicas),
+		},
+		{
+			testPod:         CreateCRDPod("crd-xxx-0", "ns1", neverAnnotation, NotScalableCrd),
+			expectFiltererd: []string{node3, node4},
+			expectFailed:    []string{drainedNode, nodeHasNoIP},
+		},
+		{
+			testPod: CreateCRDPod("crd-xxx-xb1", "ns1", neverAnnotation, NotScalableCrd),
+			expectErr: fmt.Errorf("release policy never is not supported for pod crd-xxx-xb1: %w",
+				NotStatefulWorkload),
+		},
+	}
+	for i := range testCases {
+		if err := checkFilterCase(fipPlugin, testCases[i], nodes); err != nil {
+			t.Fatalf("Case %d: %v", i, err)
+		}
+	}
 }

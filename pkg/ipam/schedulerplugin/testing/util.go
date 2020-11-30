@@ -26,6 +26,10 @@ import (
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 )
 
+const (
+	TAppKind = "TApp"
+)
+
 // CreateStatefulSetPodWithLabels creates a statefulset pod with labels as `labels` for testing
 func CreateStatefulSetPodWithLabels(name, namespace string, labels, annotations map[string]string) *corev1.Pod {
 	pod := CreateStatefulSetPod(name, namespace, annotations)
@@ -73,7 +77,7 @@ func CreateDeploymentPod(name, namespace string, annotation map[string]string) *
 // CreateTAppPod creates a tapp pod for testing
 func CreateTAppPod(name, namespace string, annotations map[string]string) *corev1.Pod {
 	pod := CreateStatefulSetPod(name, namespace, annotations)
-	pod.OwnerReferences[0].Kind = "TApp"
+	pod.OwnerReferences[0].Kind = TAppKind
 	return pod
 }
 

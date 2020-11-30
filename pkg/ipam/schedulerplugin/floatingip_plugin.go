@@ -33,7 +33,10 @@ import (
 	"tkestack.io/galaxy/pkg/api/galaxy/constant/utils"
 	"tkestack.io/galaxy/pkg/api/k8s/schedulerapi"
 	"tkestack.io/galaxy/pkg/ipam/cloudprovider"
+	"tkestack.io/galaxy/pkg/ipam/context"
+	"tkestack.io/galaxy/pkg/ipam/crd"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
+	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
 // FloatingIPPlugin Allocates Floating IP for deployments
@@ -42,7 +45,7 @@ type FloatingIPPlugin struct {
 	// node name to subnet cache
 	nodeSubnet     map[string]*net.IPNet
 	nodeSubnetLock sync.Mutex
-	*PluginFactoryArgs
+	*context.IPAMContext
 	lastIPConf    string
 	conf          *Conf
 	unreleased    chan *releaseEvent
@@ -51,21 +54,25 @@ type FloatingIPPlugin struct {
 	dpLockPool keymutex.KeyMutex
 	// protect bind/unbind for each pod
 	podLockPool keymutex.KeyMutex
+	crdCache    crd.CrdCache
+	crdKey      CrdKey
 }
 
 // NewFloatingIPPlugin creates FloatingIPPlugin
-func NewFloatingIPPlugin(conf Conf, args *PluginFactoryArgs) (*FloatingIPPlugin, error) {
+func NewFloatingIPPlugin(conf Conf, ctx *context.IPAMContext) (*FloatingIPPlugin, error) {
 	conf.validate()
 	glog.Infof("floating ip config: %v", conf)
 	plugin := &FloatingIPPlugin{
-		nodeSubnet:        make(map[string]*net.IPNet),
-		PluginFactoryArgs: args,
-		conf:              &conf,
-		unreleased:        make(chan *releaseEvent, 50000),
-		dpLockPool:        keymutex.NewHashed(500000),
-		podLockPool:       keymutex.NewHashed(500000),
+		nodeSubnet:  make(map[string]*net.IPNet),
+		IPAMContext: ctx,
+		conf:        &conf,
+		unreleased:  make(chan *releaseEvent, 50000),
+		dpLockPool:  keymutex.NewHashed(500000),
+		podLockPool: keymutex.NewHashed(500000),
+		crdKey:      NewCrdKey(ctx.ExtensionLister),
+		crdCache:    crd.NewCrdCache(ctx.DynamicClient, ctx.ExtensionLister, 0),
 	}
-	plugin.ipam = floatingip.NewCrdIPAM(args.CrdClient, floatingip.InternalIp, plugin.FIPInformer)
+	plugin.ipam = floatingip.NewCrdIPAM(ctx.GalaxyClient, floatingip.InternalIp, plugin.FIPInformer)
 	if conf.CloudProviderGRPCAddr != "" {
 		plugin.cloudProvider = cloudprovider.NewGRPCCloudProvider(conf.CloudProviderGRPCAddr)
 	}
@@ -256,4 +263,23 @@ func getPodCniArgs(pod *corev1.Pod) (constant.CniArgs, error) {
 		args = &constant.CniArgs{}
 	}
 	return *args, err
+}
+
+// supportReserveIPPolicy checks if reserveIP release policy is supported for a given keyObj
+func (p *FloatingIPPlugin) supportReserveIPPolicy(obj *util.KeyObj, policy constant.ReleasePolicy) error {
+	if obj.Deployment() || obj.StatefulSet() {
+		return nil
+	}
+	_, err := parsePodIndex(obj.PodName)
+	if err != nil {
+		return NotStatefulWorkload
+	}
+	if policy == constant.ReleasePolicyNever {
+		return nil
+	}
+	gvr := p.crdKey.GetGroupVersionResource(obj.AppTypePrefix)
+	if gvr == nil {
+		return NoReplicas
+	}
+	return nil
 }

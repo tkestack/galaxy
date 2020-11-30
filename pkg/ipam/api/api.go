@@ -100,7 +100,7 @@ func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 		if appType == "" {
 			appTypePrefix = util.StatefulsetPrefixKey
 		} else {
-			appTypePrefix = toAppTypePrefix(appType)
+			appTypePrefix = util.GetAppTypePrefix(appType)
 		}
 		if appTypePrefix == "" {
 			httputil.BadRequest(resp, fmt.Errorf("invalid appType %s", appType))
@@ -123,34 +123,6 @@ func (c *Controller) ListIPs(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	resp.WriteEntity(ListIPResp{Page: *pagin, Content: pagedFips}) // nolint: errcheck
-}
-
-// toAppTypePrefix converts app name to app key prefix
-func toAppTypePrefix(appType string) string {
-	switch appType {
-	case "deployment":
-		return util.DeploymentPrefixKey
-	case "statefulset", "statefulsets":
-		return util.StatefulsetPrefixKey
-	case "tapp":
-		return util.TAppPrefixKey
-	default:
-		return ""
-	}
-}
-
-// toAppType converts app key prefix to app name
-func toAppType(appTypePrefix string) string {
-	switch appTypePrefix {
-	case util.DeploymentPrefixKey:
-		return "deployment"
-	case util.StatefulsetPrefixKey:
-		return "statefulset"
-	case util.TAppPrefixKey:
-		return "tapp"
-	default:
-		return ""
-	}
 }
 
 // fillReleasableAndStatus fills status and releasable field
@@ -282,7 +254,7 @@ func (c *Controller) ReleaseIPs(req *restful.Request, resp *restful.Response) {
 		if temp.AppType == "" {
 			appTypePrefix = util.StatefulsetPrefixKey
 		}
-		appTypePrefix = toAppTypePrefix(temp.AppType)
+		appTypePrefix = util.GetAppTypePrefix(temp.AppType)
 		if appTypePrefix == "" {
 			httputil.BadRequest(resp, fmt.Errorf("unknown app type %q", temp.AppType))
 			return
@@ -351,7 +323,7 @@ func convert(fip *floatingip.FloatingIP) FloatingIP {
 		AppName:    keyObj.AppName,
 		PodName:    keyObj.PodName,
 		PoolName:   keyObj.PoolName,
-		AppType:    toAppType(keyObj.AppTypePrefix),
+		AppType:    util.GetAppType(keyObj.AppTypePrefix),
 		Policy:     fip.Policy,
 		UpdateTime: fip.UpdatedAt,
 		labels:     fip.Labels}

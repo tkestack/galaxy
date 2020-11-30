@@ -20,12 +20,15 @@ import (
 	"net"
 	"testing"
 
+	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
+	. "tkestack.io/galaxy/pkg/utils/test"
 )
 
 func TestResyncAppNotExist(t *testing.T) {
@@ -55,54 +58,90 @@ func TestResyncAppNotExist(t *testing.T) {
 	}
 }
 
-func TestResyncStsPod(t *testing.T) {
-	for i, testCase := range []struct {
-		annotations   map[string]string
-		replicas      int32
-		createPod     bool
-		updateStatus  func(*corev1.Pod)
-		createApp     bool
-		expectKeyFunc func(obj *util.KeyObj) string
-	}{
-		{annotations: nil, replicas: 1, expectKeyFunc: podNameFunc, createPod: true},                    // pod exist, ip won't be released
-		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc},                                   // pod and app not exist, ip will be released
-		{annotations: immutableAnnotation, replicas: 1, expectKeyFunc: emptyNameFunc, createApp: false}, // app not exist, ip will be released from immutable pod
-		{annotations: immutableAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createApp: true},    // app exist, ip won't be released from immutable pod
-		{annotations: immutableAnnotation, replicas: 0, expectKeyFunc: emptyNameFunc, createApp: true},  // app exist, ip will be released from scaled down immutable pod
-		{annotations: neverAnnotation, replicas: 0, expectKeyFunc: podNameFunc, createApp: true},
-		{annotations: neverAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createApp: true},
-		{annotations: neverAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createApp: false},
-		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc, createPod: true, updateStatus: toFailedPod},  // pod failed, ip will be released
-		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc, createPod: true, updateStatus: toSuccessPod}, // pod completed, ip will be released
-	} {
-		var objs []runtime.Object
-		pod := CreateStatefulSetPod("sts-xxx-0", "ns1", testCase.annotations)
-		if testCase.updateStatus != nil {
-			testCase.updateStatus(pod)
+func getResyncCases(createPod func(annotations map[string]string) *corev1.Pod,
+	createApp func(podMeta v1.ObjectMeta, replicas int32) runtime.Object) []bindCase {
+	createSuccessPod := func(annotations map[string]string) *corev1.Pod {
+		pod := createPod(annotations)
+		pod.Status.Phase = corev1.PodSucceeded
+		return pod
+	}
+	createFailedPod := func(annotations map[string]string) *corev1.Pod {
+		pod := createPod(annotations)
+		pod.Status.Phase = corev1.PodFailed
+		return pod
+	}
+	cases := []bindCase{
+		{annotations: nil, replicas: 1, expectKeyFunc: podNameFunc, createPod: true},                            // pod exist, ip won't be released
+		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc},                                           // pod and app not exist, ip will be released
+		{annotations: immutableAnnotation, replicas: 1, expectKeyFunc: emptyNameFunc},                           // app not exist, ip will be released from immutable pod
+		{annotations: immutableAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createAppFunc: createApp},   // app exist, ip won't be released from immutable pod
+		{annotations: immutableAnnotation, replicas: 0, expectKeyFunc: emptyNameFunc, createAppFunc: createApp}, // app exist, ip will be released from scaled down immutable pod
+		{annotations: neverAnnotation, replicas: 0, expectKeyFunc: podNameFunc, createAppFunc: createApp},
+		{annotations: neverAnnotation, replicas: 1, expectKeyFunc: podNameFunc, createAppFunc: createApp},
+		{annotations: neverAnnotation, replicas: 1, expectKeyFunc: podNameFunc},
+		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc, createPod: true, createPodFunc: createFailedPod},  // pod failed, ip will be released
+		{annotations: nil, replicas: 1, expectKeyFunc: emptyNameFunc, createPod: true, createPodFunc: createSuccessPod}, // pod completed, ip will be released
+	}
+	for i := range cases {
+		if cases[i].createPodFunc == nil {
+			cases[i].createPodFunc = createPod
 		}
-		keyObj, _ := util.FormatKey(pod)
-		if testCase.createPod {
-			objs = append(objs, pod)
-		}
-		if testCase.createApp {
-			sts := CreateStatefulSet(pod.ObjectMeta, testCase.replicas)
-			sts.Spec.Template.Spec = pod.Spec
+	}
+	return cases
+}
+
+func resyncTest(t *testing.T, c *bindCase) error {
+	var objs, crObjs []runtime.Object
+	pod = c.createPodFunc(c.annotations)
+	keyObj, _ := util.FormatKey(pod)
+	if c.createPod {
+		objs = append(objs, pod)
+	}
+	if c.createAppFunc != nil {
+		app := c.createAppFunc(pod.ObjectMeta, c.replicas)
+		if sts, ok := app.(*appv1.StatefulSet); ok {
 			objs = append(objs, sts)
+		} else {
+			crObjs = append(crObjs, app)
 		}
-		func() {
-			fipPlugin, stopChan, _ := createPluginTestNodes(t, objs...)
-			defer func() { stopChan <- struct{}{} }()
-			if err := fipPlugin.ipam.AllocateSpecificIP(keyObj.KeyInDB, net.ParseIP("10.49.27.205"),
-				floatingip.Attr{Policy: parseReleasePolicy(&pod.ObjectMeta)}); err != nil {
-				t.Fatalf("case %d, err %v", i, err)
-			}
-			if err := fipPlugin.resyncPod(); err != nil {
-				t.Fatalf("case %d, err %v", i, err)
-			}
-			if err := checkIPKey(fipPlugin.ipam, "10.49.27.205", testCase.expectKeyFunc(keyObj)); err != nil {
-				t.Fatalf("case %d, err %v", i, err)
-			}
-		}()
+	}
+	fipPlugin, stopChan, _ := createPluginTestNodesWithCrdObjs(t, objs, []runtime.Object{NotScalableCrd, FooCrd}, crObjs)
+	defer func() { stopChan <- struct{}{} }()
+	if err := fipPlugin.ipam.AllocateSpecificIP(keyObj.KeyInDB, net.ParseIP("10.49.27.205"),
+		floatingip.Attr{Policy: parseReleasePolicy(&pod.ObjectMeta)}); err != nil {
+		return err
+	}
+	if err := fipPlugin.resyncPod(); err != nil {
+		return err
+	}
+	return checkIPKey(fipPlugin.ipam, "10.49.27.205", c.expectKeyFunc(keyObj))
+}
+
+func TestResyncStsPod(t *testing.T) {
+	createPod := func(annotations map[string]string) *corev1.Pod {
+		return CreateStatefulSetPod("sts-xxx-0", "ns1", annotations)
+	}
+	createApp := func(podMeta v1.ObjectMeta, replicas int32) runtime.Object {
+		return CreateStatefulSet(podMeta, replicas)
+	}
+	for i, testCase := range getResyncCases(createPod, createApp) {
+		if err := resyncTest(t, &testCase); err != nil {
+			t.Errorf("Case %d, err: %v", i, err)
+		}
+	}
+}
+
+func TestResyncCRDPod(t *testing.T) {
+	createPod := func(annotations map[string]string) *corev1.Pod {
+		return CreateCRDPod("crd-xxx-0", "ns1", annotations, FooCrd)
+	}
+	createApp := func(podMeta v1.ObjectMeta, replicas int32) runtime.Object {
+		return CreateCRDApp(podMeta, int64(replicas), FooCrd)
+	}
+	for i, testCase := range getResyncCases(createPod, createApp) {
+		if err := resyncTest(t, &testCase); err != nil {
+			t.Errorf("Case %d, err: %v", i, err)
+		}
 	}
 }
 

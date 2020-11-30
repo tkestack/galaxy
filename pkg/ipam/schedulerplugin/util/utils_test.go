@@ -18,6 +18,7 @@ package util
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +26,8 @@ import (
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 )
+
+var TAppPrefixKey = strings.ToLower(TAppKind) + "_"
 
 func TestResolvePodKey(t *testing.T) {
 	tests := map[string][]string{
