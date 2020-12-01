@@ -19,7 +19,6 @@ package kernel
 import (
 	"io/ioutil"
 	"os"
-	"syscall"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -64,15 +63,4 @@ func setArg(expect string, file string, quit <-chan struct{}) {
 			}
 		}
 	}, interval, quit)
-}
-
-// nolint: deadcode
-func remountSysfs() error {
-	if err := syscall.Mount("", "/", "none", syscall.MS_SLAVE|syscall.MS_REC, ""); err != nil {
-		return err
-	}
-	if err := syscall.Unmount("/sys", syscall.MNT_DETACH); err != nil {
-		return err
-	}
-	return syscall.Mount("sysfs", "/sys", "sysfs", 0, "")
 }

@@ -109,7 +109,7 @@ codegen:
 ## update: Update vendor
 .PHONY: update
 update:
-	hack/updatevendor.sh
+	go mod tidy
 
 ## help: Show this help info.
 .PHONY: help
