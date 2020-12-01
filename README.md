@@ -17,6 +17,7 @@ Galaxy is compatible with CNI spec and you can integrate any CNI plugin with it 
 - [Galaxy configuration](doc/galaxy-config.md)
 - [Galaxy-ipam configuration](doc/galaxy-ipam-config.md)
 - [Float IP usage](doc/float-ip.md)
+- [Random port mapping](doc/portmapping.md)
 - [Built-in CNI plugins](doc/supported-cnis.md)
 - [Network policy](doc/network-policy.md)
 

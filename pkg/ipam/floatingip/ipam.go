@@ -73,8 +73,6 @@ type IPAM interface {
 	// NodeSubnetsByIPRanges finds an unallocated ip for each []nets.IPRange, and returns their intersection
 	// node subnets.
 	NodeSubnetsByIPRanges(ipranges [][]nets.IPRange) (sets.String, error)
-	// Name returns IPAM's name.
-	Name() string
 	// implements metrics Collector interface
 	prometheus.Collector
 }
