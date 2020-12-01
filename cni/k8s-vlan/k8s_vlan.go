@@ -105,7 +105,7 @@ func setupMacvlan(result *t020.Result, vlanId uint16, args *skel.CmdArgs) error 
 	if err := d.MaybeCreateVlanDevice(vlanId); err != nil {
 		return err
 	}
-	if err := utils.MacVlanConnectsHostWithContainer(result, args, d.DeviceIndex); err != nil {
+	if err := utils.MacVlanConnectsHostWithContainer(result, args, d.DeviceIndex, d.MTU); err != nil {
 		return err
 	}
 	_ = utils.SendGratuitousARP(args.IfName, result.IP4.IP.IP.String(), args.Netns, d.GratuitousArpRequest)
@@ -117,7 +117,7 @@ func setupIPVlan(result *t020.Result, vlanId uint16, args *skel.CmdArgs) error {
 		return err
 	}
 
-	if err := utils.IPVlanConnectsHostWithContainer(result, args, d.DeviceIndex, d.GetIPVlanMode()); err != nil {
+	if err := utils.IPVlanConnectsHostWithContainer(result, args, d.DeviceIndex, d.GetIPVlanMode(), d.MTU); err != nil {
 		return err
 	}
 

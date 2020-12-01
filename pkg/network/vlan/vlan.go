@@ -66,6 +66,8 @@ type NetConf struct {
 	VlanNamePrefix string `json:"vlan_name_prefix"`
 
 	GratuitousArpRequest bool `json:"gratuitous_arp_request"`
+
+	MTU int `json:"mtu"`
 }
 
 func (d *VlanDriver) LoadConf(bytes []byte) (*NetConf, error) {
@@ -85,6 +87,7 @@ func (d *VlanDriver) LoadConf(bytes []byte) (*NetConf, error) {
 	if conf.IpVlanMode == "" {
 		conf.IpVlanMode = DefaultIPVlanMode
 	}
+
 	d.NetConf = conf
 	return conf, nil
 }
@@ -94,6 +97,9 @@ func (d *VlanDriver) Init() error {
 	device, err := netlink.LinkByName(d.Device)
 	if err != nil {
 		return fmt.Errorf("Error getting device %s: %v", d.Device, err)
+	}
+	if d.MTU == 0 {
+		d.MTU = device.Attrs().MTU
 	}
 	d.DeviceIndex = device.Attrs().Index
 	d.vlanParentIndex = device.Attrs().Index
