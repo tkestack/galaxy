@@ -361,13 +361,13 @@ func SendGratuitousARP(dev, ip, nns string, useArpRequest bool) error {
 }
 
 // MacVlanConnectsHostWithContainer creates macvlan device onto parent and connects container with host
-func MacVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, parent int) error {
+func MacVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, parent int, mtu int) error {
 	var err error
 	macVlan := &netlink.Macvlan{
 		Mode: netlink.MACVLAN_MODE_BRIDGE,
 		LinkAttrs: netlink.LinkAttrs{
 			Name:        HostMacVlanName(args.ContainerID),
-			MTU:         1500,
+			MTU:         mtu,
 			ParentIndex: parent,
 		}}
 	if err := netlink.LinkAdd(macVlan); err != nil {
@@ -386,13 +386,13 @@ func MacVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, p
 }
 
 // IPVlanConnectsHostWithContainer creates ipvlan device onto parent device and connects container with host
-func IPVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, parent int, mode netlink.IPVlanMode) error {
+func IPVlanConnectsHostWithContainer(result *t020.Result, args *skel.CmdArgs, parent int, mode netlink.IPVlanMode, mtu int) error {
 	var err error
 	ipVlan := &netlink.IPVlan{
 		Mode: mode,
 		LinkAttrs: netlink.LinkAttrs{
 			Name:        HostMacVlanName(args.ContainerID),
-			MTU:         1500,
+			MTU:         mtu,
 			ParentIndex: parent,
 		}}
 	if err := netlink.LinkAdd(ipVlan); err != nil {
