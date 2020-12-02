@@ -19,6 +19,7 @@ package schedulerplugin
 import (
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 	"time"
 
@@ -223,7 +224,19 @@ func (p *FloatingIPPlugin) GetIpam() floatingip.IPAM {
 
 func (p *FloatingIPPlugin) lockPod(name, namespace string) func() {
 	key := fmt.Sprintf("%s_%s", namespace, name)
+	start := time.Now()
 	p.podLockPool.LockKey(key)
+	elapsed := (time.Now().UnixNano() - start.UnixNano()) / 1e6
+	if elapsed > 500 {
+		var caller string
+		pc, _, no, ok := runtime.Caller(1)
+		details := runtime.FuncForPC(pc)
+		if ok && details != nil {
+			caller = fmt.Sprintf("called from %s:%d\n", details.Name(), no)
+		}
+		glog.Infof("acquire lock for %s took %d ms, started at %s, %s", key, elapsed,
+			start.Format("15:04:05.000"), caller)
+	}
 	return func() {
 		_ = p.podLockPool.UnlockKey(key)
 	}

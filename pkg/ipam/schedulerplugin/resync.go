@@ -77,6 +77,11 @@ func (p *FloatingIPPlugin) fetchChecklist(meta *resyncMeta) error {
 			glog.Warningf("unexpected key: %s", fip.Key)
 			continue
 		}
+		if fip.PodUid == "" && fip.NodeName == "" && !keyObj.Deployment() &&
+			constant.ReleasePolicy(fip.Policy) == constant.ReleasePolicyNever {
+			// skip endless checking pod exists for never policy
+			continue
+		}
 		meta.allocatedIPs = append(meta.allocatedIPs, resyncObj{keyObj: keyObj, fip: fip.FloatingIP})
 	}
 	return nil
@@ -88,9 +93,22 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(meta *resyncMeta) {
 		key := obj.keyObj.KeyInDB
 		func() {
 			defer p.lockPod(obj.keyObj.PodName, obj.keyObj.Namespace)()
-			if p.podRunning(obj.keyObj.PodName, obj.keyObj.Namespace, obj.fip.PodUid) {
+			// we are holding the pod's lock, query again in case the ip has been reallocated.
+			fip, err := p.ipam.ByIP(obj.fip.IP)
+			if err != nil {
+				glog.Warning(err)
 				return
 			}
+			if fip.Key != obj.fip.Key {
+				// if key changed, abort
+				return
+			}
+			obj.fip = fip
+			running, reason := p.podRunning(obj.keyObj.PodName, obj.keyObj.Namespace, obj.fip.PodUid)
+			if running {
+				return
+			}
+			glog.Infof("%s is not running, %s", obj.keyObj.KeyInDB, reason)
 			if p.cloudProvider != nil && obj.fip.NodeName != "" {
 				// For tapp and sts pod, nodeName will be updated to empty after unassigning
 				glog.Infof("UnAssignIP nodeName %s, ip %s, key %s during resync", obj.fip.NodeName,
@@ -122,28 +140,37 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(meta *resyncMeta) {
 	}
 }
 
-func (p *FloatingIPPlugin) podRunning(podName, namespace, podUid string) bool {
+func (p *FloatingIPPlugin) podRunning(podName, namespace, podUid string) (bool, string) {
 	pod, err := p.PodLister.Pods(namespace).Get(podName)
-	if runningAndUidMatch(podUid, pod, err) {
-		return true
+	running, reason1 := runningAndUidMatch(podUid, pod, err)
+	if running {
+		return true, ""
 	}
 	// double check with apiserver to confirm it is not running
 	pod, err = p.Client.CoreV1().Pods(namespace).Get(podName, v1.GetOptions{})
-	return runningAndUidMatch(podUid, pod, err)
+	running, reason2 := runningAndUidMatch(podUid, pod, err)
+	if running {
+		return true, ""
+	}
+	return false, "from podlist: " + reason1 + ", from client: " + reason2
 }
 
-func runningAndUidMatch(storedUid string, pod *corev1.Pod, err error) bool {
+func runningAndUidMatch(storedUid string, pod *corev1.Pod, err error) (bool, string) {
 	if err != nil {
 		if metaErrs.IsNotFound(err) {
-			return false
+			return false, "pod not found"
 		}
 		// we cannot figure out whether pod exist or not, we'd better keep the ip
-		return true
+		return true, ""
 	}
 	if storedUid != "" && storedUid != string(pod.GetUID()) {
-		return false
+		return false, fmt.Sprintf("pod current uid %s missmatch stored uid %s", string(pod.GetUID()), storedUid)
 	}
-	return !finished(pod)
+	if !finished(pod) {
+		return true, ""
+	} else {
+		return false, "pod finished"
+	}
 }
 
 func parsePodIndex(name string) (int, error) {
