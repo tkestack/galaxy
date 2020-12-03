@@ -145,7 +145,7 @@ spec:
 
 ## CNI network configuration
 
-You can use [Vlan CNI or TKE route ENI CNI plugin](supported-cnis.md) to launch float IP Pods. Make sure to update `DefaultNetworks` to `galaxy-k8s-vlan` of galaxy-etc ConfigMap or add `k8s.v1.cni.cncf.io/networks=galaxy-k8s-vlan` annotation to Pod spec.
+You can use [Vlan CNI or TKE route ENI CNI plugin](supported-cnis.md) to launch float IP Pods. Make sure to update `DefaultNetworks` to `galaxy-k8s-vlan` of galaxy-etc ConfigMap or add `k8s.v1.cni.cncf.io/networks=galaxy-k8s-vlan` annotation to pod spec.
 
 ## Cloud Provider
 
@@ -168,32 +168,32 @@ This is how Galaxy-ipam supports running underlay network.
 1. On private cloud the cluster administrator needs to config the floatingip-config ConfigMap. While on public cloud Cloud
 provider should provide that for Galaxy-ipam
 1. Kubernetes scheduler calls Galaxy-ipam on filter/priority/bind method
-1. Galaxy-ipam checks if POD has a reserved IP, if it does, Galaxy-ipam marks only the nodes within the available subnets of this IP as
-valid node, otherwise all nodes that has float IP left. During binding, Galaxy-ipam allocates an IP and writes it into POD annotation.
+1. Galaxy-ipam checks if pod has a reserved IP, if it does, Galaxy-ipam marks only the nodes within the available subnets of this IP as
+valid node, otherwise all nodes that has float IP left. During binding, Galaxy-ipam allocates an IP and writes it into pod annotation.
 1. On public cloud, scheduler plugin calls cloud provider to Assign and UnAssign ENI IP.
-1. Galaxy gets IP from POD annotation and calls CNIs with them as CNI args.
+1. Galaxy gets IP from pod annotation and calls CNIs with them as CNI args.
 
 ![How galaxy ipam allocates IP according to network typology](image/galaxy-ipam-scheduling-process.png)
 
 The above picture shows how Galaxy-ipam allocates IP according to the network typology. Floatingip-config ConfigMap has
-the information of network typology that which node subnets POD IPs can be placed in. All Galaxy-ipam needs to do is to
+the information of network typology that which node subnets pod IPs can be placed in. All Galaxy-ipam needs to do is to
 follow the rules, so the following is the scheduling process.
 
-1. Scheduler sends all nodes that fit all filter plugins of itself and the POD to be scheduled to Galaxy-ipam.
-1. Galaxy-ipam queries its memory table to find node subnets with full pod name matching the to be scheduled POD. 
+1. Scheduler sends all nodes that fit all filter plugins of itself and the pod to be scheduled to Galaxy-ipam.
+1. Galaxy-ipam queries its memory table to find node subnets with full pod name matching the to be scheduled pod. 
 If not, it finds those with pods' app full name matching. And again if not, it finds all from unallocated IPs. Then it 
 matches all nodes' IPs with these node subnetes and return the matched nodes to Scheduler.
 1. Scheduler priorities these nodes and picks the top one and calls Galaxy-ipam for binding.
 1. Galaxy-ipam updates its memory table to reuse or allocate an IP from the picked node's corresponding subnet. It then
 invokes cloud provider to assign the ENI IP. And finally stores the IP in floatip crd.
 1. Galaxy-ipam has a memory table and a floatip crd storage for storing allocated IPs. When restarting, it allocates all
-IPs in memory by reading floatip crds. It watches POD delete event from Apiserver to release IPs and runs a regular
+IPs in memory by reading floatip crds. It watches pod delete event from Apiserver to release IPs and runs a regular
 goroutine to release IPs that should be done but somehow haven't done.
 
 There is something more that worth talking about.
 
 1. For deployment, in order to allocate the same IPs for its' PODs when rolling upgrade. Galaxy-ipam updates keys of
-allocated IPs from POD full name to app full name to reserve these IPs. e.g. from `dp_$namespace_$deploymentName_$podName` to `dp_$namespace_$deploymentName_`.
-`dp` is short for `deployment`. Then it updates keys of reserved IPs to new Pods by updating keys from app full name to POD full name.
+allocated IPs from pod full name to app full name to reserve these IPs. e.g. from `dp_$namespace_$deploymentName_$podName` to `dp_$namespace_$deploymentName_`.
+`dp` is short for `deployment`. Then it updates keys of reserved IPs to new Pods by updating keys from app full name to pod full name.
 1. Since Scheduler starts a next loop of scheduling without waiting for the previous binding process to finish, for deployment pod,
 Galaxy-ipam allocates reused IP at filtering stage instead of binding stage to make sure IPs don't over allocate for a node subnet.
