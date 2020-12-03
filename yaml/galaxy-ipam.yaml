@@ -139,6 +139,8 @@ spec:
           mountPath: /data/galaxy-ipam/logs
         - name: galaxy-ipam-etc
           mountPath: /etc/galaxy
+        - name: tz-config
+          mountPath: /etc/localtime
       terminationGracePeriodSeconds: 30
       tolerations:
         - effect: NoSchedule
@@ -154,6 +156,9 @@ spec:
           defaultMode: 420
           name: galaxy-ipam-etc
         name: galaxy-ipam-etc
+      - name: tz-config
+        hostPath:
+          path: /etc/localtime
 ---
 apiVersion: v1
 kind: ConfigMap
