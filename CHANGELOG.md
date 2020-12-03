@@ -3,6 +3,7 @@
 ## Feature
 
 - [Support allocating multiple ips](https://github.com/tkestack/galaxy/pull/95), [please check usage docs](https://github.com/tkestack/galaxy/blob/master/doc/float-ip.md#allocate-multiple-ips)
+- [Add mtu config in ipvlan and macvlan mode](https://github.com/tkestack/galaxy/pull/108)
 
 ## Enhance
 
@@ -14,6 +15,10 @@
 ## Clean up
 
 - [Remove subnet from floatingip spec](https://github.com/tkestack/galaxy/pull/103)
+
+## Bug fix
+
+- [Fix a race condition that resync released ip due to pod uid missmatch](https://github.com/tkestack/galaxy/pull/109)
 
 # v1.0.6
 
