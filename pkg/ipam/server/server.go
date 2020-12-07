@@ -31,9 +31,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	corev1 "k8s.io/api/core/v1"
 	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
-	"k8s.io/client-go/informers"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -47,16 +46,13 @@ import (
 	"tkestack.io/galaxy/pkg/api/k8s/schedulerapi"
 	"tkestack.io/galaxy/pkg/ipam/api"
 	"tkestack.io/galaxy/pkg/ipam/client/clientset/versioned"
-	crdInformer "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions"
+	ipamcontext "tkestack.io/galaxy/pkg/ipam/context"
 	"tkestack.io/galaxy/pkg/ipam/crd"
 	"tkestack.io/galaxy/pkg/ipam/metrics"
 	"tkestack.io/galaxy/pkg/ipam/schedulerplugin"
 	"tkestack.io/galaxy/pkg/ipam/server/options"
 	"tkestack.io/galaxy/pkg/utils/httputil"
 	pageutil "tkestack.io/galaxy/pkg/utils/page"
-	"tkestack.io/tapp/pkg/apis/tappcontroller"
-	tappVersioned "tkestack.io/tapp/pkg/client/clientset/versioned"
-	tappInformers "tkestack.io/tapp/pkg/client/informers/externalversions"
 )
 
 type JsonConf struct {
@@ -68,14 +64,8 @@ const COMPONENT_NAME = "galaxy-ipam"
 type Server struct {
 	JsonConf
 	*options.ServerRunOptions
-	client               kubernetes.Interface
-	crdClient            versioned.Interface
-	tappClient           tappVersioned.Interface
-	extensionClient      extensionClient.Interface
+	*ipamcontext.IPAMContext
 	plugin               *schedulerplugin.FloatingIPPlugin
-	informerFactory      informers.SharedInformerFactory
-	crdInformerFactory   crdInformer.SharedInformerFactory
-	tappInformerFactory  tappInformers.SharedInformerFactory
 	stopChan             chan struct{}
 	leaderElectionConfig *leaderelection.LeaderElectionConfig
 }
@@ -99,35 +89,11 @@ func (s *Server) init() error {
 		return fmt.Errorf("bad config %s: %v", string(data), err)
 	}
 	s.initk8sClient()
-	s.informerFactory = informers.NewFilteredSharedInformerFactory(s.client, time.Minute, v1.NamespaceAll, nil)
-	podInformer := s.informerFactory.Core().V1().Pods()
-	statefulsetInformer := s.informerFactory.Apps().V1().StatefulSets()
-	deploymentInformer := s.informerFactory.Apps().V1().Deployments()
-	s.crdInformerFactory = crdInformer.NewSharedInformerFactory(s.crdClient, 0)
-	poolInformer := s.crdInformerFactory.Galaxy().V1alpha1().Pools()
-	fipInformer := s.crdInformerFactory.Galaxy().V1alpha1().FloatingIPs()
-
-	pluginArgs := &schedulerplugin.PluginFactoryArgs{
-		PodLister:         podInformer.Lister(),
-		StatefulSetLister: statefulsetInformer.Lister(),
-		DeploymentLister:  deploymentInformer.Lister(),
-		Client:            s.client,
-		TAppClient:        s.tappClient,
-		PoolLister:        poolInformer.Lister(),
-		CrdClient:         s.crdClient,
-		ExtClient:         s.extensionClient,
-		FIPInformer:       fipInformer,
-	}
-	if s.tappClient != nil {
-		s.tappInformerFactory = tappInformers.NewSharedInformerFactory(s.tappClient, time.Minute)
-		tappInformer := s.tappInformerFactory.Tappcontroller().V1().TApps()
-		pluginArgs.TAppLister = tappInformer.Lister()
-	}
-	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, pluginArgs)
+	s.plugin, err = schedulerplugin.NewFloatingIPPlugin(s.SchedulePluginConf, s.IPAMContext)
 	if err != nil {
 		return err
 	}
-	podInformer.Informer().AddEventHandler(eventhandler.NewPodEventHandler(s.plugin))
+	s.PodInformer.Informer().AddEventHandler(eventhandler.NewPodEventHandler(s.plugin))
 	return nil
 }
 
@@ -135,6 +101,7 @@ func (s *Server) Start() error {
 	if err := s.init(); err != nil {
 		return fmt.Errorf("init server: %v", err)
 	}
+	s.StartInformers(s.stopChan)
 	if s.LeaderElection.LeaderElect && s.leaderElectionConfig != nil {
 		leaderelection.RunOrDie(context.Background(), *s.leaderElectionConfig)
 		return nil
@@ -143,14 +110,6 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Run() error {
-	s.informerFactory.Start(s.stopChan)
-	s.crdInformerFactory.Start(s.stopChan)
-	s.informerFactory.WaitForCacheSync(s.stopChan)
-	s.crdInformerFactory.WaitForCacheSync(s.stopChan)
-	if s.tappInformerFactory != nil {
-		s.tappInformerFactory.Start(s.stopChan)
-		s.tappInformerFactory.WaitForCacheSync(s.stopChan)
-	}
 	if err := s.plugin.Init(); err != nil {
 		return err
 	}
@@ -170,27 +129,25 @@ func (s *Server) initk8sClient() {
 	cfg.Burst = 2000
 	glog.Infof("QPS: %e, Burst: %d", cfg.QPS, cfg.Burst)
 
-	s.client, err = kubernetes.NewForConfig(cfg)
+	client, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		glog.Fatalf("Error building kubernetes clientset: %v", err)
 	}
-	s.crdClient, err = versioned.NewForConfig(cfg)
+	galaxyClient, err := versioned.NewForConfig(cfg)
 	if err != nil {
 		glog.Fatalf("Error building float ip clientset: %v", err)
 	}
-	s.extensionClient, err = extensionClient.NewForConfig(cfg)
+	extClient, err := extensionClient.NewForConfig(cfg)
 	if err != nil {
-		glog.Fatalf("Error building float ip clientset: %v", err)
+		glog.Fatalf("Error building extension clientset: %v", err)
 	}
-	if _, err := s.extensionClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("tapps."+tappcontroller.GroupName,
-		v1.GetOptions{}); err == nil {
-		s.tappClient, err = tappVersioned.NewForConfig(cfg)
-		if err != nil {
-			glog.Fatalf("Error building tapp clientset: %v", err)
-		}
+	dynamicClient, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		glog.Fatalf("Error building dynamic clientset: %v", err)
 	}
+	s.IPAMContext = ipamcontext.NewIPAMContext(client, galaxyClient, extClient, dynamicClient)
 	glog.Infof("connected to apiserver %v", cfg)
-	if err := crd.EnsureCRDCreated(s.extensionClient); err != nil {
+	if err := crd.EnsureCRDCreated(extClient); err != nil {
 		glog.Fatalf("Ensure crd created: %v", err)
 	}
 
@@ -279,7 +236,7 @@ func (s *Server) startAPIServer() {
 		Path("/v1").
 		Consumes(restful.MIME_JSON).
 		Produces(restful.MIME_JSON)
-	c := api.NewController(s.plugin.GetIpam(), s.plugin.PodLister)
+	c := api.NewController(s.plugin.GetIpam(), s.PodLister)
 	ws.Route(ws.GET("/ip").To(c.ListIPs).
 		Doc("List ips by keyword or params").
 		Param(ws.QueryParameter("keyword", "keyword").DataType("string")).
@@ -315,7 +272,7 @@ func (s *Server) startAPIServer() {
 		Returns(http.StatusOK, "request succeed", api.ReleaseIPResp{Resp: httputil.Resp{Code: http.StatusOK}}).
 		Writes(api.ReleaseIPResp{Resp: httputil.Resp{Code: http.StatusOK}}))
 
-	poolController := api.PoolController{PoolLister: s.plugin.PoolLister, Client: s.crdClient,
+	poolController := api.PoolController{PoolLister: s.PoolLister, Client: s.GalaxyClient,
 		LockPoolFunc: s.plugin.LockDpPool, IPAM: s.plugin.GetIpam()}
 	ws.Route(ws.GET("/pool/{name}").To(poolController.Get).
 		Doc("Get pool by name").

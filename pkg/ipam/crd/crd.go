@@ -21,6 +21,7 @@ import (
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/ipam/apis/galaxy"
 )
@@ -79,4 +80,13 @@ func EnsureCRDCreated(client apiextensionsclient.Interface) error {
 		glog.Infof("Create CRD %s successfully.", crds[i].Spec.Names.Kind)
 	}
 	return nil
+}
+
+// GetGroupVersionResource from crd
+func GetGroupVersionResource(crd *extensionsv1.CustomResourceDefinition) schema.GroupVersionResource {
+	return schema.GroupVersionResource{
+		Group:    crd.Spec.Group,
+		Version:  crd.Spec.Version,
+		Resource: crd.Spec.Names.Plural,
+	}
 }

@@ -21,26 +21,17 @@ import (
 	"fmt"
 	"net"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/informers"
-	coreInformer "k8s.io/client-go/informers/core/v1"
-	"k8s.io/client-go/kubernetes/fake"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
-	fakeGalaxyCli "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned/fake"
-	crdInformer "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions"
+	"tkestack.io/galaxy/pkg/api/k8s/eventhandler"
+	"tkestack.io/galaxy/pkg/ipam/context"
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
 	. "tkestack.io/galaxy/pkg/ipam/schedulerplugin/testing"
 	schedulerplugin_util "tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 	"tkestack.io/galaxy/pkg/ipam/utils"
-	//fakeTAppCli "tkestack.io/tapp/pkg/client/clientset/versioned/fake"
-	//tappInformer "tkestack.io/tapp/pkg/client/informers/externalversions"
-	//"tkestack.io/tapp/pkg/tapp"
-	"tkestack.io/galaxy/pkg/api/k8s/eventhandler"
 )
 
 const (
@@ -64,6 +55,11 @@ var (
 )
 
 func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}, []corev1.Node) {
+	return createPluginTestNodesWithCrdObjs(t, objs, nil, nil)
+}
+
+func createPluginTestNodesWithCrdObjs(t *testing.T, objs, crdObjs, crObjs []runtime.Object) (*FloatingIPPlugin,
+	chan struct{}, []corev1.Node) {
 	nodes := []corev1.Node{
 		CreateNode(drainedNode, nil, "10.180.1.3"), // no floating ip left on this node
 		CreateNode(nodeHasNoIP, nil, "10.48.28.2"), // no floating ip configured for this node
@@ -71,7 +67,7 @@ func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlu
 		CreateNode(node4, nil, "10.173.13.4"),      // good node
 	}
 	allObjs := append([]runtime.Object{&nodes[0], &nodes[1], &nodes[2], &nodes[3]}, objs...)
-	fipPlugin, stopChan := createPlugin(t, allObjs...)
+	fipPlugin, stopChan := createPlugin(t, allObjs, crdObjs, crObjs)
 	// drain drainedNode 10.180.1.3/32
 	subnet := &net.IPNet{IP: net.ParseIP("10.180.1.3"), Mask: net.CIDRMask(32, 32)}
 	if err := drainNode(fipPlugin, subnet, nil); err != nil {
@@ -85,12 +81,12 @@ func createPluginTestNodes(t *testing.T, objs ...runtime.Object) (*FloatingIPPlu
 	return fipPlugin, stopChan, nodes
 }
 
-func createPlugin(t *testing.T, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}) {
+func createPlugin(t *testing.T, objs, crdObjs, crObjs []runtime.Object) (*FloatingIPPlugin, chan struct{}) {
 	var conf Conf
 	if err := json.Unmarshal([]byte(utils.TestConfig), &conf); err != nil {
 		t.Fatal(err)
 	}
-	fipPlugin, stopChan := newPlugin(t, conf, objs...)
+	fipPlugin, stopChan := newPlugin(t, conf, objs, crdObjs, crObjs)
 	return fipPlugin, stopChan
 }
 
@@ -141,49 +137,13 @@ func poolAnnotation(poolName string) map[string]string {
 	return map[string]string{constant.IPPoolAnnotation: poolName}
 }
 
-func createPluginFactoryArgs(objs ...runtime.Object) (*PluginFactoryArgs, coreInformer.PodInformer, chan struct{}) {
-	galaxyCli := fakeGalaxyCli.NewSimpleClientset()
-	crdInformerFactory := crdInformer.NewSharedInformerFactory(galaxyCli, 0)
-	poolInformer := crdInformerFactory.Galaxy().V1alpha1().Pools()
-	FIPInformer := crdInformerFactory.Galaxy().V1alpha1().FloatingIPs()
-	client := fake.NewSimpleClientset(objs...)
-	informerFactory := informers.NewFilteredSharedInformerFactory(client, time.Minute, v1.NamespaceAll, nil)
-	podInformer := informerFactory.Core().V1().Pods()
-	statefulsetInformer := informerFactory.Apps().V1().StatefulSets()
-	deploymentInformer := informerFactory.Apps().V1().Deployments()
-	//tappCli := fakeTAppCli.NewSimpleClientset()
-	//tappInformerFactory := tappInformer.NewSharedInformerFactory(tappCli, 0)
-	//tappInformer := tappInformerFactory.Tappcontroller().V1().TApps()
-	stopChan := make(chan struct{})
-	pluginArgs := &PluginFactoryArgs{
-		PodLister:         podInformer.Lister(),
-		StatefulSetLister: statefulsetInformer.Lister(),
-		DeploymentLister:  deploymentInformer.Lister(),
-		Client:            client,
-		PoolLister:        poolInformer.Lister(),
-		//TAppClient:        tappCli,
-		//TAppHasSynced:     tappInformer.Informer().HasSynced,
-		//TAppLister:        tappInformer.Lister(),
-		ExtClient:   extensionClient.NewSimpleClientset(),
-		CrdClient:   galaxyCli,
-		FIPInformer: FIPInformer,
-	}
-	//tapp.EnsureCRDCreated(pluginArgs.ExtClient)
-	informerFactory.Start(stopChan)
-	crdInformerFactory.Start(stopChan)
-	informerFactory.WaitForCacheSync(stopChan)
-	crdInformerFactory.WaitForCacheSync(stopChan)
-	//go tappInformerFactory.Start(stopChan)
-	return pluginArgs, podInformer, stopChan
-}
-
-func newPlugin(t *testing.T, conf Conf, objs ...runtime.Object) (*FloatingIPPlugin, chan struct{}) {
-	pluginArgs, podInformer, stopChan := createPluginFactoryArgs(objs...)
-	fipPlugin, err := NewFloatingIPPlugin(conf, pluginArgs)
+func newPlugin(t *testing.T, conf Conf, objs, crdObjs, crObjs []runtime.Object) (*FloatingIPPlugin, chan struct{}) {
+	ctx, stopChan := context.CreateTestIPAMContext(objs, crdObjs, crObjs)
+	fipPlugin, err := NewFloatingIPPlugin(conf, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	podInformer.Informer().AddEventHandler(eventhandler.NewPodEventHandler(fipPlugin))
+	ctx.PodInformer.Informer().AddEventHandler(eventhandler.NewPodEventHandler(fipPlugin))
 	if err = fipPlugin.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +165,7 @@ func TestLoadConfigMap(t *testing.T) {
 	conf.ConfigMapName = cm.Name
 	conf.ConfigMapNamespace = cm.Namespace
 	conf.FloatingIPKey = "key"
-	fipPlugin, stopChan := newPlugin(t, conf, cm)
+	fipPlugin, stopChan := newPlugin(t, conf, []runtime.Object{cm}, nil, nil)
 	defer func() { stopChan <- struct{}{} }()
 	if fipPlugin.lastIPConf != cm.Data["key"] {
 		t.Errorf(fipPlugin.lastIPConf)

@@ -26,17 +26,11 @@ import (
 
 func (p *FloatingIPPlugin) unbindNoneDpPod(keyObj *util.KeyObj, policy constant.ReleasePolicy, when string) error {
 	key := keyObj.KeyInDB
-	if policy == constant.ReleasePolicyPodDelete || (!keyObj.StatefulSet() && !keyObj.TApp()) {
-		// TODO for other workload pods, if we support more release policy other than ReleasePolicyPodDelete,
-		// make sure change this
+	if policy == constant.ReleasePolicyPodDelete || p.supportReserveIPPolicy(keyObj, policy) != nil {
 		return p.releaseIP(key, fmt.Sprintf("%s %s", deletedAndIPMutablePod, when))
 	} else if policy == constant.ReleasePolicyNever {
 		return p.reserveIP(key, key, fmt.Sprintf("never release policy %s", when))
 	} else if policy == constant.ReleasePolicyImmutable {
-		if keyObj.TApp() && p.TAppLister == nil {
-			// tapp lister is nil, we can't get replicas and it's better to reserve the ip.
-			return p.reserveIP(key, key, fmt.Sprintf("immutable policy %s", when))
-		}
 		appExist, replicas, err := p.checkAppAndReplicas(keyObj)
 		if err != nil {
 			return err
@@ -58,12 +52,21 @@ func (p *FloatingIPPlugin) unbindNoneDpPod(keyObj *util.KeyObj, policy constant.
 func (p *FloatingIPPlugin) checkAppAndReplicas(keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {
 	if keyObj.StatefulSet() {
 		return p.getStsReplicas(keyObj)
-	} else if keyObj.TApp() {
-		return p.getTAppReplicas(keyObj)
+	} else if gvr := p.crdKey.GetGroupVersionResource(keyObj.AppTypePrefix); gvr != nil {
+		replica, err := p.crdCache.GetReplicas(*gvr, keyObj.Namespace, keyObj.AppName)
+		if err != nil {
+			if !metaErrs.IsNotFound(err) {
+				retErr = err
+			}
+			// app not exist
+		} else {
+			appExist = true
+			replicas = int32(replica)
+		}
 	} else {
 		retErr = fmt.Errorf("Unknown app")
-		return
 	}
+	return
 }
 
 func (p *FloatingIPPlugin) getStsReplicas(keyObj *util.KeyObj) (appExist bool, replicas int32, retErr error) {

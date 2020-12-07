@@ -351,7 +351,7 @@ func checkFakeCloudProviderState(cp *FakeCloudProvider, expectAssigned, expectUn
 
 func checkBinding(fipPlugin *FloatingIPPlugin, pod *corev1.Pod, expectCniArgs *constant.CniArgs,
 	expectNode string) error {
-	actualBinding, err := fipPlugin.PluginFactoryArgs.Client.CoreV1().Pods(pod.Namespace).(*fakeV1.FakePods).
+	actualBinding, err := fipPlugin.Client.CoreV1().Pods(pod.Namespace).(*fakeV1.FakePods).
 		GetBinding(pod.GetName())
 	if err != nil {
 		return err

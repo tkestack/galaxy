@@ -6,7 +6,7 @@ Galaxy currently supports Float IP function for Deployment and Statefulsets PODs
 
 ## Usage
 
-Specify extended resource requests and limits `tke.cloud.tencent.com/eni-ip:1` in one of the container definition of POD spec.
+Specify extended resource requests and limits `tke.cloud.tencent.com/eni-ip:1` in one of the container definition of pod spec.
 
 ```
 ...
@@ -21,16 +21,35 @@ Specify extended resource requests and limits `tke.cloud.tencent.com/eni-ip:1` i
 
 ## Release Policy
 
-Galaxy supports three kind of release policy. Add a POD annotation naming `k8s.v1.cni.galaxy.io/release-policy` with the following value:
+Galaxy supports three kind of release policy. Add a pod annotation naming `k8s.v1.cni.galaxy.io/release-policy` with the following value:
 
-- `never`, Never Release IP even if the Deployment or Statefulset is deleted. Submitting a same name Deployment or Statefulset will reuse previous reserved IPs. 
-- `immutable`, Release IP Only when deleting or scaling down Deployment or Statefulset. If POD float onto a new node in case of original Node became NotReady, it will get the previous IP.
+- the annotation is not specified or has empty value, release IP once the pod is deleted or finished.
+- `immutable`, release IP only when deleting or scaling down deployment or statefulset. If pod floats onto a new node in
+case of the original Node became NotReady, it will get the previous IP.
+- `never`, never release IP even if deployment or statefulset is deleted. Submitting a deployment or statefulset with
+the same name will reuse previous reserved IPs. 
 
-If the annotation is not specified or empty or any other value, the IP will be released once the POD floats or deleted.
+### Custom resource workloads
+
+FEATURE STATE: tkestack/galaxy-ipam:v1.0.8 [alpha]
+
+Before v1.0.8 galaxy-ipam only supports immutable and never release policy for statefulset, deployment and [tapp](https://github.com/tkestack/tapp).
+The usage is the same as before. Galaxy-ipam makes use of [dynamic client](https://github.com/kubernetes/client-go/tree/master/dynamic) to watch all custom resource workloads by demand to get
+their replicas and and decide when to release ips.
+
+For pods with never release policy, galaxy-ipam checks if its name matches regular expression `.*-[0-9]*$`, if it
+does galaxy-ipam binds an IP to a key `$kind_$namespace_$appName_$podName`, otherwise it throws an error of not
+supporting never release policy for it. Galaxy-ipam assumes the workload controller generates pod names by workload
+name and a `-[0-9]*$` suffix like what statefulset does.
+
+For pods that need an immutable strategy, not only its name must satisfy the same regular expression, but also its
+CustomResourceDefinition must support scale sub-resource and define the [SpecReplicasPath](https://github.com/kubernetes/kubernetes/blob/v1.19.4/staging/src/k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1/types.go#L455). Galaxy-ipam gets the parent
+workload replicas by `SpecReplicasPath` and invokes `unstructured.NestedInt64` to get the actual replicas to check
+whether to release IP.
 
 ## Float IP Pool
 
-Galaxy also supports Deployment IP Pool which shares IPs among several Deployments by setting a `tke.cloud.tencent.com/eni-ip-pool` POD annotation with a given pool name as value.
+Galaxy also supports Deployment IP Pool which shares IPs among several Deployments by setting a `tke.cloud.tencent.com/eni-ip-pool` pod annotation with a given pool name as value.
 
 Note that Float IP Pool Deployment is always `never` release policy regardless of the value of `k8s.v1.cni.galaxy.io/release-policy`.
 

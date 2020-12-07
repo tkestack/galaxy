@@ -36,15 +36,15 @@ Galaxy works well and peacefully with other cni plugins by loading unknown netwo
 **But please be careful not to add a configuration file with alphabetical order higher than the Galaxy CNI configuration
 file `00-galaxy.conf`, otherwise Kubelet will call your CNI plugin first than Galaxy CNI plugin.**
 
-## Configure specific networks for a POD
+## Configure specific networks for a pod
 
-Galaxy supports to configure specific and multiple networks for a single POD. It matches a pod's `k8s.v1.cni.cncf.io
+Galaxy supports to configure specific and multiple networks for a single pod. It matches a pod's `k8s.v1.cni.cncf.io
 /networks` annotation value with the name of networks, so you can configure different cni implementations of the
  same network name.
 
 Pod Annotation | Usage | Expain
 ---------------|-------|--------
-k8s.v1.cni.cncf.io/networks | k8s.v1.cni.cncf.io/networks: galaxy-flannel,galaxy-k8s-sriov | Galaxy setup specified networks according to the order of its values if not empty for a POD, otherwise make use of `DefaultNetworks` to do that.
+k8s.v1.cni.cncf.io/networks | k8s.v1.cni.cncf.io/networks: galaxy-flannel,galaxy-k8s-sriov | Galaxy setup specified networks according to the order of its values if not empty for a pod, otherwise make use of `DefaultNetworks` to do that.
 
 ## Galaxy command line args
 

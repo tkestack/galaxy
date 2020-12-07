@@ -3,7 +3,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://tkestack.io/galaxy/merge_requests)
 
 Galaxy is a Kubernetes network project designed for providing both overlay and high performance underlay network for pods.
-And it also implements float IP(or elastic IP), i.e. Pod's IP won't change even if it float onto another node due to node crash, which benefits for running stateful set applications.
+And it also implements float IP(or elastic IP), i.e. pod's IP won't change even if it float onto another node due to node crash, which benefits for running stateful set applications.
 
 Currently, it consists of three components - Galaxy, CNI plugins and Galaxy IPAM.
 Galaxy is a daemon process running on each kubelet node which invokes different kinds of CNI plugins to setup the required networks for pods.

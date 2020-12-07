@@ -28,7 +28,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/wait"
 	glog "k8s.io/klog"
-	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/utils/exec"
 	"tkestack.io/galaxy/pkg/api/k8s"
 	utiliptables "tkestack.io/galaxy/pkg/utils/iptables"
@@ -52,7 +51,7 @@ type PortMappingHandler struct {
 
 func New(natInterfaceName string) *PortMappingHandler {
 	return &PortMappingHandler{
-		Interface:        utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4),
+		Interface:        utiliptables.New(utilexec.New(), utiliptables.ProtocolIpv4),
 		podPortMap:       make(map[string]map[hostport]closeable),
 		natInterfaceName: natInterfaceName,
 	}

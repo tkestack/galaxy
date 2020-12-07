@@ -120,8 +120,11 @@ func (p *FloatingIPPlugin) getSubnet(pod *corev1.Pod) (sets.String, error) {
 		ipranges = unallocatedIPRange
 	}
 	policy := parseReleasePolicy(&pod.ObjectMeta)
-	if !keyObj.Deployment() && !keyObj.StatefulSet() && !keyObj.TApp() && policy != constant.ReleasePolicyPodDelete {
-		return nil, fmt.Errorf("policy %s not supported for non deployment/tapp/sts app", constant.PolicyStr(policy))
+	if policy != constant.ReleasePolicyPodDelete {
+		if err1 := p.supportReserveIPPolicy(keyObj, policy); err1 != nil {
+			return nil, fmt.Errorf("release policy %s is not supported for pod %s: %w",
+				constant.PolicyStr(policy), keyObj.PodName, err1)
+		}
 	}
 	var replicas int
 	var isPoolSizeDefined bool

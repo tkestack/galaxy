@@ -17,36 +17,24 @@
 package schedulerplugin
 
 import (
-	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	"k8s.io/client-go/kubernetes"
-	appv1 "k8s.io/client-go/listers/apps/v1"
-	corev1lister "k8s.io/client-go/listers/core/v1"
-	crd_clientset "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned"
-	crdInformer "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions/galaxy/v1alpha1"
-	list "tkestack.io/galaxy/pkg/ipam/client/listers/galaxy/v1alpha1"
+	"errors"
+
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
-	"tkestack.io/tapp/pkg/client/clientset/versioned"
-	"tkestack.io/tapp/pkg/client/listers/tappcontroller/v1"
 )
 
-type PluginFactoryArgs struct {
-	Client            kubernetes.Interface
-	TAppClient        versioned.Interface
-	PodLister         corev1lister.PodLister
-	StatefulSetLister appv1.StatefulSetLister
-	DeploymentLister  appv1.DeploymentLister
-	TAppLister        v1.TAppLister
-	PoolLister        list.PoolLister
-	CrdClient         crd_clientset.Interface
-	ExtClient         extensionClient.Interface
-	FIPInformer       crdInformer.FloatingIPInformer
-}
+type NotSupportedReleasePolicyError error
 
 const (
 	deletedAndIPMutablePod         = "deletedAndIPMutablePod"
 	deletedAndParentAppNotExistPod = "deletedAndParentAppNotExistPod"
 	deletedAndScaledDownAppPod     = "deletedAndScaledDownAppPod"
 	deletedAndScaledDownDpPod      = "deletedAndScaledDownDpPod"
+)
+
+var (
+	NoReplicas          = NotSupportedReleasePolicyError(errors.New("parent workload has no replicas"))
+	NotStatefulWorkload = NotSupportedReleasePolicyError(
+		errors.New("pod name doesn't match '.*-[0-9]*$', assume its parent is not a stateful workload"))
 )
 
 type Conf struct {

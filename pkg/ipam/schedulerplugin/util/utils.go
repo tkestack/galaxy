@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 )
@@ -78,10 +77,6 @@ func (k *KeyObj) StatefulSet() bool {
 	return k.AppTypePrefix == StatefulsetPrefixKey
 }
 
-func (k *KeyObj) TApp() bool {
-	return k.AppTypePrefix == TAppPrefixKey
-}
-
 func (k *KeyObj) genKey() {
 	var prefix string
 	if k.PoolName != "" {
@@ -121,7 +116,6 @@ const (
 	poolPrefix           = "pool__"
 	DeploymentPrefixKey  = "dp_"
 	StatefulsetPrefixKey = "sts_"
-	TAppPrefixKey        = "tapp_"
 
 	NoRefAppName       = "NULL"
 	NoRefAppTypePrefix = "NULL_"
@@ -140,13 +134,10 @@ func FormatKey(pod *corev1.Pod) (*KeyObj, error) {
 		if pod.OwnerReferences[0].Kind == "StatefulSet" {
 			keyObj.AppName = pod.OwnerReferences[0].Name
 			keyObj.AppTypePrefix = StatefulsetPrefixKey
-		} else if pod.OwnerReferences[0].Kind == "TApp" {
-			keyObj.AppName = pod.OwnerReferences[0].Name
-			keyObj.AppTypePrefix = TAppPrefixKey
 		} else if pod.OwnerReferences[0].Kind != "ReplicaSet" {
 			// some app type galaxy can't recognize
 			keyObj.AppName = pod.OwnerReferences[0].Name
-			keyObj.AppTypePrefix = strings.ToLower(pod.OwnerReferences[0].Kind) + "_"
+			keyObj.AppTypePrefix = GetAppTypePrefix(pod.OwnerReferences[0].Kind)
 		} else {
 			deploymentName := resolveDeploymentName(pod)
 			if deploymentName == "" {
@@ -198,10 +189,29 @@ func PodName(pod *corev1.Pod) string {
 	return fmt.Sprintf("%s_%s", pod.Namespace, pod.Name)
 }
 
-func StatefulsetName(ss *appv1.StatefulSet) string {
-	return fmt.Sprintf("%s_%s", ss.Namespace, ss.Name)
+// GetAppTypePrefix formats an appTypePrefix for the given resource kind
+func GetAppTypePrefix(kind string) string {
+	lower := strings.ToLower(kind)
+	if lower == "statefulset" || lower == "statefulsets" {
+		return StatefulsetPrefixKey
+	} else if lower == "replicaset" || lower == "deployment" {
+		return DeploymentPrefixKey
+	}
+	return lower + "_"
 }
 
-func DeploymentName(dp *appv1.Deployment) string {
-	return fmt.Sprintf("%s_%s", dp.Namespace, dp.Name)
+// GetAppType formats appTypePrefix to appType
+func GetAppType(appTypePrefix string) string {
+	switch appTypePrefix {
+	case DeploymentPrefixKey:
+		return "deployment"
+	case StatefulsetPrefixKey:
+		return "statefulset"
+	default:
+		if len(appTypePrefix) > 0 {
+			return appTypePrefix[:len(appTypePrefix)-1]
+		} else {
+			return ""
+		}
+	}
 }

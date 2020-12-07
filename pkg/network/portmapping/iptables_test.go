@@ -255,8 +255,6 @@ func (w *IPTablesWapper) Restore(table utiliptables.Table, data []byte, flush ut
 func (w *IPTablesWapper) RestoreAll(data []byte, flush utiliptables.FlushFlag, counters utiliptables.RestoreCountersFlag) error {
 	return w.handler.RestoreAll(data, flush, counters)
 }
-func (w *IPTablesWapper) AddReloadFunc(reloadFunc func()) { w.handler.AddReloadFunc(reloadFunc) }
-func (w *IPTablesWapper) Destroy()                        { w.handler.Destroy() }
 
 func TestCleanPortMappingWithRetry(t *testing.T) {
 	testPorts := []k8s.Port{{PodName: "pod-2", HostPort: 9090, Protocol: "UDP", ContainerPort: 9090, PodIP: "192.168.0.2"}}

@@ -39,7 +39,7 @@ import (
 // Bind binds a new floatingip or reuse an old one to pod
 func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	start := time.Now()
-	pod, err := p.PluginFactoryArgs.PodLister.Pods(args.PodNamespace).Get(args.PodName)
+	pod, err := p.PodLister.Pods(args.PodNamespace).Get(args.PodName)
 	if err != nil {
 		return fmt.Errorf("failed to find pod %s: %w", util.Join(args.PodName, args.PodNamespace), err)
 	}

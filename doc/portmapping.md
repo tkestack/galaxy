@@ -22,7 +22,7 @@ CNI plugin allocates the same host port 9040 on nodes for pods requesting for ho
 
 But you can't run two pods requesting the same host port on the same node. As kubernetes document [suggests](https://kubernetes.io/docs/concepts/configuration/overview/)
 
-> When you bind a Pod to a hostPort, it limits the number of places the Pod can be scheduled, because each <hostIP,
+> When you bind a pod to a hostPort, it limits the number of places the pod can be scheduled, because each <hostIP,
 > hostPort, protocol> combination must be unique. If you don't specify the hostIP and protocol explicitly, Kubernetes
 > will use 0.0.0.0 as the default hostIP and TCP as the default protocol.
 

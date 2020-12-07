@@ -39,7 +39,6 @@ import (
 	networkingv1Lister "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
 	glog "k8s.io/klog"
-	utildbus "k8s.io/kubernetes/pkg/util/dbus"
 	utilexec "k8s.io/utils/exec"
 	"tkestack.io/galaxy/pkg/api/k8s"
 	"tkestack.io/galaxy/pkg/api/k8s/eventhandler"
@@ -90,7 +89,7 @@ func New(client kubernetes.Interface, quitChan <-chan struct{}) *PolicyManager {
 	pm := &PolicyManager{
 		client:        client,
 		ipsetHandle:   ipset.New(utilexec.New()),
-		iptableHandle: utiliptables.New(utilexec.New(), utildbus.New(), utiliptables.ProtocolIpv4),
+		iptableHandle: utiliptables.New(utilexec.New(), utiliptables.ProtocolIpv4),
 		hostName:      k8s.GetHostname(),
 		quitChan:      quitChan,
 	}
