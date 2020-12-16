@@ -79,7 +79,7 @@ func main() {
 					},
 				}},
 			},
-		}, &skel.CmdArgs{Netns: *flagNetns, IfName: "eth0"}, bridgeName, "", nil); err != nil {
+		}, &skel.CmdArgs{Netns: *flagNetns, IfName: "eth0"}, bridgeName, utils.VlanDeviceSuffix, nil); err != nil {
 			glog.Fatalf("Error creating veth %v", err)
 		}
 	}

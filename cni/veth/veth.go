@@ -211,7 +211,7 @@ func cmdDel(args *skel.CmdArgs) error {
 		return err
 	}
 
-	if err := utils.DeleteHostVeth(args.ContainerID); err != nil {
+	if err := utils.DeleteHostVeth(args.ContainerID, ""); err != nil {
 		return err
 	}
 

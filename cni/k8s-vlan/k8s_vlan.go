@@ -139,7 +139,7 @@ func setupVlanDevice(result020s []*t020.Result, vlanIds []uint16, args *skel.Cmd
 		if err != nil {
 			return err
 		}
-		suffix := fmt.Sprintf("-%d", i+1)
+		suffix := fmt.Sprintf("-%s%d", utils.VlanDeviceSuffix, i+1)
 		if i != 0 {
 			ifIndex++
 			args.IfName = fmt.Sprintf("eth%d", ifIndex)

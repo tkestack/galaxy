@@ -72,9 +72,8 @@ func cmdAdd(args *skel.CmdArgs) error {
 		if masterDevice, err = vlan.SetupVlanInPureMode(device, vlanId); err != nil {
 			return fmt.Errorf("failed setup vlan: %v", err)
 		}
-		suffix := ""
+		suffix := fmt.Sprintf("-%s%d", utils.UnderlayVethDeviceSuffix, i+1)
 		if i != 0 {
-			suffix = fmt.Sprintf("-%d", i+1)
 			ifIndex++
 			args.IfName = fmt.Sprintf("eth%d", ifIndex)
 			if args.IfName == ifName {

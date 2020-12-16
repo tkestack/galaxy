@@ -34,6 +34,11 @@ import (
 	"tkestack.io/galaxy/pkg/api/cniutil"
 )
 
+const (
+	UnderlayVethDeviceSuffix = "u"
+	VlanDeviceSuffix = "l"
+)
+
 var (
 	ErrNoDefaultRoute = errors.New("no default route was found")
 )
@@ -171,8 +176,8 @@ func DeleteVeth(netnsPath, ifName string) error {
 }
 
 // DeleteHostVeth deletes veth device in the host network namespace
-func DeleteHostVeth(containerId string) error {
-	hostIfName := HostVethName(containerId, "")
+func DeleteHostVeth(containerId, suffix string) error {
+	hostIfName := HostVethName(containerId, suffix)
 	link, err := netlink.LinkByName(hostIfName)
 	if err != nil {
 		// return nil if we can't find host veth device
@@ -218,11 +223,11 @@ func DeleteAllVeth(netnsPath string) error {
 }
 
 func HostVethName(containerId string, suffix string) string {
-	return fmt.Sprintf("v-h%s%s", containerId[0:9], suffix)
+	return fmt.Sprintf("v-h%s%s", containerId[0:8], suffix)
 }
 
 func ContainerVethName(containerId string, suffix string) string {
-	return fmt.Sprintf("v-s%s%s", containerId[0:9], suffix)
+	return fmt.Sprintf("v-s%s%s", containerId[0:8], suffix)
 }
 
 func HostMacVlanName(containerId string) string {
