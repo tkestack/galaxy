@@ -223,11 +223,11 @@ func DeleteAllVeth(netnsPath string) error {
 }
 
 func HostVethName(containerId string, suffix string) string {
-	return fmt.Sprintf("v-h%s%s", containerId[0:8], suffix)
+	return fmt.Sprintf("v-h%s%s", containerId[0:9], suffix)
 }
 
 func ContainerVethName(containerId string, suffix string) string {
-	return fmt.Sprintf("v-s%s%s", containerId[0:8], suffix)
+	return fmt.Sprintf("v-s%s%s", containerId[0:9], suffix)
 }
 
 func HostMacVlanName(containerId string) string {
