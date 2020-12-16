@@ -36,7 +36,7 @@ import (
 
 const (
 	UnderlayVethDeviceSuffix = "u"
-	VlanDeviceSuffix = "l"
+	VlanDeviceSuffix         = "l"
 )
 
 var (
