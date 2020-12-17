@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/vishvananda/netlink"
@@ -44,13 +43,14 @@ type VlanDriver struct {
 	vlanParentIndex int
 	// The device id of NetConf.Device or created vlan device
 	DeviceIndex int
-	sync.Mutex
 }
 
 type NetConf struct {
 	types.NetConf
 	// The device which has IDC ip address, eg. eth1 or eth1.12 (A vlan device)
 	Device string `json:"device"`
+	// The candidate devices if device is empty
+	Devices []string `json:"devices"`
 	// Supports macvlan, bridge or pure(which avoid create unnecessary bridge), default bridge
 	Switch string `json:"switch"`
 	// Supports ipvlan mode l2, l3, l3s, default is l3
@@ -94,7 +94,23 @@ func (d *VlanDriver) LoadConf(bytes []byte) (*NetConf, error) {
 
 // #lizard forgives
 func (d *VlanDriver) Init() error {
-	device, err := netlink.LinkByName(d.Device)
+	var (
+		device netlink.Link
+		err    error
+	)
+	if d.Device != "" {
+		device, err = netlink.LinkByName(d.Device)
+	} else {
+		if len(d.Devices) == 0 {
+			return fmt.Errorf("a device is needed to use vlan plugin")
+		}
+		for _, devName := range d.Devices {
+			device, err = netlink.LinkByName(devName)
+			if err == nil {
+				break
+			}
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("Error getting device %s: %v", d.Device, err)
 	}
@@ -247,8 +263,6 @@ func (d *VlanDriver) CreateBridgeAndVlanDevice(vlanId uint16) (string, error) {
 	if vlanId == 0 {
 		return d.BridgeNameForVlan(vlanId), nil
 	}
-	d.Lock()
-	defer d.Unlock()
 	vlan, err := d.getOrCreateVlanDevice(vlanId)
 	if err != nil {
 		return "", err
@@ -298,8 +312,6 @@ func (d *VlanDriver) MaybeCreateVlanDevice(vlanId uint16) error {
 	if vlanId == 0 {
 		return nil
 	}
-	d.Lock()
-	defer d.Unlock()
 	_, err := d.getOrCreateVlanDevice(vlanId)
 	return err
 }

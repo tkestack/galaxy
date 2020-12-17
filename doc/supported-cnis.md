@@ -32,6 +32,8 @@ type NetConf struct {
 	types.NetConf
 	// The device which has IDC ip address, eg. eth0 or eth0.12 (A vlan device)
 	Device string `json:"device"`
+	// The candidate devices if device is empty. Cni picks an available device accounding to the device order.
+	Devices []string `json:"devices"`
 	// Supports macvlan, bridge or pure(which avoid create unnecessary bridge), default bridge
 	Switch string `json:"switch"`
 	// Supports ipvlan mode l2, l3, l3s, default is l3
