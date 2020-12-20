@@ -1,6 +1,8 @@
 package veth
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"tkestack.io/galaxy/e2e/helper"
@@ -36,7 +38,7 @@ var _ = Describe("galaxy-underlay-veth vlan test", func() {
 
 		err = (&helper.NetworkTopology{
 			LeaveDevices: []*helper.LinkDevice{
-				helper.NewLinkDevice(nil, utils.HostVethName(containerId, ""), "veth"),
+				helper.NewLinkDevice(nil, utils.HostVethName(containerId, fmt.Sprintf("-%s%d", utils.UnderlayVethDeviceSuffix, 0)), "veth"),
 			},
 		}).Verify()
 		Expect(err).NotTo(HaveOccurred())
