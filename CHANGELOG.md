@@ -1,3 +1,14 @@
+# v1.0.8
+
+## Feature
+
+- Support reserve ip for all workloads [#107](https://github.com/tkestack/galaxy/pull/107), please check [custom resource workloads](https://github.com/tkestack/galaxy/blob/master/doc/float-ip.md#custom-resource-workloads)
+- Support configuring multiple device of vlan cni plugin [#114](https://github.com/tkestack/galaxy/pull/114)
+
+## Bug fix
+
+- Fix veth device name conflict when multi network enabled [#115](https://github.com/tkestack/galaxy/pull/115)
+
 # v1.0.7
 
 ## Feature

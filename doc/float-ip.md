@@ -35,17 +35,20 @@ FEATURE STATE: tkestack/galaxy-ipam:v1.0.8 [alpha]
 
 Before v1.0.8 galaxy-ipam only supports immutable and never release policy for statefulset, deployment and [tapp](https://github.com/tkestack/tapp).
 The usage is the same as before. Galaxy-ipam makes use of [dynamic client](https://github.com/kubernetes/client-go/tree/master/dynamic) to watch all custom resource workloads by demand to get
-their replicas and and decide when to release ips.
+their replicas and decide when to release ips. If you want to use it, please make sure to add list and watch permissions of custom resource to galaxy-ipam cluster role like the following tapp resource.
 
-For pods with never release policy, galaxy-ipam checks if its name matches regular expression `.*-[0-9]*$`, if it
-does galaxy-ipam binds an IP to a key `$kind_$namespace_$appName_$podName`, otherwise it throws an error of not
-supporting never release policy for it. Galaxy-ipam assumes the workload controller generates pod names by workload
-name and a `-[0-9]*$` suffix like what statefulset does.
+```
+- apiGroups: ["apps.tkestack.io"]
+  resources:
+  - tapps
+  verbs: ["list", "watch"]
+```
 
-For pods that need an immutable strategy, not only its name must satisfy the same regular expression, but also its
-CustomResourceDefinition must support scale sub-resource and define the [SpecReplicasPath](https://github.com/kubernetes/kubernetes/blob/v1.19.4/staging/src/k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1/types.go#L455). Galaxy-ipam gets the parent
-workload replicas by `SpecReplicasPath` and invokes `unstructured.NestedInt64` to get the actual replicas to check
-whether to release IP.
+For pods with never release policy, galaxy-ipam checks if its name matches regular expression `.*-[0-9]*$`, if it does galaxy-ipam binds an IP to a key `$kind_$namespace_$appName_$podName`, otherwise it throws an error of not
+supporting never release policy for it. Galaxy-ipam assumes the workload controller generates pod names by workload name and a `-[0-9]*$` suffix like what statefulset does.
+
+For pods that need an immutable strategy, not only its name must satisfy the same regular expression, but also its CustomResourceDefinition must support scale sub-resource and define the [SpecReplicasPath](https://github.com/kubernetes/kubernetes/blob/v1.19.4/staging/src/k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1/types.go#L455).
+Galaxy-ipam gets the parent workload replicas by `SpecReplicasPath` and invokes `unstructured.NestedInt64` to get the actual replicas to check whether to release IP.
 
 ## Float IP Pool
 
