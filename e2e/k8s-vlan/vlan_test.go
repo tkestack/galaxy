@@ -17,6 +17,7 @@
 package k8s_vlan
 
 import (
+	"fmt"
 	"net"
 
 	. "github.com/onsi/ginkgo"
@@ -33,7 +34,7 @@ var _ = Describe("galaxy-k8s-vlan vlan test", func() {
 	containerCidr := "192.168.0.68/26"
 	containerId := helper.NewContainerId()
 	cidrIPNet, _ := ips.ParseCIDR(ifaceCidr)
-	hostVeth1 := helper.NewLinkDevice(nil, utils.HostVethName(containerId, ""), "veth").SetMaster(
+	hostVeth1 := helper.NewLinkDevice(nil, utils.HostVethName(containerId, fmt.Sprintf("-%s%d", utils.VlanDeviceSuffix, 0)), "veth").SetMaster(
 		helper.NewLinkDevice(nil, "br2", "bridge"),
 	)
 	dummyVlan2 := helper.NewDummyVlan(cidrIPNet, 2)
@@ -89,7 +90,7 @@ var _ = Describe("galaxy-k8s-vlan vlan test", func() {
 			LeaveDevices: []*helper.LinkDevice{
 				hostVeth1,
 				dummyVlan2,
-				helper.NewLinkDevice(nil, utils.HostVethName(containerId, "-2"), "veth").SetMaster(
+				helper.NewLinkDevice(nil, utils.HostVethName(containerId, fmt.Sprintf("-%s%d", utils.VlanDeviceSuffix, 1)), "veth").SetMaster(
 					helper.NewLinkDevice(nil, "br3", "bridge"),
 				),
 				helper.NewDummyVlan(cidrIPNet, 3),

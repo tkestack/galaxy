@@ -26,7 +26,7 @@ import (
 func TestDeleteHostVeth(t *testing.T) {
 	containerId := "TestDeleteHostVeth"
 	// check delete a not exist veth
-	if err := DeleteHostVeth(containerId); err != nil {
+	if err := DeleteHostVeth(containerId, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -34,7 +34,7 @@ func TestDeleteHostVeth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := DeleteHostVeth(containerId); err != nil {
+	if err := DeleteHostVeth(containerId, ""); err != nil {
 		t.Fatal(err)
 	}
 

@@ -17,6 +17,8 @@
 package k8s_vlan
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"tkestack.io/galaxy/e2e/helper"
@@ -85,7 +87,7 @@ var _ = Describe("galaxy-k8s-vlan bridge and pure test", func() {
 		// check host iface topology, route, neigh, ip address is expected
 		err := (&helper.NetworkTopology{
 			LeaveDevices: []*helper.LinkDevice{
-				helper.NewLinkDevice(nil, utils.HostVethName(containerId, ""), "veth"),
+				helper.NewLinkDevice(nil, utils.HostVethName(containerId, fmt.Sprintf("-%s%d", utils.VlanDeviceSuffix, 0)), "veth"),
 				helper.NewLinkDevice(cidrIPNet, "dummy0", "dummy"),
 			},
 		}).Verify()
