@@ -444,6 +444,9 @@ func configSboxDevice(result *t020.Result, args *skel.CmdArgs, sbox netlink.Link
 		if err := DisableRpFilter(args.IfName); err != nil {
 			return fmt.Errorf("failed disable rp_filter to dev %s: %v", args.IfName, err)
 		}
+		if err := DisableRpFilter("all"); err != nil {
+			return fmt.Errorf("failed disable rp_filter to all: %v", err)
+		}
 		// Add IP and routes to sbox, including default route
 		return cniutil.ConfigureIface(args.IfName, result)
 	})
