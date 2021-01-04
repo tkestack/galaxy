@@ -235,14 +235,8 @@ func (p *FloatingIPPlugin) lockPod(name, namespace string) func() {
 	p.podLockPool.LockKey(key)
 	elapsed := (time.Now().UnixNano() - start.UnixNano()) / 1e6
 	if elapsed > 500 {
-		var caller string
-		pc, _, no, ok := runtime.Caller(1)
-		details := runtime.FuncForPC(pc)
-		if ok && details != nil {
-			caller = fmt.Sprintf("called from %s:%d\n", details.Name(), no)
-		}
 		glog.Infof("acquire lock for %s took %d ms, started at %s, %s", key, elapsed,
-			start.Format("15:04:05.000"), caller)
+			start.Format("15:04:05.000"), getCaller())
 	}
 	return func() {
 		_ = p.podLockPool.UnlockKey(key)
@@ -282,4 +276,14 @@ func (p *FloatingIPPlugin) supportReserveIPPolicy(obj *util.KeyObj, policy const
 		return NoReplicas
 	}
 	return nil
+}
+
+// getCaller returns the func packageName.funcName of the caller
+func getCaller() string {
+	pc, _, no, ok := runtime.Caller(2)
+	details := runtime.FuncForPC(pc)
+	if ok && details != nil {
+		return fmt.Sprintf("called from %s:%d\n", details.Name(), no)
+	}
+	return ""
 }
