@@ -236,7 +236,7 @@ func (s *Server) startAPIServer() {
 		Path("/v1").
 		Consumes(restful.MIME_JSON).
 		Produces(restful.MIME_JSON)
-	c := api.NewController(s.plugin.GetIpam(), s.PodLister)
+	c := api.NewController(s.plugin.GetIpam(), s.PodLister, s.plugin.Release)
 	ws.Route(ws.GET("/ip").To(c.ListIPs).
 		Doc("List ips by keyword or params").
 		Param(ws.QueryParameter("keyword", "keyword").DataType("string")).

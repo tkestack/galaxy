@@ -18,8 +18,10 @@ package schedulerplugin
 
 import (
 	"errors"
+	"net"
 
 	"tkestack.io/galaxy/pkg/ipam/floatingip"
+	"tkestack.io/galaxy/pkg/ipam/schedulerplugin/util"
 )
 
 type NotSupportedReleasePolicyError error
@@ -59,4 +61,9 @@ func (conf *Conf) validate() {
 	if conf.FloatingIPKey == "" {
 		conf.FloatingIPKey = "floatingips"
 	}
+}
+
+type ReleaseRequest struct {
+	KeyObj *util.KeyObj
+	IP     net.IP
 }

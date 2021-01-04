@@ -200,3 +200,47 @@ func (p *FloatingIPPlugin) unbind(pod *corev1.Pod) error {
 	}
 	return p.unbindNoneDpPod(keyObj, policy, "during unbinding pod")
 }
+
+func (p *FloatingIPPlugin) Release(r *ReleaseRequest) error {
+	caller := "by " + getCaller()
+	k := r.KeyObj
+	defer p.lockPod(k.PodName, k.Namespace)()
+	// we are holding the pod's lock, query again in case the ip has been reallocated.
+	fip, err := p.ipam.ByIP(r.IP)
+	if err != nil {
+		return err
+	}
+	if fip.Key != k.KeyInDB {
+		// if key changed, abort
+		if fip.Key == "" {
+			glog.Infof("attempt to release %s key %s which is already released", r.IP.String(), k.KeyInDB)
+			return nil
+		}
+		return fmt.Errorf("ip allocated to another pod %s", fip.Key)
+	}
+	running, reason := p.podRunning(k.PodName, k.Namespace, fip.PodUid)
+	if running {
+		return fmt.Errorf("pod (uid %s) is running", fip.PodUid)
+	}
+	glog.Infof("%s is not running, %s, %s", k.KeyInDB, reason, caller)
+	if p.cloudProvider != nil && fip.NodeName != "" {
+		// For tapp and sts pod, nodeName will be updated to empty after unassigning
+		glog.Infof("UnAssignIP nodeName %s, ip %s, key %s %s", fip.NodeName, r.IP.String(), k.KeyInDB, caller)
+		if err := p.cloudProviderUnAssignIP(&rpc.UnAssignIPRequest{
+			NodeName:  fip.NodeName,
+			IPAddress: fip.IP.String(),
+		}); err != nil {
+			return fmt.Errorf("UnAssignIP nodeName %s, ip %s: %v", fip.NodeName, fip.IP.String(), err)
+		}
+		// for tapp and sts pod, we need to clean its node attr and uid
+		if err := p.reserveIP(k.KeyInDB, k.KeyInDB, "after UnAssignIP "+caller); err != nil {
+			return err
+		}
+	}
+	if err := p.ipam.Release(k.KeyInDB, r.IP); err != nil {
+		glog.Errorf("release ip %s: %v", caller, err)
+		return fmt.Errorf("release ip: %v", err)
+	}
+	glog.Infof("released floating ip %s from %s %s", r.IP.String(), k.KeyInDB, caller)
+	return nil
+}
