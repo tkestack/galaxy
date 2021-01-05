@@ -137,7 +137,12 @@ func (c *Controller) checkReleasableAndStatus(fip *FloatingIP) (releasable bool,
 			return
 		}
 	}
+	if fip.PodName == "" && fip.AppName == "" && fip.PoolName == "" {
+		return
+	}
 	if fip.PodName == "" {
+		releasable = true
+		status = "Deleted"
 		return
 	}
 	pod, err := c.podLister.Pods(fip.Namespace).Get(fip.PodName)

@@ -59,7 +59,7 @@ spec:
 ```
 
 Galaxy will map a random host port to each container port via iptables and write back the random port back as the value 
-of `tkestack.io/portmapping` annotation. The value is a json encoding of `[]Port`. `Port` is the following struct.
+of each pod's `tkestack.io/portmapping` annotation. The value is a json encoding of `[]Port`. `Port` is the following struct.
 
 ```
 type Port struct {

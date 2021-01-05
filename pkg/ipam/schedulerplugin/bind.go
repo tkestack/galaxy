@@ -220,7 +220,7 @@ func (p *FloatingIPPlugin) Release(r *ReleaseRequest) error {
 	}
 	running, reason := p.podRunning(k.PodName, k.Namespace, fip.PodUid)
 	if running {
-		return fmt.Errorf("pod (uid %s) is running", fip.PodUid)
+		return fmt.Errorf("pod %s_%s (uid %s) is running", k.Namespace, k.PodName, fip.PodUid)
 	}
 	glog.Infof("%s is not running, %s, %s", k.KeyInDB, reason, caller)
 	if p.cloudProvider != nil && fip.NodeName != "" {

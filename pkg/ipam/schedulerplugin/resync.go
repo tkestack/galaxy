@@ -141,6 +141,9 @@ func (p *FloatingIPPlugin) resyncAllocatedIPs(meta *resyncMeta) {
 }
 
 func (p *FloatingIPPlugin) podRunning(podName, namespace, podUid string) (bool, string) {
+	if podName == "" || namespace == "" {
+		return false, ""
+	}
 	pod, err := p.PodLister.Pods(namespace).Get(podName)
 	running, reason1 := runningAndUidMatch(podUid, pod, err)
 	if running {

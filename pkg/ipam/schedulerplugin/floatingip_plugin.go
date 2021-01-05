@@ -72,7 +72,7 @@ func NewFloatingIPPlugin(conf Conf, ctx *context.IPAMContext) (*FloatingIPPlugin
 		crdKey:      NewCrdKey(ctx.ExtensionLister),
 		crdCache:    crd.NewCrdCache(ctx.DynamicClient, ctx.ExtensionLister, 0),
 	}
-	plugin.ipam = floatingip.NewCrdIPAM(ctx.GalaxyClient, floatingip.InternalIp, plugin.FIPInformer)
+	plugin.ipam = floatingip.NewCrdIPAM(ctx.GalaxyClient, plugin.FIPInformer)
 	if conf.CloudProviderGRPCAddr != "" {
 		plugin.cloudProvider = cloudprovider.NewGRPCCloudProvider(conf.CloudProviderGRPCAddr)
 	}

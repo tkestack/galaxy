@@ -29,7 +29,7 @@ import (
 )
 
 func TestAddFloatingIPEventByUser(t *testing.T) {
-	ipam, informerFactory := createIPAM(t)
+	ipam, informerFactory := CreateTestIPAM(t)
 	stop := make(chan struct{})
 	go informerFactory.Start(stop)
 	defer func() { close(stop) }()
@@ -98,7 +98,7 @@ func TestAddFloatingIPEventByIPAM(t *testing.T) {
 }
 
 func TestDeleteFloatingIPEvent(t *testing.T) {
-	ipam, informerFactory := createIPAM(t)
+	ipam, informerFactory := CreateTestIPAM(t)
 	stop := make(chan struct{})
 	go informerFactory.Start(stop)
 	defer func() { close(stop) }()

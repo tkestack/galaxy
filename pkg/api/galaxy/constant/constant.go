@@ -77,7 +77,6 @@ const (
 	ResourceKind = "FloatingIP"
 	ApiVersion   = "galaxy.k8s.io/v1alpha1"
 	NameSpace    = "floating-ip"
-	IpType       = "ipType"
 )
 
 // CniArgs is the cni args in pod annotation

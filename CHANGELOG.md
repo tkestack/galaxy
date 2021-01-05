@@ -8,6 +8,9 @@
 ## Bug fix
 
 - Fix veth device name conflict when multi network enabled [#115](https://github.com/tkestack/galaxy/pull/115)
+- Disable rp_filter in container [#119](https://github.com/tkestack/galaxy/pull/119)
+- Fix release IP API race condition [#120](https://github.com/tkestack/galaxy/pull/120)
+- Fix list ip API lists reserved IPs [#121] https://github.com/tkestack/galaxy/pull/121
 
 # v1.0.7
 

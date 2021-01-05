@@ -22,6 +22,7 @@ import (
 	"net"
 	"testing"
 
+	"tkestack.io/galaxy/pkg/ipam/utils"
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
@@ -153,5 +154,14 @@ func TestInsertRemoveIP(t *testing.T) {
 	fip.RemoveIP(net.ParseIP("10.166.141.115"))
 	if len(fip.IPRanges) != 0 {
 		t.Fatal(fip.IPRanges)
+	}
+}
+
+func TestTestConfig(t *testing.T) {
+	var conf struct {
+		Floatingips []*FloatingIPPool `json:"floatingips"`
+	}
+	if err := json.Unmarshal([]byte(utils.TestConfig), &conf); err != nil {
+		t.Fatal(err)
 	}
 }
