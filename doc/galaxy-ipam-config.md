@@ -130,6 +130,7 @@ to stop reserving. But please don't delete any floatingip that is not created by
 # creating a floatingip crd object to reserve IP
 # please replace name with the IP you want to reserve.
 # don't delete ipType/reserved label or it won't work
+# start from v1.0.8, ipType: internalIP label is no longer needed
 
 apiVersion: galaxy.k8s.io/v1alpha1
 kind: FloatingIP
