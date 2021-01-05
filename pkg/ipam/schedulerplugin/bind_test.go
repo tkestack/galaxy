@@ -18,6 +18,7 @@ package schedulerplugin
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"reflect"
@@ -26,6 +27,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	fakeV1 "k8s.io/client-go/kubernetes/typed/core/v1/fake"
@@ -163,8 +165,8 @@ func TestUnBind(t *testing.T) {
 }
 
 func TestUnBindImmutablePod(t *testing.T) {
-	pod = CreateStatefulSetPodWithLabels("sts1-0", "ns1", map[string]string{"app": "sts1"}, immutableAnnotation)
-	podKey, _ = schedulerplugin_util.FormatKey(pod)
+	pod := CreateStatefulSetPodWithLabels("sts1-0", "ns1", map[string]string{"app": "sts1"}, immutableAnnotation)
+	podKey, _ := schedulerplugin_util.FormatKey(pod)
 	fipPlugin, stopChan, _ := createPluginTestNodes(t, pod, CreateStatefulSet(pod.ObjectMeta, 1))
 	defer func() { stopChan <- struct{}{} }()
 	if err := fipPlugin.ipam.AllocateSpecificIP(podKey.KeyInDB, net.ParseIP("10.173.13.2"),
@@ -397,4 +399,54 @@ func checkByKeyAndIPRanges(fipPlugin *FloatingIPPlugin, key string, ipranges [][
 		}
 	}
 	return fipInfos, nil
+}
+
+func TestRelease(t *testing.T) {
+	ip := net.ParseIP("10.49.27.205")
+	for i, testCase := range []struct {
+		name   string
+		r      ReleaseRequest
+		key    string
+		expect error
+		objs   []runtime.Object
+	}{
+		{
+			name:   "pod is running, should not released",
+			r:      ReleaseRequest{KeyObj: podKey, IP: ip},
+			key:    podKey.KeyInDB,
+			expect: errors.New("pod ns1_pod1-0 (uid ) is running"),
+			objs:   []runtime.Object{pod},
+		},
+		{
+			name:   "pod is not running, should released",
+			key:    "tapp_ns1_tapp_tapp-1",
+			r:      ReleaseRequest{KeyObj: schedulerplugin_util.ParseKey("tapp_ns1_tapp_tapp-1"), IP: ip},
+			expect: nil,
+		},
+		{
+			name:   "already released, should return nil",
+			r:      ReleaseRequest{KeyObj: schedulerplugin_util.ParseKey(""), IP: ip},
+			expect: nil,
+		},
+		{
+			name:   "ip allocated to another pod, should not release ip",
+			key:    "tapp_ns1_tapp_tapp-2",
+			r:      ReleaseRequest{KeyObj: schedulerplugin_util.ParseKey("tapp_ns1_tapp_tapp-1"), IP: ip},
+			expect: errors.New("ip allocated to another pod tapp_ns1_tapp_tapp-2"),
+		},
+	} {
+		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
+			fipPlugin, stopChan, _ := createPluginTestNodes(t, testCase.objs...)
+			fipPlugin.Run(stopChan)
+			defer func() { stopChan <- struct{}{} }()
+			if err := fipPlugin.ipam.AllocateSpecificIP(testCase.key, testCase.r.IP,
+				floatingip.Attr{Policy: constant.ReleasePolicyNever}); err != nil {
+				t.Fatal(err)
+			}
+			err := fipPlugin.Release(&testCase.r)
+			if !reflect.DeepEqual(err, testCase.expect) {
+				t.Fatalf("expect %v, got %v", testCase.expect, err)
+			}
+		})
+	}
 }
