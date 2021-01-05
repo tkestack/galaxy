@@ -28,15 +28,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
-	fakeGalaxyCli "tkestack.io/galaxy/pkg/ipam/client/clientset/versioned/fake"
-	crdInformer "tkestack.io/galaxy/pkg/ipam/client/informers/externalversions"
-	"tkestack.io/galaxy/pkg/ipam/utils"
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
 const (
-	pod1CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod1","attribute":"{\"NodeName\":\"212\",\"Uid\":\"xx1\"}","policy":2,"updateTime":null}}`
-	pod2CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.216","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"pod2","attribute":"{\"NodeName\":\"333\",\"Uid\":\"xx2\"}","policy":1,"updateTime":null}}`
+	pod1CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null},"spec":{"key":"pod1","attribute":"{\"NodeName\":\"212\",\"Uid\":\"xx1\"}","policy":2,"updateTime":null}}`
+	pod2CRD = `{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.216","creationTimestamp":null},"spec":{"key":"pod2","attribute":"{\"NodeName\":\"333\",\"Uid\":\"xx2\"}","policy":1,"updateTime":null}}`
 
 	policy = constant.ReleasePolicyPodDelete
 )
@@ -64,25 +61,8 @@ var (
 	allNodeSubnet  = []*net.IPNet{node1IPNet, node2IPNet, node3IPNet, node4IPNet, node5IPNet1, node5IPNet2, node6IPNet1, node6IPNet2, node7IPNet}
 )
 
-func createIPAM(t *testing.T, objs ...runtime.Object) (*crdIpam, crdInformer.SharedInformerFactory) {
-	galaxyCli := fakeGalaxyCli.NewSimpleClientset(objs...)
-	crdInformerFactory := crdInformer.NewSharedInformerFactory(galaxyCli, 0)
-	fipInformer := crdInformerFactory.Galaxy().V1alpha1().FloatingIPs()
-	crdIPAM := NewCrdIPAM(galaxyCli, InternalIp, fipInformer).(*crdIpam)
-	var conf struct {
-		Floatingips []*FloatingIPPool `json:"floatingips"`
-	}
-	if err := json.Unmarshal([]byte(utils.TestConfig), &conf); err != nil {
-		t.Fatal(err)
-	}
-	if err := crdIPAM.ConfigurePool(conf.Floatingips); err != nil {
-		t.Fatal(err)
-	}
-	return crdIPAM, crdInformerFactory
-}
-
 func createTestCrdIPAM(t *testing.T, objs ...runtime.Object) *crdIpam {
-	crdIPAM, _ := createIPAM(t, objs...)
+	crdIPAM, _ := CreateTestIPAM(t, objs...)
 	return crdIPAM
 }
 
@@ -116,9 +96,6 @@ func TestConfigurePoolWithAllocatedIP(t *testing.T) {
 	}
 	fipCrd := newFIPCrd(expectFip.IP.String())
 	fipCrd.Labels[constant.ReserveFIPLabel] = ""
-	internalIP := InternalIp
-	ipType, _ := internalIP.String()
-	fipCrd.Labels[constant.IpType] = ipType
 	if err := assign(fipCrd, expectFip); err != nil {
 		t.Fatal(err)
 	}
@@ -132,6 +109,9 @@ func TestConfigurePoolWithAllocatedIP(t *testing.T) {
 	}
 	if fip.Key != expectFip.Key {
 		t.Fatal()
+	}
+	if _, ok := fip.Labels[constant.ReserveFIPLabel]; !ok {
+		t.Fatal("labels missing")
 	}
 }
 
@@ -202,8 +182,8 @@ func TestReserveIP(t *testing.T) {
 		}
 	}
 	if err := checkFIP(ipam,
-		`{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"p1","attribute":"{\"NodeName\":\"node2\",\"Uid\":\"xx2\"}","policy":2,"updateTime":null}}`,
-		`{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.216","creationTimestamp":null,"labels":{"ipType":"internalIP"}},"spec":{"key":"p1","attribute":"{\"NodeName\":\"node2\",\"Uid\":\"xx2\"}","policy":2,"updateTime":null}}`); err != nil {
+		`{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.205","creationTimestamp":null},"spec":{"key":"p1","attribute":"{\"NodeName\":\"node2\",\"Uid\":\"xx2\"}","policy":2,"updateTime":null}}`,
+		`{"kind":"FloatingIP","apiVersion":"galaxy.k8s.io/v1alpha1","metadata":{"name":"10.49.27.216","creationTimestamp":null},"spec":{"key":"p1","attribute":"{\"NodeName\":\"node2\",\"Uid\":\"xx2\"}","policy":2,"updateTime":null}}`); err != nil {
 		t.Fatal(err)
 	}
 	// reserve again, should not succeed
@@ -684,5 +664,42 @@ func TestNodeSubnetsByKeyAndIPRanges(t *testing.T) {
 		if !reflect.DeepEqual(subnets.List(), expectSubnets.List()) {
 			t.Fatalf("case %d, expect %v, real %v", i, testCase.expectSubnets, subnets)
 		}
+	}
+}
+
+func TestLabels(t *testing.T) {
+	fip := newFIPCrd("10.49.27.216")
+	fip.Labels[constant.ReserveFIPLabel] = ""
+	fip.Spec.Key = "hello-xx"
+	ipam, informerFactory := CreateTestIPAM(t, fip)
+	stop := make(chan struct{})
+	informerFactory.Start(stop)
+	informerFactory.WaitForCacheSync(stop)
+	defer func() { close(stop) }()
+	fips, err := ipam.ByKeyword("xx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fips) != 1 {
+		t.Fatal(fips)
+	}
+	if fips[0].Labels == nil {
+		t.Fatal()
+	}
+	if _, ok := fips[0].Labels[constant.ReserveFIPLabel]; !ok {
+		t.Fatal()
+	}
+	fipInfos, err := ipam.ByPrefix("hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fipInfos) != 1 {
+		t.Fatal(fipInfos)
+	}
+	if fipInfos[0].Labels == nil {
+		t.Fatal()
+	}
+	if _, ok := fipInfos[0].Labels[constant.ReserveFIPLabel]; !ok {
+		t.Fatal()
 	}
 }

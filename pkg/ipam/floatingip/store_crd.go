@@ -28,14 +28,7 @@ import (
 )
 
 func (ci *crdIpam) listFloatingIPs() (*v1alpha1.FloatingIPList, error) {
-	val, err := ci.ipType.String()
-	if err != nil {
-		return nil, err
-	}
-	listOpt := metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", constant.IpType, val),
-	}
-	fips, err := ci.client.GalaxyV1alpha1().FloatingIPs().List(listOpt)
+	fips, err := ci.client.GalaxyV1alpha1().FloatingIPs().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -146,10 +139,7 @@ func checkForReserved(obj interface{}) (*v1alpha1.FloatingIP, error) {
 }
 
 func (ci *crdIpam) newFIPCrd(name string) *v1alpha1.FloatingIP {
-	ipType, _ := ci.ipType.String()
-	crd := newFIPCrd(name)
-	crd.Labels[constant.IpType] = ipType
-	return crd
+	return newFIPCrd(name)
 }
 
 func newFIPCrd(name string) *v1alpha1.FloatingIP {

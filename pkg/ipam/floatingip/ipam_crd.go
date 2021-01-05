@@ -34,26 +34,9 @@ import (
 	"tkestack.io/galaxy/pkg/utils/nets"
 )
 
-// Type is struct of IP type.
-type Type uint16
-
-const (
-	// InternalIp is enum of pod's internal IP.
-	InternalIp Type = iota
-)
-
-// String used to transform IP Type to string.
-func (t *Type) String() (string, error) {
-	if *t == InternalIp {
-		return "internalIP", nil
-	}
-	return "", fmt.Errorf("unknown ip type %v", *t)
-}
-
 type crdIpam struct {
 	FloatingIPs []*FloatingIPPool `json:"floatingips,omitempty"`
 	client      crd_clientset.Interface
-	ipType      Type
 	//caches for FloatingIP crd, both stores allocated FloatingIPs and unallocated FloatingIPs
 	cacheLock *sync.RWMutex
 	// key is ip string
@@ -64,10 +47,9 @@ type crdIpam struct {
 }
 
 // NewCrdIPAM init IPAM struct.
-func NewCrdIPAM(fipClient crd_clientset.Interface, ipType Type, informer crdInformer.FloatingIPInformer) IPAM {
+func NewCrdIPAM(fipClient crd_clientset.Interface, informer crdInformer.FloatingIPInformer) IPAM {
 	ipam := &crdIpam{
 		client:          fipClient,
-		ipType:          ipType,
 		cacheLock:       new(sync.RWMutex),
 		allocatedFIPs:   make(map[string]*FloatingIP),
 		unallocatedFIPs: make(map[string]*FloatingIP),
@@ -386,6 +368,7 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
 				if err := tmpFip.unmarshalAttr(ip.Spec.Attribute); err != nil {
 					glog.Error(err)
 				}
+				tmpFip.Labels = ip.Labels
 				tmpCacheAllocated[ip.Name] = tmpFip
 				break
 			}
