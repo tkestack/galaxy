@@ -125,10 +125,16 @@ func (d *VlanDriver) Init() error {
 		d.vlanParentIndex = device.Attrs().ParentIndex
 		//glog.Infof("root device %s is a vlan device, parent index %d", d.Device, d.vlanParentIndex)
 	}
-	if d.MacVlanMode() || d.IPVlanMode() {
+	if d.IPVlanMode() {
+		switch d.GetIPVlanMode() {
+		case netlink.IPVLAN_MODE_L3S, netlink.IPVLAN_MODE_L3:
+			return utils.EnableNonlocalBind()
+		default:
+			return nil
+		}
+	} else if d.MacVlanMode() {
 		return nil
-	}
-	if d.PureMode() {
+	} else if d.PureMode() {
 		if err := d.initPureModeArgs(); err != nil {
 			return err
 		}
