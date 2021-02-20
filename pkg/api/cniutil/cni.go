@@ -86,7 +86,11 @@ func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs, ifName stri
 	if err != nil {
 		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
 	}
-	pluginPath, err := invoke.FindInPath(netconf["type"].(string), strings.Split(args.Path, ":"))
+	typ, err := getNetworkType(netconf)
+	if err != nil {
+		return nil, err
+	}
+	pluginPath, err := invoke.FindInPath(typ, strings.Split(args.Path, ":"))
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +111,11 @@ func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs, ifName stri
 	if err != nil {
 		return fmt.Errorf("error serializing delegate netconf: %v", err)
 	}
-	pluginPath, err := invoke.FindInPath(netconf["type"].(string), strings.Split(args.Path, ":"))
+	typ, err := getNetworkType(netconf)
+	if err != nil {
+		return err
+	}
+	pluginPath, err := invoke.FindInPath(typ, strings.Split(args.Path, ":"))
 	if err != nil {
 		return err
 	}
@@ -120,6 +128,20 @@ func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs, ifName stri
 		IfName:        ifName,
 		Path:          args.Path,
 	})
+}
+
+func getNetworkType(netconf map[string]interface{}) (string, error) {
+	typ := netconf["type"]
+	if typ == nil {
+		return "", fmt.Errorf("empty network type of network %v", netconf)
+	}
+	typStr, ok := typ.(string)
+	if !ok {
+		return "", fmt.Errorf("bad golang type of network type %v", netconf)
+	} else if typStr == "" {
+		return "", fmt.Errorf("empty network type of network %v", netconf)
+	}
+	return typStr, nil
 }
 
 // CmdAdd saves networkInfos to disk and executes each cni binary to setup network

@@ -186,11 +186,18 @@ func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]
 	var networkInfos []*cniutil.NetworkInfo
 	if pod.Annotations == nil || pod.Annotations[constant.MultusCNIAnnotation] == "" {
 		if utils.WantENIIP(&pod.Spec) && g.ENIIPNetwork != "" {
-			networkInfos = append(networkInfos, cniutil.NewNetworkInfo(g.ENIIPNetwork, g.getNetworkConf(g.ENIIPNetwork),
-				req.IfName))
+			netConf, err := g.getNetworkConf(g.ENIIPNetwork)
+			if err != nil {
+				return nil, err
+			}
+			networkInfos = append(networkInfos, cniutil.NewNetworkInfo(g.ENIIPNetwork, netConf, req.IfName))
 		} else {
 			for i, netName := range g.DefaultNetworks {
-				networkInfos = append(networkInfos, cniutil.NewNetworkInfo(netName, g.getNetworkConf(netName),
+				netConf, err := g.getNetworkConf(netName)
+				if err != nil {
+					return nil, err
+				}
+				networkInfos = append(networkInfos, cniutil.NewNetworkInfo(netName, netConf,
 					setNetInterface("", i, req.IfName)))
 			}
 		}
@@ -203,14 +210,12 @@ func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]
 		}
 		//init networkInfo
 		for idx, network := range networks {
-			netConf := g.getNetworkConf(network.Name)
-			if netConf == nil {
-				return nil, fmt.Errorf("pod %s_%s requires network %s which is not configured", pod.Name,
-					pod.Namespace, network.Name)
+			netConf, err := g.getNetworkConf(network.Name)
+			if err != nil {
+				return nil, err
 			}
-			networkInfo := cniutil.NewNetworkInfo(network.Name, netConf,
-				setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName))
-			networkInfos = append(networkInfos, networkInfo)
+			networkInfos = append(networkInfos, cniutil.NewNetworkInfo(network.Name, netConf,
+				setNetInterface(network.InterfaceRequest, idx, req.CmdArgs.IfName)))
 		}
 	}
 	extendedCNIArgs, err := parseExtendedCNIArgs(pod)
@@ -226,9 +231,9 @@ func (g *Galaxy) resolveNetworks(req *galaxyapi.PodRequest, pod *corev1.Pod) ([]
 	return networkInfos, nil
 }
 
-func (g *Galaxy) getNetworkConf(networkName string) map[string]interface{} {
+func (g *Galaxy) getNetworkConf(networkName string) (map[string]interface{}, error) {
 	if netConf, ok := g.netConf[networkName]; ok {
-		return netConf
+		return netConf, nil
 	}
 	// In the absence of existing network config from json
 	// config, load and execute a CNI .configlist
@@ -236,20 +241,18 @@ func (g *Galaxy) getNetworkConf(networkName string) map[string]interface{} {
 	// “name” key matches this Network object’s name.
 	data, err := cniutil.GetNetworkConfig(networkName, g.NetworkConfDir)
 	if err != nil {
-		glog.Warningf("failed to load network config %s from confdir %s with error %v", networkName, g.NetworkConfDir, err)
-		return nil
+		return nil, fmt.Errorf("load network config %s from confdir %s: %v", networkName, g.NetworkConfDir, err)
 	}
 	var m map[string]interface{}
 	if err := json.Unmarshal(data, &m); err != nil {
-		glog.Warningf("failed to unmarshal networkinfo %s: %v", string(data), err)
-		return nil
+		return nil, fmt.Errorf("unmarshal networkinfo %s: %v", string(data), err)
 	}
 	// kubeconfig of host filesystem won't be reachable for galaxy.
 	// Since galaxy is running in pod, it can talk to apiserver via secret token
 	if m["kubeconfig"] != "" {
 		delete(m, "kubeconfig")
 	}
-	return m
+	return m, nil
 }
 
 func (g *Galaxy) cmdAdd(req *galaxyapi.PodRequest, pod *corev1.Pod) (types.Result, error) {
