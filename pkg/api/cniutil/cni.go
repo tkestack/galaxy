@@ -17,6 +17,7 @@
 package cniutil
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -24,12 +25,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
+	"github.com/containernetworking/cni/pkg/version"
 	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/vishvananda/netlink"
 	glog "k8s.io/klog"
@@ -52,6 +55,9 @@ const (
 
 	COMMAND_ADD = "ADD"
 	COMMAND_DEL = "DEL"
+
+	// CNITimeoutSec is set to be slightly less than 240sec/4mins, which is the default remote runtime request timeout.
+	CNITimeoutSec = 220
 )
 
 // BuildCNIArgs builds cni args as string such as key1=val1;key2=val2
@@ -82,6 +88,8 @@ func ParseCNIArgs(args string) (map[string]string, error) {
 
 // DelegateAdd calles delegate cni binary to execute cmdAdd
 func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs, ifName string) (types.Result, error) {
+	cniTimeoutCtx, cancelFunc := context.WithTimeout(context.Background(), CNITimeoutSec*time.Second)
+	defer cancelFunc()
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
 		return nil, fmt.Errorf("error serializing delegate netconf: %v", err)
@@ -95,18 +103,23 @@ func DelegateAdd(netconf map[string]interface{}, args *skel.CmdArgs, ifName stri
 		return nil, err
 	}
 	glog.Infof("delegate add %s args %s conf %s", args.ContainerID, args.Args, string(netconfBytes))
-	return invoke.ExecPluginWithResult(pluginPath, netconfBytes, &invoke.Args{
+	return invoke.ExecPluginWithResult(cniTimeoutCtx, pluginPath, netconfBytes, &invoke.Args{
 		Command:       "ADD",
 		ContainerID:   args.ContainerID,
 		NetNS:         args.Netns,
 		PluginArgsStr: args.Args,
 		IfName:        ifName,
 		Path:          args.Path,
+	}, &invoke.DefaultExec{
+		RawExec:       &invoke.RawExec{Stderr: os.Stderr},
+		PluginDecoder: version.PluginDecoder{},
 	})
 }
 
 // DelegateDel calles delegate cni binary to execute cmdDEL
 func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs, ifName string) error {
+	cniTimeoutCtx, cancelFunc := context.WithTimeout(context.Background(), CNITimeoutSec*time.Second)
+	defer cancelFunc()
 	netconfBytes, err := json.Marshal(netconf)
 	if err != nil {
 		return fmt.Errorf("error serializing delegate netconf: %v", err)
@@ -120,13 +133,16 @@ func DelegateDel(netconf map[string]interface{}, args *skel.CmdArgs, ifName stri
 		return err
 	}
 	glog.Infof("delegate del %s args %s conf %s", args.ContainerID, args.Args, string(netconfBytes))
-	return invoke.ExecPluginWithoutResult(pluginPath, netconfBytes, &invoke.Args{
+	return invoke.ExecPluginWithoutResult(cniTimeoutCtx, pluginPath, netconfBytes, &invoke.Args{
 		Command:       "DEL",
 		ContainerID:   args.ContainerID,
 		NetNS:         args.Netns,
 		PluginArgsStr: args.Args,
 		IfName:        ifName,
 		Path:          args.Path,
+	}, &invoke.DefaultExec{
+		RawExec:       &invoke.RawExec{Stderr: os.Stderr},
+		PluginDecoder: version.PluginDecoder{},
 	})
 }
 

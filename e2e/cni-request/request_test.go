@@ -18,6 +18,7 @@ package cni_request_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -32,6 +33,8 @@ import (
 	"tkestack.io/galaxy/pkg/api/galaxy/private"
 	"tkestack.io/galaxy/pkg/galaxy"
 
+	t020 "github.com/containernetworking/cni/pkg/types/020"
+	current "github.com/containernetworking/cni/pkg/types/current"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	glog "k8s.io/klog"
@@ -93,7 +96,7 @@ FLANNEL_IPMASQ=true`
 	Expect(err).NotTo(HaveOccurred())
 	jsonFile = jsonConfigFile.Name()
 	Expect(jsonConfigFile.Close()).NotTo(HaveOccurred())
-	err = ioutil.WriteFile(jsonFile, []byte(`{"NetworkConf":[{"type":"galaxy-flannel", "delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env"}], "DefaultNetworks": ["galaxy-flannel"]}`), 0644)
+	err = ioutil.WriteFile(jsonFile, []byte(`{"NetworkConf":[{"type":"galaxy-flannel", "delegate":{"type":"galaxy-bridge","isDefaultGateway":true,"forceAddress":true},"subnetFile":"/run/flannel/subnet.env","cniVersion": "0.3.1"}], "DefaultNetworks": ["galaxy-flannel"]}`), 0644)
 	Expect(err).NotTo(HaveOccurred())
 
 	g := galaxy.NewGalaxy()
@@ -130,7 +133,7 @@ var _ = Describe("cni add request", func() {
 		content := call(cniutil.COMMAND_ADD)
 		// the result ip may change, check other things.
 		Expect(strings.HasPrefix(content, `{"cniVersion":"0.2.0","ip4":{"ip":"172.16.59.`)).Should(BeTrue())
-		Expect(strings.HasSuffix(content, `/24","gateway":"172.16.59.1","routes":[{"dst":"172.16.0.0/13","gw":"172.16.59.1"},{"dst":"0.0.0.0/0","gw":"172.16.59.1"}]},"dns":{}}`)).
+		Expect(strings.HasSuffix(content, `/24","gateway":"172.16.59.1","routes":[{"dst":"172.16.0.0/13"},{"dst":"0.0.0.0/0","gw":"172.16.59.1"}]},"dns":{}}`)).
 			Should(BeTrue())
 	})
 	It("cni delete request", func() {
@@ -154,5 +157,15 @@ func call(method string) string {
 	Expect(err).NotTo(HaveOccurred())
 	content, err := ioutil.ReadAll(resp.Body)
 	Expect(err).NotTo(HaveOccurred())
-	return string(content)
+	if len(content) == 0 {
+		return ""
+	}
+	resultCurrent := &current.Result{}
+	err = json.Unmarshal(content, resultCurrent)
+	Expect(err).NotTo(HaveOccurred())
+	result020, err := resultCurrent.GetAsVersion(t020.ImplementedSpecVersion)
+	Expect(err).NotTo(HaveOccurred())
+	bytes, err := json.Marshal(result020)
+	Expect(err).NotTo(HaveOccurred())
+	return string(bytes)
 }

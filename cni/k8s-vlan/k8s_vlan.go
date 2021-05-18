@@ -25,6 +25,7 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/version"
+	bv "github.com/containernetworking/plugins/pkg/utils/buildversion"
 	"tkestack.io/galaxy/cni/ipam"
 	"tkestack.io/galaxy/pkg/network/vlan"
 	"tkestack.io/galaxy/pkg/utils"
@@ -190,7 +191,11 @@ func cmdDel(args *skel.CmdArgs) error {
 	return ipam.Release(conf.IPAM.Type, args)
 }
 
+func cmdCheck(args *skel.CmdArgs) error {
+	return nil
+}
+
 func main() {
 	d = &vlan.VlanDriver{}
-	skel.PluginMain(cmdAdd, cmdDel, version.Legacy)
+	skel.PluginMain(cmdAdd, cmdCheck, cmdDel, version.Legacy, bv.BuildString("k8s-vlan"))
 }

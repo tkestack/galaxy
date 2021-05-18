@@ -10,6 +10,7 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
 	"github.com/containernetworking/cni/pkg/version"
+	bv "github.com/containernetworking/plugins/pkg/utils/buildversion"
 	"github.com/vishvananda/netlink"
 	"tkestack.io/galaxy/cni/ipam"
 	"tkestack.io/galaxy/pkg/network"
@@ -25,13 +26,17 @@ func init() {
 }
 
 func main() {
-	skel.PluginMain(cmdAdd, cmdDel, version.Legacy)
+	skel.PluginMain(cmdAdd, cmdCheck, cmdDel, version.All, bv.BuildString("underlay-veth"))
 }
 
 func cmdDel(args *skel.CmdArgs) error {
 	if err := utils.DeleteAllVeth(args.Netns); err != nil {
 		return err
 	}
+	return nil
+}
+
+func cmdCheck(args *skel.CmdArgs) error {
 	return nil
 }
 
