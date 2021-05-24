@@ -29,6 +29,7 @@ import (
 
 	"github.com/containernetworking/cni/pkg/types"
 	t020 "github.com/containernetworking/cni/pkg/types/020"
+	current "github.com/containernetworking/cni/pkg/types/current"
 	"github.com/emicklei/go-restful"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -434,10 +435,21 @@ func convertResult(result types.Result) (*t020.Result, error) {
 	if result == nil {
 		return nil, fmt.Errorf("result is nil")
 	}
+	resultCurrent, ok := result.(*current.Result)
+	if !ok {
+		return nil, fmt.Errorf("faild to convert result to 020 result")
+	}
+
+	result, err := resultCurrent.GetAsVersion(t020.ImplementedSpecVersion)
+	if err != nil {
+		return nil, err
+	}
+
 	result020, ok := result.(*t020.Result)
 	if !ok {
 		return nil, fmt.Errorf("faild to convert result to 020 result")
 	}
+
 	if result020.IP4 == nil {
 		return nil, fmt.Errorf("CNI plugin reported no IPv4 address")
 	}

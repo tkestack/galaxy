@@ -17,6 +17,7 @@
 package helper
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -24,11 +25,18 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/types"
+	"github.com/containernetworking/cni/pkg/version"
 	"github.com/google/uuid"
 	glog "k8s.io/klog"
+)
+
+const (
+	// CNITimeoutSec is set to be slightly less than 240sec/4mins, which is the default remote runtime request timeout.
+	CNITimeoutSec = 220
 )
 
 var (
@@ -50,11 +58,16 @@ func fillDefaultArgs(root string, args *invoke.Args) *invoke.Args {
 //ip netns add ctn
 // CNI_ARGS="IP=192.168.33.3" CNI_COMMAND="ADD" CNI_CONTAINERID=ctn1 CNI_NETNS=/var/run/netns/ctn CNI_IFNAME=eth0 CNI_PATH=`pwd`/bin galaxy-vlan < /etc/cni/net.d/10-mynet.conf
 func ExecCNIWithResult(cniName string, netConfStdin []byte, args *invoke.Args) (types.Result, error) {
+	cniTimeoutCtx, cancelFunc := context.WithTimeout(context.Background(), CNITimeoutSec*time.Second)
+	defer cancelFunc()
 	root := ProjectDir()
 	pluginPath := path.Join(root, "bin", cniName)
 	cniArgs := fillDefaultArgs(root, args)
 	glog.V(4).Infof("echo %s | %s %s", compressJson(string(netConfStdin)), strings.Join(cniArgs.AsEnv()[:6], " "), pluginPath)
-	return invoke.ExecPluginWithResult(pluginPath, netConfStdin, cniArgs)
+	return invoke.ExecPluginWithResult(cniTimeoutCtx, pluginPath, netConfStdin, cniArgs, &invoke.DefaultExec{
+		RawExec:       &invoke.RawExec{Stderr: os.Stderr},
+		PluginDecoder: version.PluginDecoder{},
+	})
 }
 
 func compressJson(str string) string {
@@ -65,8 +78,13 @@ func compressJson(str string) string {
 }
 
 func ExecCNI(cniName string, netConfStdin []byte, args *invoke.Args) error {
+	cniTimeoutCtx, cancelFunc := context.WithTimeout(context.Background(), CNITimeoutSec*time.Second)
+	defer cancelFunc()
 	root := ProjectDir()
-	return invoke.ExecPluginWithoutResult(path.Join(root, "bin", cniName), netConfStdin, fillDefaultArgs(root, args))
+	return invoke.ExecPluginWithoutResult(cniTimeoutCtx, path.Join(root, "bin", cniName), netConfStdin, fillDefaultArgs(root, args), &invoke.DefaultExec{
+		RawExec:       &invoke.RawExec{Stderr: os.Stderr},
+		PluginDecoder: version.PluginDecoder{},
+	})
 }
 
 func NewContainerId() string {
@@ -127,7 +145,7 @@ func SetupDummyDev(ifName, cidr string) error {
 }
 
 func SetupVlanDev(ifName, parent, cidr string, vlanID int) error {
-	if out, err := Command("ip", "link", "add", "link",parent, "name", ifName, "type", "vlan", "id", fmt.Sprintf("%d", vlanID)).CombinedOutput(); err != nil {
+	if out, err := Command("ip", "link", "add", "link", parent, "name", ifName, "type", "vlan", "id", fmt.Sprintf("%d", vlanID)).CombinedOutput(); err != nil {
 		if !strings.HasPrefix(string(out), "RTNETLINK answers: File exists") {
 			return fmt.Errorf("failed to add link %s: %v, %s", ifName, err, string(out))
 		}

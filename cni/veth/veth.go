@@ -29,6 +29,7 @@ import (
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/containernetworking/plugins/pkg/ipam"
 	"github.com/containernetworking/plugins/pkg/ns"
+	bv "github.com/containernetworking/plugins/pkg/utils/buildversion"
 	"github.com/vishvananda/netlink"
 	"tkestack.io/galaxy/pkg/utils"
 )
@@ -221,6 +222,10 @@ func cmdDel(args *skel.CmdArgs) error {
 	return nil
 }
 
+func cmdCheck(args *skel.CmdArgs) error {
+	return nil
+}
+
 func main() {
-	skel.PluginMain(cmdAdd, cmdDel, version.Legacy)
+	skel.PluginMain(cmdAdd, cmdCheck, cmdDel, version.All, bv.BuildString("veth"))
 }

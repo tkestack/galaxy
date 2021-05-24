@@ -166,10 +166,10 @@ data:
   galaxy.json: |
     {
       "NetworkConf":[
-        {"name":"tke-route-eni","type":"tke-route-eni","eni":"eth1","routeTable":1},
-        {"name":"galaxy-flannel","type":"galaxy-flannel", "delegate":{"type":"galaxy-veth"},"subnetFile":"/run/flannel/subnet.env"},
-        {"name":"galaxy-k8s-vlan","type":"galaxy-k8s-vlan", "device":"eth1", "default_bridge_name": "br0"},
-        {"name":"galaxy-k8s-sriov","type": "galaxy-k8s-sriov", "device": "eth1", "vf_num": 10}
+        {"name":"tke-route-eni","type":"tke-route-eni","eni":"eth1","routeTable":1, "cniVersion": "0.3.1"},
+        {"name":"galaxy-flannel","type":"galaxy-flannel", "delegate":{"type":"galaxy-veth"},"subnetFile":"/run/flannel/subnet.env", "cniVersion": "0.3.1"},
+        {"name":"galaxy-k8s-vlan","type":"galaxy-k8s-vlan", "device":"eth1", "default_bridge_name": "br0", "cniVersion": "0.3.1"},
+        {"name":"galaxy-k8s-sriov","type": "galaxy-k8s-sriov", "device": "eth1", "vf_num": 10, "cniVersion": "0.3.1"}
       ],
       "DefaultNetworks": ["galaxy-flannel"],
       "ENIIPNetwork": "galaxy-k8s-vlan"
@@ -183,8 +183,20 @@ metadata:
 data:
   00-galaxy.conf: |
     {
-      "name": "galaxy-sdn",
-      "type": "galaxy-sdn",
-      "capabilities": {"portMappings": true},
-      "cniVersion": "0.2.0"
+      "cniVersion": "0.3.1",
+      "plugins": [
+        {
+          "name": "galaxy-sdn",,
+          "type": "galaxy-sdn",
+          "capabilities": {
+            "portMappings": true
+          }
+        },
+        {
+          "type": "bandwidth",
+          "capabilities": {
+            "bandwidth": true
+          }
+        }
+      ]
     }

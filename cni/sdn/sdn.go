@@ -27,8 +27,9 @@ import (
 	"strings"
 
 	"github.com/containernetworking/cni/pkg/skel"
-	t020 "github.com/containernetworking/cni/pkg/types/020"
+	current "github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
+	bv "github.com/containernetworking/plugins/pkg/utils/buildversion"
 	galaxyapi "tkestack.io/galaxy/pkg/api/galaxy"
 	"tkestack.io/galaxy/pkg/api/galaxy/private"
 )
@@ -94,13 +95,13 @@ func (p *cniPlugin) doCNI(url string, req *galaxyapi.CNIRequest) ([]byte, error)
 
 // Send the ADD command environment and config to the CNI server, returning
 // the IPAM result to the caller
-func (p *cniPlugin) CmdAdd(args *skel.CmdArgs) (*t020.Result, error) {
+func (p *cniPlugin) CmdAdd(args *skel.CmdArgs) (*current.Result, error) {
 	body, err := p.doCNI("http://dummy/cni", newCNIRequest(args))
 	if err != nil {
 		return nil, err
 	}
 
-	result := &t020.Result{}
+	result := &current.Result{}
 	if err := json.Unmarshal(body, result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response '%s': %v", string(body), err)
 	}
@@ -124,7 +125,11 @@ func (p *cniPlugin) CmdDel(args *skel.CmdArgs) error {
 	return err
 }
 
+func (p *cniPlugin) cmdCheck(args *skel.CmdArgs) error {
+	return nil
+}
+
 func main() {
 	p := NewCNIPlugin(private.GalaxySocketPath)
-	skel.PluginMain(p.skelCmdAdd, p.CmdDel, version.Legacy)
+	skel.PluginMain(p.skelCmdAdd, p.cmdCheck, p.CmdDel, version.All, bv.BuildString("galaxy-sdn"))
 }

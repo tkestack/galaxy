@@ -4,9 +4,8 @@ go 1.14
 
 require (
 	github.com/Microsoft/go-winio v0.4.15 // indirect
-	github.com/containernetworking/cni v0.6.0
-	github.com/containernetworking/plugins v0.6.0
-	github.com/coreos/go-iptables v0.4.3 // indirect
+	github.com/containernetworking/cni v0.8.0
+	github.com/containernetworking/plugins v0.8.7
 	github.com/dbdd4us/qcloudapi-sdk-go v0.0.0-20190530123522-c8d9381de48c
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/engine-api v0.4.0
