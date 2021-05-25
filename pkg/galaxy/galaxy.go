@@ -22,11 +22,16 @@ import (
 	"io/ioutil"
 	"time"
 
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	corev1Lister "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/docker"
+	"tkestack.io/galaxy/pkg/api/k8s"
 	"tkestack.io/galaxy/pkg/galaxy/options"
 	"tkestack.io/galaxy/pkg/gc"
 	"tkestack.io/galaxy/pkg/network/kernel"
@@ -44,6 +49,8 @@ type Galaxy struct {
 	pmhandler *portmapping.PortMappingHandler
 	client    kubernetes.Interface
 	pm        *policy.PolicyManager
+	factory   informers.SharedInformerFactory
+	podLister corev1Lister.PodLister
 }
 
 type JsonConf struct {
@@ -163,6 +170,14 @@ func (g *Galaxy) initk8sClient() {
 		glog.Fatalf("Can not generate client from config: error(%v)", err)
 	}
 	glog.Infof("apiserver address %s", clientConfig.Host)
+	g.factory = informers.NewSharedInformerFactoryWithOptions(g.client, time.Minute,
+		informers.WithTweakListOptions(
+			func(listOptions *v1.ListOptions) {
+				listOptions.FieldSelector = fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()
+			}))
+	g.podLister = g.factory.Core().V1().Pods().Lister()
+	g.factory.Start(g.quitChan)
+	g.factory.WaitForCacheSync(g.quitChan)
 }
 
 func (g *Galaxy) SetClient(cli kubernetes.Interface) {

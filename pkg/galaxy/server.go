@@ -32,9 +32,8 @@ import (
 	current "github.com/containernetworking/cni/pkg/types/current"
 	"github.com/emicklei/go-restful"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/cniutil"
@@ -286,14 +285,12 @@ func parseExtendedCNIArgs(pod *corev1.Pod) (map[string]json.RawMessage, error) {
 
 func (g *Galaxy) setupIPtables() error {
 	// filter all running pods on node
-	pods, err := g.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
+	pods, err := g.podLister.List(labels.Everything())
 	if err != nil {
 		return fmt.Errorf("failed to get pods on node: %v", err)
 	}
 	var allPorts []k8s.Port
-	for i := range pods.Items {
-		pod := &pods.Items[i]
+	for _, pod := range pods {
 		if len(pod.Status.PodIP) == 0 || pod.Spec.HostNetwork {
 			continue
 		}
@@ -410,25 +407,7 @@ func (g *Galaxy) cleanIPtables(containerID string) error {
 }
 
 func (g *Galaxy) getPod(name, namespace string) (*corev1.Pod, error) {
-	var pod *corev1.Pod
-	printOnce := false
-	if err := wait.PollImmediate(time.Millisecond*500, 5*time.Second, func() (done bool, err error) {
-		pod, err = g.client.CoreV1().Pods(namespace).Get(name, v1.GetOptions{})
-		if err != nil {
-			if errors.IsNotFound(err) {
-				if printOnce == false {
-					printOnce = true
-					glog.Warningf("can't find pod %s_%s, retring", name, namespace)
-				}
-				return false, nil
-			}
-			return false, err
-		}
-		return true, nil
-	}); err != nil {
-		return nil, fmt.Errorf("failed to get pod %s_%s: %v", name, namespace, err)
-	}
-	return pod, nil
+	return g.podLister.Pods(namespace).Get(name)
 }
 
 func convertResult(result types.Result) (*t020.Result, error) {
