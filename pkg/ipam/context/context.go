@@ -42,13 +42,15 @@ type IPAMContext struct {
 	DynamicClient dynamic.Interface
 
 	PodLister         corev1lister.PodLister
+	NodeLister        corev1lister.NodeLister
 	StatefulSetLister appv1.StatefulSetLister
 	DeploymentLister  appv1.DeploymentLister
 	PoolLister        list.PoolLister
 	ExtensionLister   extensionlister.CustomResourceDefinitionLister
 
-	PodInformer coreinformer.PodInformer
-	FIPInformer galaxyinformer.FloatingIPInformer
+	PodInformer  coreinformer.PodInformer
+	NodeInformer coreinformer.NodeInformer
+	FIPInformer  galaxyinformer.FloatingIPInformer
 
 	informerFactory    informers.SharedInformerFactory
 	crdInformerFactory crdInformer.SharedInformerFactory
@@ -66,6 +68,7 @@ func NewIPAMContext(client kubernetes.Interface, galaxyClient crd_clientset.Inte
 	}
 	ctx.informerFactory = informers.NewSharedInformerFactoryWithOptions(ctx.Client, time.Minute)
 	ctx.PodInformer = ctx.informerFactory.Core().V1().Pods()
+	ctx.NodeInformer = ctx.informerFactory.Core().V1().Nodes()
 	statefulsetInformer := ctx.informerFactory.Apps().V1().StatefulSets()
 	deploymentInformer := ctx.informerFactory.Apps().V1().Deployments()
 	ctx.crdInformerFactory = crdInformer.NewSharedInformerFactory(ctx.GalaxyClient, 0)
@@ -76,6 +79,7 @@ func NewIPAMContext(client kubernetes.Interface, galaxyClient crd_clientset.Inte
 	extensionInformer.Informer() // call Informer to actually create an informer
 
 	ctx.PodLister = ctx.PodInformer.Lister()
+	ctx.NodeLister = ctx.NodeInformer.Lister()
 	ctx.StatefulSetLister = statefulsetInformer.Lister()
 	ctx.DeploymentLister = deploymentInformer.Lister()
 	ctx.PoolLister = poolInformer.Lister()

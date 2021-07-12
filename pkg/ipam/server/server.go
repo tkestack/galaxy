@@ -220,6 +220,7 @@ func (s *Server) startServer() {
 		Writes(schedulerapi.HostPriorityList{}))
 	ws.Route(ws.POST("/bind").To(s.bind).Reads(schedulerapi.ExtenderBindingArgs{}).
 		Writes(schedulerapi.ExtenderBindingResult{}))
+	ws.Route(ws.POST("/preempt").To(s.preempt).Reads(schedulerapi.ExtenderPreemptionArgs{}))
 	health := new(restful.WebService)
 	health.Route(health.GET("/healthy").To(s.healthy))
 	container := restful.NewContainer()
@@ -383,6 +384,26 @@ func (s *Server) bind(request *restful.Request, response *restful.Response) {
 		result.Error = err.Error()
 	}
 	_ = response.WriteEntity(result)
+}
+
+func (s *Server) preempt(request *restful.Request, response *restful.Response) {
+	args := new(schedulerapi.ExtenderPreemptionArgs)
+	if err := request.ReadEntity(&args); err != nil {
+		glog.Error(err)
+		_ = response.WriteError(http.StatusInternalServerError, err)
+		return
+	}
+	glog.V(5).Infof("POST preempt %v+", *args)
+	start := time.Now()
+	glog.V(3).Infof("preempt for pod %v/%v with %v/%v victims start at %d+",
+		args.Pod.Namespace, args.Pod.Name, len(args.NodeNameToMetaVictims), len(args.NodeNameToVictims), start.Nanosecond())
+	nodeNameToMetaVictims := s.plugin.Preempt(args)
+	glog.V(3).Infof("preempt for pod %v/%v with %v/%v victims start at %d-",
+		args.Pod.Namespace, args.Pod.Name, len(args.NodeNameToMetaVictims), len(args.NodeNameToVictims), start.Nanosecond())
+	glog.V(5).Infof("POST preempt %v-", *args)
+	_ = response.WriteEntity(schedulerapi.ExtenderPreemptionResult{
+		NodeNameToMetaVictims: nodeNameToMetaVictims,
+	})
 }
 
 func (s *Server) healthy(request *restful.Request, response *restful.Response) {

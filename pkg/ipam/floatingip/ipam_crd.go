@@ -338,7 +338,6 @@ func (ci *crdIpam) ConfigurePool(floatIPs []*FloatingIPPool) error {
 		glog.Infof("Configure pool done, %d fip pool, %d unallocated, %d allocated", len(ci.FloatingIPs),
 			len(ci.unallocatedFIPs), len(ci.allocatedFIPs))
 	}()
-
 	sort.Sort(FloatingIPSlice(floatIPs))
 	ips, err := ci.listFloatingIPs()
 	if err != nil {
