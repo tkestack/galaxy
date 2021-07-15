@@ -103,6 +103,9 @@ spec:
         volumeMounts:
         - name: galaxy-run
           mountPath: /var/run/galaxy/
+        - name: containerd-run
+          mountPath: /var/run/netns
+          mountPropagation: Bidirectional
         - name: flannel-run
           mountPath: /run/flannel
         - name: galaxy-etc
@@ -126,6 +129,9 @@ spec:
       - name: galaxy-run
         hostPath:
           path: /var/run/galaxy
+      - name: containerd-run
+        hostPath:
+          path: /var/run/netns
       - name: flannel-run
         hostPath:
           path: /run/flannel
