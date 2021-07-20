@@ -17,6 +17,7 @@ data:
           "httpTimeout": 70000000000,
           "filterVerb": "filter",
           "BindVerb": "bind",
+          "preemptVerb": "preempt",
           "weight": 1,
           "enableHttps": false,
           "managedResources": [

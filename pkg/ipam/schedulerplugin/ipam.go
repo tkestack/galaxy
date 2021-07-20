@@ -161,7 +161,7 @@ func (p *FloatingIPPlugin) getNodeSubnetfromIPAM(node *corev1.Node) (*net.IPNet,
 		return nil, errors.New("FloatingIPPlugin:UnknowNode")
 	}
 	if ipNet := p.ipam.NodeSubnet(nodeIP); ipNet != nil {
-		glog.V(4).Infof("node %s %s %s", node.Name, nodeIP.String(), ipNet.String())
+		glog.V(4).Infof("node subnet cache %s %s %s", node.Name, nodeIP.String(), ipNet.String())
 		p.nodeSubnet[node.Name] = ipNet
 		return ipNet, nil
 	} else {
