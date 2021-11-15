@@ -99,7 +99,7 @@ ips from `10.0.80.2~10.0.80.4` or `10.0.81.2~10.0.81.4`. But if it runs on `10.4
 }]
 ```
 
-Multiple nodeSubnets may share the same pod subnet with none overlapping ips. Overlapping ips is a not allowed.
+Multiple nodeSubnets may share the same pod subnet with none overlapping ips. Overlapping ips are not allowed.
 The following example means `10.180.154.2~10.180.154.3` can only be allocated to pods running on `10.180.1.2/32` and
 `10.180.154.7~10.180.154.8` can only be allocated to pods running on `10.180.1.3/32`.
 
