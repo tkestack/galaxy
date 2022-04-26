@@ -7,10 +7,10 @@ cd $GOPATH/src/tkestack.io/galaxy
 # building all binaries
 make
 # OR
-make BINS="galxy galxy-ipam"
+make BINS="galaxy galaxy-ipam"
 
-# building galxy-ipam
-make BINS="galxy-ipam"
+# building galaxy-ipam
+make BINS="galaxy-ipam"
 ```
 
 # Build Docker Image
@@ -19,8 +19,8 @@ make BINS="galxy-ipam"
 # building all images
 make image
 
-# builing Galxy-ipam
-make image BINS="galxy-ipam"
+# builing galaxy-ipam
+make image BINS="galaxy-ipam"
 ```
 
 # Build Docker Image for specified arch
