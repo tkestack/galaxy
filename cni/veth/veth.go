@@ -19,6 +19,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/containernetworking/cni/pkg/types/current"
 	"net"
 	"os"
 	"runtime"
@@ -199,7 +200,29 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return err
 	}
 	result.DNS = conf.DNS
-	return result.Print()
+
+	isCurrent := false
+	for _, v := range current.SupportedVersions {
+		if v == generalResult.Version() {
+			isCurrent = true
+		}
+	}
+	if !isCurrent {
+		return result.Print()
+	}
+	currentResult, ok := generalResult.(*current.Result)
+	if ok {
+		for _, v := range currentResult.IPs {
+			if v.Version == "4" {
+				v.Address = result.IP4.IP
+				v.Gateway = result.IP4.Gateway
+				for _, route := range result.IP4.Routes {
+					currentResult.Routes = append(currentResult.Routes, &route)
+				}
+			}
+		}
+	}
+	return currentResult.Print()
 }
 
 func cmdDel(args *skel.CmdArgs) error {
