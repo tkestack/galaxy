@@ -17,6 +17,7 @@
 package schedulerplugin
 
 import (
+	gocontext "context"
 	"fmt"
 	"net"
 	"runtime"
@@ -124,7 +125,7 @@ func (p *FloatingIPPlugin) Run(stop chan struct{}) {
 // updateConfigMap fetches the newest floatingips configmap and syncs in memory/db config,
 // returns true if successfully gets floatingip config.
 func (p *FloatingIPPlugin) updateConfigMap() (bool, error) {
-	cm, err := p.Client.CoreV1().ConfigMaps(p.conf.ConfigMapNamespace).Get(p.conf.ConfigMapName, v1.GetOptions{})
+	cm, err := p.Client.CoreV1().ConfigMaps(p.conf.ConfigMapNamespace).Get(gocontext.TODO(), p.conf.ConfigMapName, v1.GetOptions{})
 	if err != nil {
 		return false, fmt.Errorf("failed to get floatingip configmap %s_%s: %v", p.conf.ConfigMapName,
 			p.conf.ConfigMapNamespace, err)
@@ -199,7 +200,7 @@ func (p *FloatingIPPlugin) queryNodeSubnet(nodeName string) (*net.IPNet, error) 
 	defer p.nodeSubnetLock.Unlock()
 	if subnet, ok := p.nodeSubnet[nodeName]; !ok {
 		if err := wait.Poll(time.Millisecond*100, time.Minute, func() (done bool, err error) {
-			node, err = p.Client.CoreV1().Nodes().Get(nodeName, v1.GetOptions{})
+			node, err = p.Client.CoreV1().Nodes().Get(gocontext.TODO(), nodeName, v1.GetOptions{})
 			if !apierrors.IsServerTimeout(err) {
 				return true, err
 			}

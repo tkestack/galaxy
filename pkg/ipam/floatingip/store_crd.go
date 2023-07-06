@@ -17,18 +17,20 @@
 package floatingip
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	glog "k8s.io/klog"
+
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 	"tkestack.io/galaxy/pkg/ipam/apis/galaxy/v1alpha1"
 )
 
 func (ci *crdIpam) listFloatingIPs() (*v1alpha1.FloatingIPList, error) {
-	fips, err := ci.client.GalaxyV1alpha1().FloatingIPs().List(metav1.ListOptions{})
+	fips, err := ci.client.GalaxyV1alpha1().FloatingIPs().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +43,7 @@ func (ci *crdIpam) createFloatingIP(allocated *FloatingIP) error {
 	if err := assign(fip, allocated); err != nil {
 		return err
 	}
-	if _, err := ci.client.GalaxyV1alpha1().FloatingIPs().Create(fip); err != nil {
+	if _, err := ci.client.GalaxyV1alpha1().FloatingIPs().Create(context.TODO(), fip, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -49,19 +51,19 @@ func (ci *crdIpam) createFloatingIP(allocated *FloatingIP) error {
 
 func (ci *crdIpam) deleteFloatingIP(name string) error {
 	glog.V(4).Infof("delete floatingIP name %s", name)
-	return ci.client.GalaxyV1alpha1().FloatingIPs().Delete(name, &metav1.DeleteOptions{})
+	return ci.client.GalaxyV1alpha1().FloatingIPs().Delete(context.TODO(), name, metav1.DeleteOptions{})
 }
 
 func (ci *crdIpam) updateFloatingIP(toUpdate *FloatingIP) error {
 	glog.V(4).Infof("update floatingIP %v", *toUpdate)
-	fip, err := ci.client.GalaxyV1alpha1().FloatingIPs().Get(toUpdate.IP.String(), metav1.GetOptions{})
+	fip, err := ci.client.GalaxyV1alpha1().FloatingIPs().Get(context.TODO(), toUpdate.IP.String(), metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 	if err := assign(fip, toUpdate); err != nil {
 		return err
 	}
-	_, err = ci.client.GalaxyV1alpha1().FloatingIPs().Update(fip)
+	_, err = ci.client.GalaxyV1alpha1().FloatingIPs().Update(context.TODO(), fip, metav1.UpdateOptions{})
 	return err
 }
 

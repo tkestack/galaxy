@@ -6,17 +6,15 @@ metadata:
   labels:
     app: galaxy-ipam
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
   - name: scheduler-port
     port: 9040
     targetPort: 9040
-    nodePort: 32760
     protocol: TCP
   - name: api-port
     port: 9041
     targetPort: 9041
-    nodePort: 32761
     protocol: TCP
   selector:
     app: galaxy-ipam
@@ -59,6 +57,15 @@ rules:
   resources:
   - tapps
   verbs: ["list", "watch"]
+- apiGroups:
+    - coordination.k8s.io
+  resources:
+    - leases
+  verbs:
+    - create
+    - get
+    - list
+    - update
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -112,7 +119,7 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       containers:
-      - image: tkestack/galaxy-ipam:v1.0.7
+      - image: ccr.ccs.tencentyun.com/paas-test/jacksontong:galaxy-ipam-26f7e1d0
         args:
           - --logtostderr=true
           - --profiling
@@ -170,6 +177,6 @@ data:
   galaxy-ipam.json: |
     {
       "schedule_plugin": {
-        "cloudProviderGrpcAddr": "127.0.0.2:80"
+        "storageDriver": "k8s-crd"
       }
     }

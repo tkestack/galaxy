@@ -18,9 +18,9 @@
 # Makefile helper functions for golang
 #
 
-GO_IMAGE := golang:1.14.2
+GO_IMAGE := golang:1.18.2
 GO := go
-GO_SUPPORTED_VERSIONS ?= 1.11|1.12|1.13|1.14
+GO_SUPPORTED_VERSIONS ?= 1.14|1.18
 GO_LDFLAGS += -X $(VERSION_PACKAGE).GIT_COMMIT=$(GIT_COMMIT) \
 	-X $(VERSION_PACKAGE).GO_VERSION=$(shell go version | awk '{print $$3}') \
 	-X $(VERSION_PACKAGE).BUILD_TIME=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ') 

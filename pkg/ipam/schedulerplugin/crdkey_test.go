@@ -28,7 +28,7 @@ func TestGetGroupVersionResource(t *testing.T) {
 	stop := make(chan struct{})
 	extensionClient := extensionclient.NewSimpleClientset(FooCrd)
 	extensionFactory := extensioninformer.NewSharedInformerFactory(extensionClient, 0)
-	extensionInformer := extensionFactory.Apiextensions().V1beta1().CustomResourceDefinitions()
+	extensionInformer := extensionFactory.Apiextensions().V1().CustomResourceDefinitions()
 	extensionInformer.Informer() // call Informer to actually create an informer
 	extensionFactory.Start(stop)
 	extensionFactory.WaitForCacheSync(stop)

@@ -19,7 +19,7 @@ package test
 import (
 	"strings"
 
-	extensionv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	extensionv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -72,7 +72,7 @@ func (c *customResourceDefinitionBuilder) Get() *extensionv1.CustomResourceDefin
 		},
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CustomResourceDefinition",
-			APIVersion: "apiextensions.k8s.io/v1beta1",
+			APIVersion: "apiextensions.k8s.io/v1",
 		},
 		Spec: extensionv1.CustomResourceDefinitionSpec{
 			Group:   c.group,

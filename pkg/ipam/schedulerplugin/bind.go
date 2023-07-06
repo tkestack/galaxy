@@ -17,6 +17,7 @@
 package schedulerplugin
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -65,14 +66,14 @@ func (p *FloatingIPPlugin) Bind(args *schedulerapi.ExtenderBindingArgs) error {
 	var err1 error
 	if err := wait.PollImmediate(time.Millisecond*500, 3*time.Second, func() (bool, error) {
 		// It's the extender's response to bind pods to nodes since it is a binder
-		if err := p.Client.CoreV1().Pods(args.PodNamespace).Bind(&corev1.Binding{
+		if err := p.Client.CoreV1().Pods(args.PodNamespace).Bind(context.TODO(), &corev1.Binding{
 			ObjectMeta: v1.ObjectMeta{Namespace: args.PodNamespace, Name: args.PodName, UID: args.PodUID,
 				Annotations: bindAnnotation},
 			Target: corev1.ObjectReference{
 				Kind: "Node",
 				Name: args.Node,
 			},
-		}); err != nil {
+		}, v1.CreateOptions{}); err != nil {
 			err1 = err
 			if apierrors.IsNotFound(err) {
 				// break retry if pod no longer exists

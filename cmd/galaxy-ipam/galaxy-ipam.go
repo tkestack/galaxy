@@ -25,6 +25,8 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
+	glog "k8s.io/klog"
+
 	"tkestack.io/galaxy/pkg/ipam/server"
 	"tkestack.io/galaxy/pkg/utils/ldflags"
 )
@@ -37,6 +39,7 @@ func main() {
 	// add command line args
 	s.AddFlags(pflag.CommandLine)
 
+	glog.InitFlags(nil)
 	flag.InitFlags()
 	logs.InitLogs()
 	defer logs.FlushLogs()

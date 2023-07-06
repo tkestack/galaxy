@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	extensionlister "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1beta1"
+	extensionlister "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -60,7 +60,7 @@ func (c *crdCache) GetReplicas(gvr schema.GroupVersionResource, namespace, name 
 	if err != nil {
 		return 0, err
 	}
-	subRes := crd.Spec.Subresources
+	subRes := crd.Spec.Versions[0].Subresources
 	if subRes == nil || subRes.Scale == nil {
 		return 0, nil
 	}

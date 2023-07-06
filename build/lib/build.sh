@@ -30,7 +30,7 @@ OUTPUT_DIR=${OUTPUT_DIR:-"${ROOT_DIR}/_output"}
 BIN_DIR=${OUTPUT_DIR}/bin-${ARCH}
 mkdir -p ${BIN_DIR}
 
-CNI_VERSION="v0.6.0"
+CNI_VERSION="v1.2.0"
 CNI_BIN=https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-${ARCH}-${CNI_VERSION}.tgz
 
 function build::get_basic_cni() {

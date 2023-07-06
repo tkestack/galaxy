@@ -69,7 +69,7 @@ func DefaultLeaderElectionConfiguration() LeaderElectionConfiguration {
 		LeaseDuration: metav1.Duration{Duration: DefaultLeaseDuration},
 		RenewDeadline: metav1.Duration{Duration: DefaultRenewDeadline},
 		RetryPeriod:   metav1.Duration{Duration: DefaultRetryPeriod},
-		ResourceLock:  rl.EndpointsResourceLock,
+		ResourceLock:  rl.EndpointsLeasesResourceLock,
 	}
 }
 
