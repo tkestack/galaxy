@@ -124,6 +124,7 @@ func (g *Galaxy) requestFunc(req *galaxyapi.PodRequest) (data []byte, err error)
 			return
 		}
 		result, err1 := g.cmdAdd(req, pod)
+		glog.Infof("delegate add result %v", result)
 		if err1 != nil {
 			err = err1
 			return
@@ -444,11 +445,11 @@ func convertResult(result types.Result) (*t020.Result, error) {
 			return nil, fmt.Errorf("faild to convert result to current/020 result")
 		}
 	} else {
-		result, err := resultCurrent.GetAsVersion(t020.ImplementedSpecVersion)
+		targetResult, err := resultCurrent.GetAsVersion(t020.ImplementedSpecVersion)
 		if err != nil {
 			return nil, err
 		}
-		result020, ok = result.(*t020.Result)
+		result020, ok = targetResult.(*t020.Result)
 		if !ok {
 			return nil, fmt.Errorf("faild to convert result to 020 result")
 		}

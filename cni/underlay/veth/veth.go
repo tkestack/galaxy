@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/containernetworking/cni/pkg/types/current"
 	"net"
 	"runtime"
 
@@ -102,5 +103,24 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 	args.IfName = ifName
 	result, _ := t020.GetResult(results[0])
-	return result.Print()
+	if conf.CNIVersion == result.CNIVersion || conf.CNIVersion == "" {
+		return result.Print()
+	}
+
+	currentResult := &current.Result{}
+	currentResult.IPs = []*current.IPConfig{
+		{
+			Version: "4",
+			Gateway: result.IP4.Gateway,
+			Address: result.IP4.IP,
+		},
+	}
+	currentResult.Routes = []*types.Route{}
+
+	for _, r := range result.IP4.Routes {
+		currentResult.Routes = append(currentResult.Routes, &r)
+	}
+	currentResult.CNIVersion = conf.CNIVersion
+	currentResult.DNS = result.DNS
+	return currentResult.Print()
 }
