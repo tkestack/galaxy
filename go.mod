@@ -9,7 +9,7 @@ require (
 	github.com/docker/engine-api v0.4.0
 	github.com/emicklei/go-restful v2.10.0+incompatible
 	github.com/emicklei/go-restful-swagger12 v0.0.0-20170926063155-7524189396c6
-	github.com/golang/protobuf v1.5.2
+	github.com/golang/protobuf v1.5.3
 	github.com/google/uuid v1.1.2
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.24.2
@@ -17,9 +17,9 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/vishvananda/netlink v1.0.0
 	github.com/vishvananda/netns v0.0.0-20190625233234-7109fa855b0f
-	golang.org/x/net v0.4.0
-	golang.org/x/sys v0.3.0
-	google.golang.org/grpc v1.49.0
+	golang.org/x/net v0.8.0
+	golang.org/x/sys v0.6.0
+	google.golang.org/grpc v1.51.0
 	gotest.tools v2.2.0+incompatible
 	k8s.io/api v0.24.3
 	k8s.io/apiextensions-apiserver v0.24.3
@@ -27,7 +27,9 @@ require (
 	k8s.io/client-go v0.24.3
 	k8s.io/code-generator v0.24.3
 	k8s.io/component-base v0.24.3
+	k8s.io/cri-api v0.27.4
 	k8s.io/klog v1.0.0
+	k8s.io/klog/v2 v2.80.1
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/controller-tools v0.9.2
 )
@@ -72,14 +74,15 @@ require (
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
+	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/safchain/ethtool v0.0.0-20190326074333-42ed695e3de8 // indirect
 	github.com/spf13/cobra v1.6.1 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
+	golang.org/x/mod v0.9.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20220223155221-ee480838109b // indirect
-	golang.org/x/term v0.3.0 // indirect
-	golang.org/x/text v0.5.0 // indirect
+	golang.org/x/term v0.6.0 // indirect
+	golang.org/x/text v0.8.0 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
-	golang.org/x/tools v0.1.12 // indirect
+	golang.org/x/tools v0.6.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220502173005-c8bf987b8c21 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
@@ -88,7 +91,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/gengo v0.0.0-20211129171323-c02415ce4185 // indirect
-	k8s.io/klog/v2 v2.80.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20221012153701-172d655c2280 // indirect
 	sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect

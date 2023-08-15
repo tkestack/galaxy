@@ -19,6 +19,8 @@ package gc
 import (
 	"flag"
 	"fmt"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"io/ioutil"
 	"net"
 	"os"
@@ -27,7 +29,9 @@ import (
 	"time"
 
 	"github.com/vishvananda/netlink"
+
 	"k8s.io/apimachinery/pkg/util/wait"
+	criapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	glog "k8s.io/klog"
 	"tkestack.io/galaxy/pkg/api/docker"
 )
@@ -183,7 +187,26 @@ func (gc *flannelGC) cleanupVeth() error {
 }
 
 func (gc *flannelGC) shouldCleanup(cid string) bool {
-	if c, err := gc.dockerCli.InspectContainer(cid); err != nil {
+	if os.Getenv("CONTAINERD_HOST") != "" {
+		if c, err := gc.dockerCli.ContainedInspectContainer(cid); err != nil {
+			if stausErr, ok := status.FromError(err); ok {
+				if stausErr.Code() == codes.NotFound {
+					//glog.Infof("container %s not found", cid)
+					return false
+				}
+				glog.Warningf("Error inspect container %s: %v", cid, err)
+			} else {
+				glog.Warningf("Error inspect container %s: %v", cid, err)
+			}
+		} else {
+			if c != nil && (c.State == criapi.ContainerState_CONTAINER_EXITED || c.State == criapi.ContainerState_CONTAINER_UNKNOWN) {
+				glog.Infof("container %s exited %s", c.Id, c.State.String())
+				return true
+			}
+		}
+		return false
+	}
+	if c, err := gc.dockerCli.DockerInspectContainer(cid); err != nil {
 		if _, ok := err.(docker.ContainerNotFoundError); ok {
 			glog.Infof("container %s not found", cid)
 			return true
