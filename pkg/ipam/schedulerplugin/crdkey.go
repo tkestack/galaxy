@@ -19,7 +19,7 @@ package schedulerplugin
 import (
 	"sync"
 
-	extensionlister "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1beta1"
+	extensionlister "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog"
@@ -68,7 +68,7 @@ func (c *crdKey) popularCache() error {
 		return err
 	}
 	for i := range crds {
-		subRes := crds[i].Spec.Subresources
+		subRes := crds[i].Spec.Versions[0].Subresources
 		if subRes == nil || subRes.Scale == nil || subRes.Scale.SpecReplicasPath == "" {
 			continue
 		}

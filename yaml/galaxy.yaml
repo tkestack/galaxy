@@ -79,12 +79,13 @@ spec:
       hostNetwork: true
       hostPID: true
       containers:
-      - image: tkestack/galaxy:v1.0.7
+      # mirrors.tencent.com/tkestack/galaxy-amd64:v1.0.8.3.g494cfa14
+      - image: ccr.ccs.tencentyun.com/paas-test/jacksontong:galaxy-26f7e1d0
         command: ["/bin/sh"]
-      # qcloud galaxy should run with --route-eni
+        # qcloud galaxy should run with --route-eni
         args: ["-c", "cp -p /etc/galaxy/cni/00-galaxy.conf /etc/cni/net.d/; cp -p /opt/cni/galaxy/bin/galaxy-sdn /opt/cni/galaxy/bin/loopback /opt/cni/bin/; /usr/bin/galaxy --logtostderr=true --v=3 --route-eni"]
-      # private-cloud should run without --route-eni
-      # args: ["-c", "cp -p /etc/galaxy/cni/00-galaxy.conf /etc/cni/net.d/; cp -p /opt/cni/galaxy/bin/galaxy-sdn /opt/cni/galaxy/bin/loopback /opt/cni/bin/; /usr/bin/galaxy --logtostderr=true --v=3"]
+        # private-cloud should run without --route-eni
+        # args: ["-c", "cp -p /etc/galaxy/cni/00-galaxy.conf /etc/cni/net.d/; cp -p /opt/cni/galaxy/bin/galaxy-sdn /opt/cni/galaxy/bin/loopback /opt/cni/bin/; /usr/bin/galaxy --logtostderr=true --v=3"]
         imagePullPolicy: Always
         env:
           - name: MY_NODE_NAME
@@ -172,10 +173,9 @@ data:
   galaxy.json: |
     {
       "NetworkConf":[
-        {"name":"tke-route-eni","type":"tke-route-eni","eni":"eth1","routeTable":1, "cniVersion": "0.3.1"},
-        {"name":"galaxy-flannel","type":"galaxy-flannel", "delegate":{"type":"galaxy-veth"},"subnetFile":"/run/flannel/subnet.env", "cniVersion": "0.3.1"},
-        {"name":"galaxy-k8s-vlan","type":"galaxy-k8s-vlan", "device":"eth1", "default_bridge_name": "br0", "cniVersion": "0.3.1"},
-        {"name":"galaxy-k8s-sriov","type": "galaxy-k8s-sriov", "device": "eth1", "vf_num": 10, "cniVersion": "0.3.1"}
+        {"name":"tke-route-eni","type":"tke-route-eni","eni":"eth1","routeTable":1},
+        {"name":"galaxy-flannel","type":"galaxy-flannel", "delegate":{"type":"galaxy-veth"},"subnetFile":"/run/flannel/subnet.env"},
+        {"name":"galaxy-k8s-vlan","type":"galaxy-underlay-veth", "device":"eth0"}
       ],
       "DefaultNetworks": ["galaxy-flannel"],
       "ENIIPNetwork": "galaxy-k8s-vlan"
@@ -189,20 +189,8 @@ metadata:
 data:
   00-galaxy.conf: |
     {
-      "cniVersion": "0.3.1",
-      "plugins": [
-        {
-          "name": "galaxy-sdn",,
-          "type": "galaxy-sdn",
-          "capabilities": {
-            "portMappings": true
-          }
-        },
-        {
-          "type": "bandwidth",
-          "capabilities": {
-            "bandwidth": true
-          }
-        }
-      ]
+      "name": "galaxy-sdn",
+      "type": "galaxy-sdn",
+      "capabilities": {"portMappings": true},
+      "cniVersion": "1.2.0"
     }

@@ -21,7 +21,7 @@ import (
 
 	extensionClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	extensioninformer "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
-	extensionlister "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1beta1"
+	extensionlister "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/informers"
 	coreinformer "k8s.io/client-go/informers/core/v1"
@@ -75,7 +75,7 @@ func NewIPAMContext(client kubernetes.Interface, galaxyClient crd_clientset.Inte
 	poolInformer := ctx.crdInformerFactory.Galaxy().V1alpha1().Pools()
 	ctx.FIPInformer = ctx.crdInformerFactory.Galaxy().V1alpha1().FloatingIPs()
 	ctx.extensionFactory = extensioninformer.NewSharedInformerFactory(ctx.ExtClient, 0)
-	extensionInformer := ctx.extensionFactory.Apiextensions().V1beta1().CustomResourceDefinitions()
+	extensionInformer := ctx.extensionFactory.Apiextensions().V1().CustomResourceDefinitions()
 	extensionInformer.Informer() // call Informer to actually create an informer
 
 	ctx.PodLister = ctx.PodInformer.Lister()

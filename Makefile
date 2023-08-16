@@ -91,6 +91,10 @@ push.multiarch:
 manifest:
 	@$(MAKE) image.manifest.push
 
+# Generate manifests e.g. CRD, RBAC etc.
+manifests:
+	go run ./vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go object:headerFile=./hack/boilerplate.go.txt paths=./pkg/ipam/apis/... rbac:roleName=controller-perms crd:allowDangerousTypes=true output:crd:artifacts:config=./artifacts/crds
+
 ## manifest.multiarch: Build docker images for multiple platforms and push manifest lists to registry.
 .PHONY: manifest.multiarch
 manifest.multiarch:

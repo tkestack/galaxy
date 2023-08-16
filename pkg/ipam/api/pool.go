@@ -17,6 +17,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -66,7 +67,7 @@ func (c *PoolController) Get(req *restful.Request, resp *restful.Response) {
 		httputil.BadRequest(resp, fmt.Errorf("pool name is empty"))
 		return
 	}
-	pool, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Get(name, v1.GetOptions{})
+	pool, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Get(context.TODO(), name, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			httputil.ItemNotFound(resp, fmt.Errorf("pool %s", name))
@@ -100,19 +101,19 @@ func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Resp
 		httputil.BadRequest(resp, fmt.Errorf("pool name is empty"))
 		return
 	}
-	p, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Get(pool.Name, v1.GetOptions{})
+	p, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Get(context.TODO(), pool.Name, v1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			httputil.InternalError(resp, err)
 			return
 		}
 		// create Pool
-		if _, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Create(&v1alpha1.Pool{
+		if _, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Create(context.TODO(), &v1alpha1.Pool{
 			TypeMeta:      v1.TypeMeta{Kind: "Pool", APIVersion: "v1alpha1"},
 			ObjectMeta:    v1.ObjectMeta{Name: pool.Name},
 			Size:          pool.Size,
 			PreAllocateIP: pool.PreAllocateIP,
-		}); err != nil {
+		}, v1.CreateOptions{}); err != nil {
 			httputil.InternalError(resp, fmt.Errorf("failed to create Pool: %v", err))
 			return
 		}
@@ -121,7 +122,7 @@ func (c *PoolController) CreateOrUpdate(req *restful.Request, resp *restful.Resp
 		if pool.Size != p.Size || p.PreAllocateIP != pool.PreAllocateIP {
 			p.Size = pool.Size
 			p.PreAllocateIP = pool.PreAllocateIP
-			if _, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Update(p); err != nil {
+			if _, err := c.Client.GalaxyV1alpha1().Pools("kube-system").Update(context.TODO(), p, v1.UpdateOptions{}); err != nil {
 				httputil.InternalError(resp, err)
 				return
 			}
@@ -193,7 +194,7 @@ func (c *PoolController) Delete(req *restful.Request, resp *restful.Response) {
 		httputil.BadRequest(resp, fmt.Errorf("pool name is empty"))
 		return
 	}
-	if err := c.Client.GalaxyV1alpha1().Pools("kube-system").Delete(name, &v1.DeleteOptions{}); err != nil {
+	if err := c.Client.GalaxyV1alpha1().Pools("kube-system").Delete(context.TODO(), name, v1.DeleteOptions{}); err != nil {
 		if errors.IsNotFound(err) {
 			httputil.ItemNotFound(resp, fmt.Errorf("pool %s", name))
 			return

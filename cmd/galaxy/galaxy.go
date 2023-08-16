@@ -24,6 +24,7 @@ import (
 	"k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
 	glog "k8s.io/klog"
+
 	"tkestack.io/galaxy/pkg/galaxy"
 	"tkestack.io/galaxy/pkg/signal"
 	"tkestack.io/galaxy/pkg/utils/ldflags"
@@ -35,6 +36,7 @@ func main() {
 	galaxy := galaxy.NewGalaxy()
 	// add command line args
 	galaxy.AddFlags(pflag.CommandLine)
+	glog.InitFlags(nil)
 	flag.InitFlags()
 	logs.InitLogs()
 	defer logs.FlushLogs()

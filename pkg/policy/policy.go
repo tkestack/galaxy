@@ -18,6 +18,7 @@ package policy
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base32"
 	"fmt"
@@ -64,11 +65,12 @@ var (
 //  OUTPUT             GLX-POD-XXXX - GLX-PLCY-XXXX
 
 // iptable egress chain topology is like
-//  FORWARD            GLX-POD-XXXX - GLX-PLCY-XXXX
-//        \           /            \ /
-//         GLX-EGRESS              /\
-//        /           \           /  \
-//  INPUT             GLX-POD-XXXX - GLX-PLCY-XXXX
+//
+//	FORWARD            GLX-POD-XXXX - GLX-PLCY-XXXX
+//	      \           /            \ /
+//	       GLX-EGRESS              /\
+//	      /           \           /  \
+//	INPUT             GLX-POD-XXXX - GLX-PLCY-XXXX
 type PolicyManager struct {
 	sync.Mutex
 	policies           []policy
@@ -175,7 +177,7 @@ func (p *PolicyManager) syncPods() {
 	} else {
 		// PodInformerFactory not started meaning there isn't any network policy right now, ensure pods' chains
 		// are deleted
-		list, err := p.client.CoreV1().Pods(v1.NamespaceAll).List(v1.ListOptions{
+		list, err := p.client.CoreV1().Pods(v1.NamespaceAll).List(context.TODO(), v1.ListOptions{
 			FieldSelector: fields.OneTermEqualSelector("spec.nodeName", k8s.GetHostname()).String()})
 		if err != nil {
 			glog.Warningf("failed to list pods: %v", err)

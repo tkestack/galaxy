@@ -17,6 +17,7 @@
 package schedulerplugin
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -150,7 +151,7 @@ func (p *FloatingIPPlugin) podRunning(podName, namespace, podUid string) (bool, 
 		return true, ""
 	}
 	// double check with apiserver to confirm it is not running
-	pod, err = p.Client.CoreV1().Pods(namespace).Get(podName, v1.GetOptions{})
+	pod, err = p.Client.CoreV1().Pods(namespace).Get(context.TODO(), podName, v1.GetOptions{})
 	running, reason2 := runningAndUidMatch(podUid, pod, err)
 	if running {
 		return true, ""

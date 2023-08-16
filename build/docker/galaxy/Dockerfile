@@ -16,7 +16,7 @@
 
 ## global scope TARGETPLATFORM
 ## ref: https://docs.docker.com/engine/reference/builder/#automatic-platform-args-in-the-global-scope
-FROM --platform=${TARGETPLATFORM} golang:1.14.2 AS builder
+FROM --platform=${TARGETPLATFORM} golang:1.18.2 AS builder
 ARG TARGETPLATFORM
 RUN echo "building for ${TARGETPLATFORM}"
 ARG WORKDIR="/go/src/tkestack.io/galaxy/"

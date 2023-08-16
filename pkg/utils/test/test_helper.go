@@ -1,12 +1,14 @@
 package test
 
 import (
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
-	extensionv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	extensionv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"strings"
+
 	"tkestack.io/galaxy/pkg/api/galaxy/constant"
 )
 

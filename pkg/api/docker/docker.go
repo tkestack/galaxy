@@ -18,12 +18,13 @@ package docker
 
 import (
 	"fmt"
-	"time"
-
 	dockerapi "github.com/docker/engine-api/client"
 	dockertypes "github.com/docker/engine-api/types"
 	"golang.org/x/net/context"
+	criapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	glog "k8s.io/klog"
+	"os"
+	"time"
 )
 
 var (
@@ -32,12 +33,23 @@ var (
 )
 
 type DockerInterface struct {
-	timeout time.Duration
-	client  *dockerapi.Client
+	timeout          time.Duration
+	client           *dockerapi.Client
+	containerdClient criapi.RuntimeServiceClient
 }
 
 // NewDockerInterface creates an DockerInterface
 func NewDockerInterface() (*DockerInterface, error) {
+	if os.Getenv("CONTAINERD_HOST") != "" {
+		containerdClient, err := newContainerdClient()
+		if err != nil {
+			return nil, err
+		}
+		return &DockerInterface{
+			timeout:          defaultTimeout,
+			containerdClient: containerdClient,
+		}, nil
+	}
 	dockerCli, err := getDockerClient("")
 	if err != nil {
 		return nil, err
@@ -62,7 +74,7 @@ func getTimeoutContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 2*time.Minute)
 }
 
-func (d *DockerInterface) InspectContainer(id string) (*dockertypes.ContainerJSON, error) {
+func (d *DockerInterface) DockerInspectContainer(id string) (*dockertypes.ContainerJSON, error) {
 	ctx, cancel := getTimeoutContext()
 	defer cancel()
 	containerJSON, err := d.client.ContainerInspect(ctx, id)
@@ -76,6 +88,23 @@ func (d *DockerInterface) InspectContainer(id string) (*dockertypes.ContainerJSO
 		return nil, err
 	}
 	return &containerJSON, nil
+}
+
+func (d *DockerInterface) ContainedInspectContainer(id string) (*criapi.ContainerStatus, error) {
+	ctx, cancel := getTimeoutContext()
+	defer cancel()
+	if os.Getenv("CONTAINERD_HOST") != "" {
+		request := &criapi.ContainerStatusRequest{
+			ContainerId: id,
+			Verbose:     true,
+		}
+		resp, err := d.containerdClient.ContainerStatus(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		return resp.Status, nil
+	}
+	return nil, fmt.Errorf("CONTAINERD_HOST is not configured")
 }
 
 // contextError checks the context, and returns error if the context is timeout.
