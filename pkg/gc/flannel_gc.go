@@ -191,8 +191,8 @@ func (gc *flannelGC) shouldCleanup(cid string) bool {
 		if c, err := gc.dockerCli.ContainedInspectContainer(cid); err != nil {
 			if stausErr, ok := status.FromError(err); ok {
 				if stausErr.Code() == codes.NotFound {
-					//glog.Infof("container %s not found", cid)
-					return false
+					glog.Infof("container %s not found", cid)
+					return true
 				}
 				glog.Warningf("Error inspect container %s: %v", cid, err)
 			} else {
