@@ -199,7 +199,7 @@ func (gc *flannelGC) shouldCleanup(cid string) bool {
 				glog.Warningf("Error inspect container %s: %v", cid, err)
 			}
 		} else {
-			if c != nil && (c.State == criapi.ContainerState_CONTAINER_EXITED || c.State == criapi.ContainerState_CONTAINER_UNKNOWN) {
+			if c != nil && (c.State == criapi.PodSandboxState_SANDBOX_NOTREADY) {
 				glog.Infof("container %s exited %s", c.Id, c.State.String())
 				return true
 			}

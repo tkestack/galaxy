@@ -90,15 +90,15 @@ func (d *DockerInterface) DockerInspectContainer(id string) (*dockertypes.Contai
 	return &containerJSON, nil
 }
 
-func (d *DockerInterface) ContainedInspectContainer(id string) (*criapi.ContainerStatus, error) {
+func (d *DockerInterface) ContainedInspectContainer(id string) (*criapi.PodSandboxStatus, error) {
 	ctx, cancel := getTimeoutContext()
 	defer cancel()
 	if os.Getenv("CONTAINERD_HOST") != "" {
-		request := &criapi.ContainerStatusRequest{
-			ContainerId: id,
-			Verbose:     true,
+		request := &criapi.PodSandboxStatusRequest{
+			PodSandboxId: id,
+			Verbose:      true,
 		}
-		resp, err := d.containerdClient.ContainerStatus(ctx, request)
+		resp, err := d.containerdClient.PodSandboxStatus(ctx, request)
 		if err != nil {
 			return nil, err
 		}
