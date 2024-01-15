@@ -51,7 +51,7 @@ func CreateCRDPod(name, namespace string, annotations map[string]string,
 	return Pod().WithName(name).WithNamespace(namespace).
 		WithAnnotations(annotations).WithLabels(map[string]string{"app": appName}).
 		AddOwnerReferences(v1.OwnerReference{
-			APIVersion: crd.Spec.Version,
+			APIVersion: crd.Spec.Versions[0].Name,
 			Kind:       crd.Spec.Names.Kind,
 			Name:       appName,
 		}).
