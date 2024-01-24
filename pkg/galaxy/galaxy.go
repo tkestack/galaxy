@@ -124,7 +124,7 @@ func (g *Galaxy) Start() error {
 		return err
 	}
 	g.initk8sClient()
-	gc.NewFlannelGC(g.dockerCli, g.quitChan, g.cleanIPtables).Run()
+	gc.NewFlannelGC(g.client, g.dockerCli, g.quitChan, g.cleanIPtables).Run()
 	kernel.BridgeNFCallIptables(g.quitChan, g.BridgeNFCallIptables)
 	kernel.IPForward(g.quitChan, g.IPForward)
 	if err := g.setupIPtables(); err != nil {
