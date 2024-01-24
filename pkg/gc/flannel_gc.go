@@ -17,11 +17,15 @@
 package gc
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"io/ioutil"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"net"
 	"os"
 	"path/filepath"
@@ -37,8 +41,10 @@ import (
 )
 
 const (
-	ContainerExited = "exited"
-	ContainerDead   = "dead"
+	ContainerExited  = "exited"
+	ContainerDead    = "dead"
+	SandboxName      = "io.kubernetes.cri.sandbox-name"
+	SandboxNamespace = "io.kubernetes.cri.sandbox-namespace"
 )
 
 var (
@@ -61,16 +67,18 @@ type flannelGC struct {
 	allocatedIPDir []string
 	gcDirs         []string
 	dockerCli      *docker.DockerInterface
+	kubeCli        kubernetes.Interface
 	quit           <-chan struct{}
 	cleanPortFunc  func(containerID string) error
 }
 
-func NewFlannelGC(dockerCli *docker.DockerInterface, quit <-chan struct{},
+func NewFlannelGC(kubeCli kubernetes.Interface, dockerCli *docker.DockerInterface, quit <-chan struct{},
 	cleanPortFunc func(containerID string) error) GC {
 	dirs := strings.Split(*flagGCDirs, ",")
 	return &flannelGC{
 		allocatedIPDir: strings.Split(*flagAllocatedIPDir, ","),
 		gcDirs:         dirs,
+		kubeCli:        kubeCli,
 		dockerCli:      dockerCli,
 		quit:           quit,
 		cleanPortFunc:  cleanPortFunc,
@@ -200,6 +208,19 @@ func (gc *flannelGC) shouldCleanup(cid string) bool {
 			}
 		} else {
 			if c != nil && (c.State == criapi.PodSandboxState_SANDBOX_NOTREADY) {
+				pod, err := gc.kubeCli.CoreV1().Pods(c.Annotations[SandboxNamespace]).Get(context.Background(), c.Annotations[SandboxName], metav1.GetOptions{})
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						return true
+					}
+					glog.Errorf("failed to get pod %s", fmt.Sprintf("%s/%s", c.Annotations[SandboxNamespace], c.Annotations[SandboxName]))
+					return false
+				}
+				for _, status := range pod.Status.ContainerStatuses {
+					if status.State.Waiting != nil || status.State.Running != nil {
+						return false
+					}
+				}
 				glog.Infof("container %s exited %s", c.Id, c.State.String())
 				return true
 			}
