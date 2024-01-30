@@ -75,21 +75,23 @@ func (c *customResourceDefinitionBuilder) Get() *extensionv1.CustomResourceDefin
 			APIVersion: "apiextensions.k8s.io/v1",
 		},
 		Spec: extensionv1.CustomResourceDefinitionSpec{
-			Group:   c.group,
-			Version: c.version,
-			Scope:   "Namespaced",
+			Group: c.group,
+			Versions: []extensionv1.CustomResourceDefinitionVersion{{
+				Name:         c.version,
+				Subresources: c.subresources,
+			}},
+			Scope: "Namespaced",
 			Names: extensionv1.CustomResourceDefinitionNames{
 				Plural:   plural,
 				Singular: name,
 				Kind:     kind,
 				ListKind: kind + "List",
 			},
-			Subresources: c.subresources,
 		},
 	}
 }
 
 // CrdApiVersionAndKind returns the apiVersion and kind of the given CustomResourceDefinition
 func CrdApiVersionAndKind(crd *extensionv1.CustomResourceDefinition) (string, string) {
-	return crd.Spec.Group + "/" + crd.Spec.Version, crd.Spec.Names.Kind
+	return crd.Spec.Group + "/" + crd.Spec.Versions[0].Name, crd.Spec.Names.Kind
 }

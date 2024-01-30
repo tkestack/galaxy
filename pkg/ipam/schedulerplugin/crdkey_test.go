@@ -37,7 +37,7 @@ func TestGetGroupVersionResource(t *testing.T) {
 	if gvr == nil {
 		t.Fatal()
 	}
-	if gvr.Group != FooCrd.Spec.Group || gvr.Version != FooCrd.Spec.Version ||
+	if gvr.Group != FooCrd.Spec.Group || gvr.Version != FooCrd.Spec.Versions[0].Name ||
 		gvr.Resource != FooCrd.Spec.Names.Plural {
 		t.Fatal(gvr)
 	}

@@ -17,6 +17,7 @@
 package floatingip
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -142,7 +143,7 @@ func TestAllocateSpecificIP(t *testing.T) {
 }
 
 func checkFIP(ipam *crdIpam, expect ...string) error {
-	fips, err := ipam.client.GalaxyV1alpha1().FloatingIPs().List(v1.ListOptions{})
+	fips, err := ipam.client.GalaxyV1alpha1().FloatingIPs().List(context.Background(), v1.ListOptions{})
 	if err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@
 package floatingip
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -44,7 +45,7 @@ func TestAddFloatingIPEventByUser(t *testing.T) {
 	if err := assign(fipCrd, fip); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ipam.client.GalaxyV1alpha1().FloatingIPs().Create(fipCrd); err != nil {
+	if _, err := ipam.client.GalaxyV1alpha1().FloatingIPs().Create(context.Background(), fipCrd, v1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := waitFor(ipam, fip.IP, fip.Key, true, node1IPNet.String()); err != nil {
@@ -107,7 +108,7 @@ func TestDeleteFloatingIPEvent(t *testing.T) {
 	ip := net.ParseIP(fipCrd.Name)
 	fipCrd.Labels[constant.ReserveFIPLabel] = ""
 	fipCrd.Spec.Key = "pool__reserved-for-node_"
-	if _, err := ipam.client.GalaxyV1alpha1().FloatingIPs().Create(fipCrd); err != nil {
+	if _, err := ipam.client.GalaxyV1alpha1().FloatingIPs().Create(context.Background(), fipCrd, v1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := waitFor(ipam, ip, fipCrd.Spec.Key, true, node1IPNet.String()); err != nil {
@@ -124,7 +125,7 @@ func TestDeleteFloatingIPEvent(t *testing.T) {
 
 	// test if an event is created by user, deleteFloatingIPEvent should handle it
 	fipCrd.Labels[constant.ReserveFIPLabel] = ""
-	if err := ipam.client.GalaxyV1alpha1().FloatingIPs().Delete(fipCrd.Name, &v1.DeleteOptions{}); err != nil {
+	if err := ipam.client.GalaxyV1alpha1().FloatingIPs().Delete(context.Background(), fipCrd.Name, v1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := waitFor(ipam, ip, "", false, node1IPNet.String()); err != nil {

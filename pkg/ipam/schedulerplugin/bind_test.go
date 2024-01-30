@@ -17,6 +17,7 @@
 package schedulerplugin
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -223,7 +224,7 @@ func TestReleaseIPOfFinishedPod(t *testing.T) {
 				t.Fatalf("case %d: %v", i, err)
 			}
 			testCase.updatePodStatus(pod)
-			if _, err := fipPlugin.Client.CoreV1().Pods(pod.Namespace).UpdateStatus(pod); err != nil {
+			if _, err := fipPlugin.Client.CoreV1().Pods(pod.Namespace).UpdateStatus(context.Background(), pod, v1.UpdateOptions{}); err != nil {
 				t.Fatalf("case %d: %v", i, err)
 			}
 			if err := wait.Poll(time.Microsecond*10, time.Second*30, func() (done bool, err error) {
@@ -285,7 +286,7 @@ func TestFilterBindRequestIPRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	pod.Annotations = cniArgsAnnotation(request)
-	if _, err := fipPlugin.Client.CoreV1().Pods(pod.Namespace).Update(pod); err != nil {
+	if _, err := fipPlugin.Client.CoreV1().Pods(pod.Namespace).Update(context.Background(), pod, v1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	// wait for lister updates
