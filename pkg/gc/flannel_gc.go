@@ -200,7 +200,7 @@ func (gc *flannelGC) shouldCleanup(cid string) bool {
             if stausErr, ok := status.FromError(err); ok {
                 if stausErr.Code() == codes.NotFound {
                     glog.Infof("container %s not found once", cid)
-					time.Sleep(3 * time.Second)
+					// time.Sleep(3 * time.Second)
 					if _, err := gc.dockerCli.ContainedInspectContainer(cid); err != nil {
 						if stausErr, ok := status.FromError(err); ok {
 							if stausErr.Code() == codes.NotFound {
