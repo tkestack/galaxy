@@ -196,48 +196,45 @@ func (gc *flannelGC) cleanupVeth() error {
 
 func (gc *flannelGC) shouldCleanup(cid string) bool {
     if os.Getenv("CONTAINERD_HOST") != "" {
-        for i := 0; i < 2; i++ {
-            if c, err := gc.dockerCli.ContainedInspectContainer(cid); err != nil {
-                if statusErr, ok := status.FromError(err); ok {
-                    if statusErr.Code() == codes.NotFound {
-                        glog.Infof("container %s not found (attempt %d)", cid, i+1)
-                        if i == 1 {
-                            return true
-                        }
-                    } else {
-                        glog.Warningf("Error inspect container %s: %v", cid, err)
-                        return false
+        if c, err := gc.dockerCli.ContainedInspectContainer(cid); err != nil {
+            if stausErr, ok := status.FromError(err); ok {
+                if stausErr.Code() == codes.NotFound {
+                    glog.Infof("container %s not found once", cid)
+					time.Sleep(3 * time.Second)
+					if _, err := gc.dockerCli.ContainedInspectContainer(cid); err != nil {
+						if stausErr, ok := status.FromError(err); ok {
+							if stausErr.Code() == codes.NotFound {
+								glog.Infof("container %s not found twice", cid)
+								return true
+							}
+						}
+					}
+                }
+                glog.Warningf("Error inspect container %s: %v", cid, err)
+            } else {
+                glog.Warningf("Error inspect container %s: %v", cid, err)
+            }
+        } else {
+            if c != nil && (c.State == criapi.PodSandboxState_SANDBOX_NOTREADY) {
+                pod, err := gc.kubeCli.CoreV1().Pods(c.Annotations[SandboxNamespace]).Get(context.Background(), c.Annotations[SandboxName], metav1.GetOptions{})
+                if err != nil {
+                    if apierrors.IsNotFound(err) {
+                        return true
                     }
-                } else {
-                    glog.Warningf("Error inspect container %s: %v", cid, err)
+                    glog.Errorf("failed to get pod %s", fmt.Sprintf("%s/%s", c.Annotations[SandboxNamespace], c.Annotations[SandboxName]))
                     return false
                 }
-            } else {
-                if c != nil && (c.State == criapi.PodSandboxState_SANDBOX_NOTREADY) {
-                    pod, err := gc.kubeCli.CoreV1().Pods(c.Annotations[SandboxNamespace]).Get(context.Background(), c.Annotations[SandboxName], metav1.GetOptions{})
-                    if err != nil {
-                        if apierrors.IsNotFound(err) {
-                            return true
-                        }
-                        glog.Errorf("failed to get pod %s", fmt.Sprintf("%s/%s", c.Annotations[SandboxNamespace], c.Annotations[SandboxName]))
+                for _, status := range pod.Status.ContainerStatuses {
+                    if status.State.Waiting != nil || status.State.Running != nil {
                         return false
                     }
-                    for _, status := range pod.Status.ContainerStatuses {
-                        if status.State.Waiting != nil || status.State.Running != nil {
-                            return false
-                        }
-                    }
-                    glog.Infof("container %s exited %s", c.Id, c.State.String())
-                    return true
                 }
-                return false
-            }
-            if i == 0 {
-                time.Sleep(3 * time.Second)
+                glog.Infof("container %s exited %s", c.Id, c.State.String())
+                return true
             }
         }
+        return false
     }
-
     if c, err := gc.dockerCli.DockerInspectContainer(cid); err != nil {
         if _, ok := err.(docker.ContainerNotFoundError); ok {
             glog.Infof("container %s not found", cid)
