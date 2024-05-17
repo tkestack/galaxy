@@ -210,9 +210,9 @@ func (gc *flannelGC) shouldCleanup(cid string) bool {
 						}
 					}
 				}
-				glog.Warningf("Error inspect container %s: %v", cid, err)
+				glog.Warningf("Recognized Error inspect container %s: %v", cid, err)
 			} else {
-				glog.Warningf("Error inspect container %s: %v", cid, err)
+				glog.Warningf("Unrecognized Error inspect container %s: %v", cid, err)
 			}
 		} else {
 			if c != nil && (c.State == criapi.PodSandboxState_SANDBOX_NOTREADY) {
