@@ -106,7 +106,7 @@ func (gc *flannelGC) Run() {
 		if err := gc.cleanupVeth(); err != nil {
 			glog.Errorf("failed cleanup links: %v", err)
 		}
-	}, *flagFlannelGCInterval*2, gc.quit)
+	}, *flagFlannelGCInterval*3, gc.quit)
 }
 
 func (gc *flannelGC) cleanupIP() error {
